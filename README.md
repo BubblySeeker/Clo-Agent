@@ -8,7 +8,7 @@ An AI-powered customer relationship management platform.
 /
 ├── frontend/      # Next.js 14 app (TypeScript, Tailwind, shadcn/ui)
 ├── ai-service/    # Python FastAPI service (LangChain, pgvector)
-└── backend/       # (additional services)
+└── backend/       # Go REST API (Chi, pgx, Clerk JWT auth)
 ```
 
 ---
@@ -18,6 +18,8 @@ An AI-powered customer relationship management platform.
 - Node.js 18+
 - npm 9+
 - Python 3.10+
+- Go 1.22+
+- PostgreSQL 15+ with `pgvector` extension
 
 ---
 
@@ -113,9 +115,97 @@ python main.py
 
 ---
 
+### 4. Backend (`/backend`)
+
+#### Prerequisites
+
+- Go 1.22+ — install via `brew install go` or [go.dev/dl](https://go.dev/dl)
+- PostgreSQL 15+ with `pgvector` extension
+
+#### Install dependencies
+
+```bash
+cd backend
+go mod download
+```
+
+#### Configure environment variables
+
+Create a `.env` file in `/backend`:
+
+```bash
+cp .env.example .env   # or create manually
+```
+
+| Variable | Description |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string (e.g. `postgres://user:password@localhost:5432/crm`) |
+| `CLERK_SECRET_KEY` | Clerk secret key (from [Clerk dashboard](https://dashboard.clerk.com)) |
+| `REDIS_URL` | Redis connection string (e.g. `redis://localhost:6379`) |
+| `PORT` | HTTP port (default: `8080`) |
+
+#### Apply the database schema
+
+```bash
+psql $DATABASE_URL -f migrations/001_init.sql
+```
+
+> The migration enables `pgvector`, creates all tables, sets up row-level security policies, and seeds default deal stages.
+
+#### Run the development server
+
+```bash
+go run ./cmd/api/main.go
+# http://localhost:8080
+```
+
+#### Health check
+
+```bash
+curl http://localhost:8080/health
+# {"status":"ok"}
+```
+
+#### Build for production
+
+```bash
+go build -o bin/crm-api ./cmd/api
+./bin/crm-api
+```
+
+#### Folder structure
+
+```
+backend/
+├── cmd/api/main.go              # Entry point, router setup, graceful shutdown
+├── internal/
+│   ├── config/config.go         # Environment variable loading
+│   ├── database/postgres.go     # pgxpool connection
+│   ├── handlers/health.go       # GET /health
+│   ├── middleware/
+│   │   ├── auth.go              # Clerk JWT validation, sets agent ID in context
+│   │   └── cors.go              # CORS configuration
+│   └── models/                  # Shared struct definitions
+└── migrations/
+    └── 001_init.sql             # Full PostgreSQL schema + RLS policies
+```
+
+#### Authentication
+
+All routes under `/api/*` require a valid Clerk session token:
+
+```
+Authorization: Bearer <clerk_session_token>
+```
+
+The middleware verifies the token with Clerk, extracts the user ID, and sets `app.current_agent_id` on the DB session so row-level security policies automatically scope all queries to the authenticated agent.
+
+---
+
 ## Services Overview
 
 | Service | Port | Stack |
 |---|---|---|
 | Frontend | 3000 | Next.js 14, Clerk, TanStack Query |
 | AI Service | 8000 | FastAPI, LangChain, pgvector |
+| Backend API | 8080 | Go, Chi, pgx, Clerk JWT |
