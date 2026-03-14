@@ -1,6 +1,10 @@
 # CloAgent
 
-An AI-powered customer relationship management platform.
+CloAgent is a subscription SaaS CRM built exclusively for real estate agents. It monitors every touchpoint — emails, texts, WhatsApp messages, and phone calls — and automatically extracts key details like budget, preferred neighborhoods, timeline, and pre-approval status, updating each client profile in real time. Unstructured conversations become structured client assets automatically.
+
+Agents can also chat directly with CloAgent, asking questions like "who should I follow up with today?" or "what did Sarah say about her budget?", making their entire client database queryable in plain English.
+
+> **Market**: 3M+ licensed US real estate agents. $149/mo per agent = ~$5.4B TAM.
 
 ## Monorepo Structure
 
