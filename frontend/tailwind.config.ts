@@ -49,6 +49,15 @@ const config: Config = {
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
+      keyframes: {
+        wiggle: {
+          "0%, 100%": { transform: "rotate(-0.8deg)" },
+          "50%":      { transform: "rotate(0.8deg)" },
+        },
+      },
+      animation: {
+        wiggle: "wiggle 0.35s ease-in-out infinite",
+      },
     },
   },
   plugins: [],

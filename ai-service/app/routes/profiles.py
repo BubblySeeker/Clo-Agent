@@ -9,7 +9,7 @@ import anthropic
 import psycopg2.extras
 from pydantic import BaseModel
 
-from app.config import AI_SERVICE_SECRET, ANTHROPIC_API_KEY
+from app.config import AI_SERVICE_SECRET, ANTHROPIC_API_KEY, ANTHROPIC_MODEL
 from app.database import get_conn, run_query
 
 router = APIRouter(prefix="/ai")
@@ -90,7 +90,7 @@ async def generate_profile(req: GenerateProfileRequest):
 
     client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
     response = await client.messages.create(
-        model="claude-sonnet-4-6",
+        model=ANTHROPIC_MODEL,
         max_tokens=512,
         messages=[{"role": "user", "content": prompt}],
     )

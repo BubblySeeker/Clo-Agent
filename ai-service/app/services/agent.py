@@ -16,11 +16,11 @@ from typing import AsyncGenerator
 import anthropic
 import psycopg2.extras
 
-from app.config import ANTHROPIC_API_KEY
+from app.config import ANTHROPIC_API_KEY, ANTHROPIC_MODEL
 from app.database import get_conn, run_query
 from app.tools import TOOL_DEFINITIONS, READ_TOOLS, WRITE_TOOLS, execute_read_tool, queue_write_tool
 
-MODEL = "claude-sonnet-4-6"
+MODEL = ANTHROPIC_MODEL
 MAX_TOOL_ROUNDS = 5  # safety limit
 
 

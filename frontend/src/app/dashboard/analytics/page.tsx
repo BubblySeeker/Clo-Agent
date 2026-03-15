@@ -79,6 +79,12 @@ export default function AnalyticsPage() {
     <div className="p-6">
       <div className="max-w-[1440px] mx-auto flex flex-col gap-5">
 
+        {/* Page header */}
+        <div>
+          <h1 className="text-2xl font-bold" style={{ color: "#1E3A5F" }}>Reports</h1>
+          <p className="text-sm text-gray-400 mt-0.5">Pipeline performance, activity volume, and lead sources.</p>
+        </div>
+
         {/* Summary KPIs */}
         <div className="grid grid-cols-4 gap-4">
           {[

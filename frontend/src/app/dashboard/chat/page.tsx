@@ -244,6 +244,10 @@ export default function ChatPage() {
       {/* LEFT — Conversation History */}
       <div className="w-72 shrink-0 border-r border-gray-200 bg-white flex flex-col">
         <div className="p-4 border-b border-gray-100">
+          <div className="mb-3">
+            <h1 className="text-lg font-bold" style={{ color: "#1E3A5F" }}>AI Chat</h1>
+            <p className="text-xs text-gray-400">Your conversations</p>
+          </div>
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-bold text-sm" style={{ color: "#1E3A5F" }}>Conversations</h3>
             <button
