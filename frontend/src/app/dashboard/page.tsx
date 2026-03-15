@@ -15,7 +15,7 @@ import Link from "next/link";
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
-  DragEndEvent, DragOverlay, DragStartEvent,
+  DragEndEvent, DragOverlay,
 } from "@dnd-kit/core";
 import {
   SortableContext, useSortable, rectSortingStrategy, horizontalListSortingStrategy, arrayMove,

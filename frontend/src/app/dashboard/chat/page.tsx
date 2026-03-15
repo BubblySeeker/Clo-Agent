@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useAuth } from "@clerk/nextjs";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   listConversations,
@@ -51,8 +52,11 @@ const toolLabel: Record<string, string> = {
 export default function ChatPage() {
   const { getToken } = useAuth();
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  const router = useRouter();
 
-  const [activeConvId, setActiveConvId] = useState<string | null>(null);
+  const urlConvId = searchParams.get("conv");
+  const [activeConvId, setActiveConvIdRaw] = useState<string | null>(urlConvId);
   const [input, setInput] = useState("");
   const [hoveredConv, setHoveredConv] = useState<string | null>(null);
   const [localMessages, setLocalMessages] = useState<LocalMessage[]>([]);
@@ -60,6 +64,17 @@ export default function ChatPage() {
   const [activeToolName, setActiveToolName] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
+  const justCreatedRef = useRef(false);
+
+  // Persist activeConvId in URL
+  const setActiveConvId = useCallback((id: string | null) => {
+    setActiveConvIdRaw(id);
+    if (id) {
+      router.replace(`/dashboard/chat?conv=${id}`, { scroll: false });
+    } else {
+      router.replace("/dashboard/chat", { scroll: false });
+    }
+  }, [router]);
 
   const { data: conversations = [] } = useQuery({
     queryKey: ["conversations"],
@@ -75,6 +90,11 @@ export default function ChatPage() {
       if (!activeConvId) return [];
       const token = await getToken();
       const msgs = await getMessages(token!, activeConvId);
+      // Don't overwrite optimistic messages from a just-created conversation
+      if (justCreatedRef.current) {
+        justCreatedRef.current = false;
+        return msgs;
+      }
       setLocalMessages(
         msgs.map((m) => ({
           id: m.id,
@@ -92,12 +112,10 @@ export default function ChatPage() {
       const token = await getToken();
       return createConversation(token!);
     },
-    onSuccess: (conv) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
-      setActiveConvId(conv.id);
-      setLocalMessages([]);
     },
-    onError: () => {}, // handled in handleSend try/catch
+    onError: () => {},
   });
 
   useEffect(() => {
@@ -116,9 +134,12 @@ export default function ChatPage() {
       let convId = activeConvId;
       if (!convId) {
         try {
+          justCreatedRef.current = true;
           const conv = await createConvMutation.mutateAsync();
           convId = conv.id;
+          setActiveConvId(convId);
         } catch {
+          justCreatedRef.current = false;
           return; // leave input intact so user can retry
         }
       }
@@ -198,6 +219,8 @@ export default function ChatPage() {
             }
             return msgs;
           });
+          // Refresh conversation list so title updates from first message
+          queryClient.invalidateQueries({ queryKey: ["conversations"] });
         },
         (err) => {
           console.error("Stream error:", err);
@@ -218,7 +241,7 @@ export default function ChatPage() {
         }
       );
     },
-    [input, activeConvId, isStreaming, getToken, createConvMutation]
+    [input, activeConvId, isStreaming, getToken, createConvMutation, queryClient, setActiveConvId]
   );
 
   const handleConfirm = async (pendingId: string, assistantMsgId: string) => {
@@ -304,7 +327,11 @@ export default function ChatPage() {
                 }
               >
                 <p className="text-xs font-semibold text-gray-800 truncate pr-5">
-                  {conv.contact_name ? `Chat — ${conv.contact_name}` : "General Chat"}
+                  {conv.title
+                    ? conv.title
+                    : conv.contact_name
+                    ? `Chat — ${conv.contact_name}`
+                    : "New Chat"}
                 </p>
                 <span className="text-[10px] text-gray-400 mt-1">
                   {new Date(conv.created_at).toLocaleDateString()}
@@ -335,7 +362,11 @@ export default function ChatPage() {
               <Sparkles size={14} style={{ color: "#0EA5E9" }} />
             </div>
             <span className="text-sm font-bold" style={{ color: "#1E3A5F" }}>
-              {activeConv?.contact_name ? `Chat — ${activeConv.contact_name}` : "General Chat"}
+              {activeConv?.title
+                ? activeConv.title
+                : activeConv?.contact_name
+                ? `Chat — ${activeConv.contact_name}`
+                : "New Chat"}
             </span>
           </div>
         )}

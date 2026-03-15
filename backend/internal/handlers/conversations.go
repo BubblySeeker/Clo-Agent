@@ -18,6 +18,7 @@ type Conversation struct {
 	AgentID     string    `json:"agent_id"`
 	CreatedAt   time.Time `json:"created_at"`
 	ContactName *string   `json:"contact_name,omitempty"`
+	Title       *string   `json:"title,omitempty"`
 }
 
 func ListConversations(pool *pgxpool.Pool) http.HandlerFunc {
@@ -33,7 +34,8 @@ func ListConversations(pool *pgxpool.Pool) http.HandlerFunc {
 
 		rows, err := tx.Query(r.Context(),
 			`SELECT cv.id, cv.contact_id, cv.agent_id, cv.created_at,
-			        c.first_name || ' ' || c.last_name AS contact_name
+			        c.first_name || ' ' || c.last_name AS contact_name,
+			        (SELECT LEFT(m.content, 60) FROM messages m WHERE m.conversation_id = cv.id AND m.role = 'user' ORDER BY m.created_at ASC LIMIT 1) AS title
 			 FROM conversations cv
 			 LEFT JOIN contacts c ON c.id = cv.contact_id
 			 ORDER BY cv.created_at DESC`,
@@ -47,7 +49,7 @@ func ListConversations(pool *pgxpool.Pool) http.HandlerFunc {
 		convs := make([]Conversation, 0)
 		for rows.Next() {
 			var cv Conversation
-			if err := rows.Scan(&cv.ID, &cv.ContactID, &cv.AgentID, &cv.CreatedAt, &cv.ContactName); err != nil {
+			if err := rows.Scan(&cv.ID, &cv.ContactID, &cv.AgentID, &cv.CreatedAt, &cv.ContactName, &cv.Title); err != nil {
 				respondError(w, http.StatusInternalServerError, "scan error")
 				return
 			}

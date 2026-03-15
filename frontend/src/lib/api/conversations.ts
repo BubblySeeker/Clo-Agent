@@ -8,6 +8,7 @@ export interface Conversation {
   agent_id: string;
   created_at: string;
   contact_name?: string | null;
+  title?: string | null;
 }
 
 export interface Message {
