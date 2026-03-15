@@ -139,7 +139,12 @@ export default function AIChatBubble() {
       () => {
         setIsStreaming(false);
         setActiveToolName(null);
-        updateLastMessage({ isStreaming: false });
+        const current = useUIStore.getState().chatMessages;
+        const last = current.length > 0 ? current[current.length - 1] : null;
+        updateLastMessage({
+          isStreaming: false,
+          content: (last?.content) || "Sorry, I couldn\u2019t generate a response. Please try again.",
+        });
       },
       (err) => {
         console.error("AI stream error:", err);

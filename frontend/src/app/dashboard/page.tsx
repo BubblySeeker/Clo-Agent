@@ -2,12 +2,12 @@
 
 import { useAuth } from "@clerk/nextjs";
 import { useQuery } from "@tanstack/react-query";
-import { getDashboardSummary } from "@/lib/api/dashboard";
+import { getDashboardSummary, getDashboardLayout, saveDashboardLayout } from "@/lib/api/dashboard";
 import {
   TrendingUp, TrendingDown, Users, AlertCircle, CheckCircle,
   Phone, Mail, FileText, Home, MessageSquare, Sparkles,
-  ChevronRight, Flame, DollarSign, Banknote, Phone as PhoneIcon,
-  Calendar, Check, Zap, Plus, Briefcase, GripVertical, X,
+  ChevronRight, Flame, DollarSign, Banknote,
+  Check, Zap, Plus, Briefcase, GripVertical, X,
   Maximize2, Minimize2, Settings2, GitBranch, Activity,
   BarChart as BarChartIcon, PieChart as PieChartIcon,
 } from "lucide-react";
@@ -15,7 +15,7 @@ import Link from "next/link";
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
-  DragEndEvent, DragOverlay, DragStartEvent,
+  DragEndEvent, DragOverlay,
 } from "@dnd-kit/core";
 import {
   SortableContext, useSortable, rectSortingStrategy, horizontalListSortingStrategy, arrayMove,
@@ -41,6 +41,29 @@ function timeAgo(d: string) {
   return `${Math.floor(h / 24)}d ago`;
 }
 
+function EmptyState({ icon: Icon, headline, subline, ctaLabel, ctaHref }: {
+  icon: React.ElementType;
+  headline: string;
+  subline: string;
+  ctaLabel?: string;
+  ctaHref?: string;
+}) {
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center gap-3 py-8">
+      <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ backgroundColor: "#EFF6FF" }}>
+        <Icon size={24} style={{ color: "#0EA5E9" }} />
+      </div>
+      <p className="text-sm font-semibold" style={{ color: "#1E3A5F" }}>{headline}</p>
+      <p className="text-xs text-gray-400 text-center max-w-[220px]">{subline}</p>
+      {ctaLabel && ctaHref && (
+        <Link href={ctaHref} className="flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-full mt-1" style={{ color: "#0EA5E9", backgroundColor: "#EFF6FF" }}>
+          {ctaLabel} <ChevronRight size={13} />
+        </Link>
+      )}
+    </div>
+  );
+}
+
 // ─── Static data ──────────────────────────────────────────────────────────────
 
 const activityIconColors: Record<string, { bg: string; color: string }> = {
@@ -55,48 +78,10 @@ const activityIcons: Record<string, React.ElementType> = {
   task: CheckCircle, message: MessageSquare,
 };
 
-const commissionYearData = [
-  { month: "Jan", value: 9200 },  { month: "Feb", value: 11400 },
-  { month: "Mar", value: 8700 },  { month: "Apr", value: 14600 },
-  { month: "May", value: 12300 }, { month: "Jun", value: 18900 },
-  { month: "Jul", value: 16200 }, { month: "Aug", value: 21500 },
-  { month: "Sep", value: 17800 }, { month: "Oct", value: 15400 },
-  { month: "Nov", value: 19200 }, { month: "Dec", value: 18400 },
-];
-const commissionMonthData = [
-  { month: "Wk 1", value: 3200 }, { month: "Wk 2", value: 5400 },
-  { month: "Wk 3", value: 4100 }, { month: "Wk 4", value: 5700 },
-];
-const leadSourceData = [
-  { name: "Zillow",     value: 31, color: "#0EA5E9" },
-  { name: "Referral",   value: 27, color: "#22C55E" },
-  { name: "Cold Call",  value: 16, color: "#1E3A5F" },
-  { name: "Open House", value: 15, color: "#F59E0B" },
-  { name: "WhatsApp",   value: 11, color: "#8B5CF6" },
-];
-const speedLeads = [
-  { name: "James Walsh",    source: "Zillow",     elapsed: "4 hrs ago",  contacted: false },
-  { name: "Aisha Thompson", source: "Open House", elapsed: "7 hrs ago",  contacted: false },
-  { name: "Carlos Reyes",   source: "Referral",   elapsed: "1 hr ago",   contacted: true  },
-  { name: "Nina Patel",     source: "WhatsApp",   elapsed: "9 hrs ago",  contacted: false },
-  { name: "Tom Becker",     source: "Cold Call",  elapsed: "12 min ago", contacted: true  },
-];
 const sourceColors: Record<string, string> = {
   Zillow: "#0EA5E9", Referral: "#22C55E", "Cold Call": "#1E3A5F",
   "Open House": "#F59E0B", WhatsApp: "#8B5CF6",
 };
-const aiInsights = [
-  { id: 1, text: "Marcus hasn't replied in 11 days — he was ready to tour last week.", action: "Draft Message", urgency: "high" },
-  { id: 2, text: "Sarah Chen viewed the Pecan St. listing 4 times — high purchase intent signal.", action: "View Profile", urgency: "medium" },
-  { id: 3, text: "3 leads from the open house still uncontacted after 48 hours.", action: "View Leads", urgency: "high" },
-];
-const initialTasks = [
-  { id: 1, contact: "Marcus Rivera",  type: "Call",      time: "9:00 AM",    overdue: false, icon: PhoneIcon,     done: false },
-  { id: 2, contact: "Sarah Chen",     type: "Follow-up", time: "10:30 AM",   overdue: false, icon: MessageSquare, done: false },
-  { id: 3, contact: "David Nguyen",   type: "Email",     time: "Yesterday",  overdue: true,  icon: Mail,          done: false },
-  { id: 4, contact: "Priya Kapoor",   type: "Call",      time: "2 days ago", overdue: true,  icon: PhoneIcon,     done: false },
-  { id: 5, contact: "James Walsh",    type: "Showing",   time: "3:00 PM",    overdue: false, icon: Calendar,      done: false },
-];
 const quickActions = [
   { icon: Users,     label: "New Contact",  href: "/dashboard/contacts",   color: "#0EA5E9" },
   { icon: Briefcase, label: "New Deal",     href: "/dashboard/pipeline",   color: "#8B5CF6" },
@@ -107,6 +92,20 @@ const quickActions = [
 
 type DashData = Awaited<ReturnType<typeof getDashboardSummary>>;
 
+function pctChange(current: number, prev: number): { label: string; up: boolean } | null {
+  if (prev === 0 && current === 0) return null;
+  if (prev === 0) return { label: "+100%", up: true };
+  const pct = Math.round(((current - prev) / prev) * 100);
+  if (pct === 0) return null;
+  return { label: `${pct > 0 ? "+" : ""}${pct}%`, up: pct > 0 };
+}
+
+function numChange(current: number, prev: number): { label: string; up: boolean } | null {
+  const diff = current - prev;
+  if (diff === 0) return null;
+  return { label: `${diff > 0 ? "+" : ""}${diff}`, up: diff > 0 };
+}
+
 interface KpiDef {
   id: string;
   label: string;
@@ -116,7 +115,7 @@ interface KpiDef {
   iconColor: string;
   urgent?: boolean;
   getValue: (data: DashData | undefined, loading: boolean) => string;
-  getTrend: () => { label: string; up: boolean } | null;
+  getTrend: (data: DashData | undefined) => { label: string; up: boolean } | null;
 }
 
 const KPI_DEFS: KpiDef[] = [
@@ -124,13 +123,13 @@ const KPI_DEFS: KpiDef[] = [
     id: "kpi-leads", label: "Active Leads", sub: "vs last month",
     icon: Users, iconBg: "#EFF6FF", iconColor: "#0EA5E9",
     getValue: (d, l) => l ? "—" : String(d?.total_contacts ?? 0),
-    getTrend: () => ({ label: "+12%", up: true }),
+    getTrend: (d) => d?.trends ? pctChange(d.total_contacts, d.trends.prev_total_contacts) : null,
   },
   {
     id: "kpi-pipeline", label: "Deals in Pipeline", sub: "active deals",
     icon: DollarSign, iconBg: "#F0FDF4", iconColor: "#22C55E",
     getValue: (d, l) => l ? "—" : fmtVal(d?.pipeline_value ?? 0),
-    getTrend: () => ({ label: "+8%", up: true }),
+    getTrend: (d) => d?.trends ? pctChange(d.pipeline_value, d.trends.prev_pipeline_value) : null,
   },
   {
     id: "kpi-followups", label: "Follow-ups Overdue", sub: "needs attention",
@@ -142,13 +141,13 @@ const KPI_DEFS: KpiDef[] = [
     id: "kpi-closings", label: "Closings This Month", sub: "on track",
     icon: CheckCircle, iconBg: "#F0FDF4", iconColor: "#22C55E",
     getValue: (d, l) => l ? "—" : String(d?.closed_this_month ?? 0),
-    getTrend: () => ({ label: "+1", up: true }),
+    getTrend: (d) => d?.trends ? numChange(d.closed_this_month, d.trends.prev_closed_this_month) : null,
   },
   {
-    id: "kpi-commission", label: "Commission This Month", sub: "vs last month",
+    id: "kpi-commission", label: "Revenue This Month", sub: "vs last month",
     icon: Banknote, iconBg: "#EFF6FF", iconColor: "#1E3A5F",
-    getValue: () => "$18,400",
-    getTrend: () => ({ label: "+22%", up: true }),
+    getValue: (d, l) => l ? "—" : fmtVal(d?.trends?.closed_this_month_value ?? 0),
+    getTrend: (d) => d?.trends ? pctChange(d.trends.closed_this_month_value, d.trends.prev_closed_month_value) : null,
   },
 ];
 
@@ -220,7 +219,7 @@ function SortableKpiCard({
     opacity: isDragging ? 0.3 : 1,
   };
 
-  const trend = def.getTrend();
+  const trend = def.getTrend(data);
 
   return (
     <div ref={setNodeRef} style={style} className="relative flex-1 min-w-0">
@@ -482,10 +481,22 @@ function PipelineWidget({ data, isLoading }: { data: DashData | undefined; isLoa
           Full View <ChevronRight size={13} />
         </Link>
       </div>
-      <div className="flex flex-col gap-2.5 flex-1">
-        {isLoading
-          ? [...Array(5)].map((_, i) => <div key={i} className="flex items-center gap-3 animate-pulse"><div className="w-24 h-4 bg-gray-100 rounded" /><div className="flex-1 h-8 bg-gray-100 rounded-lg" /></div>)
-          : data?.pipeline_by_stage?.slice(0, 6).map((stage) => {
+      {isLoading ? (
+        <div className="flex flex-col gap-2.5 flex-1">
+          {[...Array(5)].map((_, i) => <div key={i} className="flex items-center gap-3 animate-pulse"><div className="w-24 h-4 bg-gray-100 rounded" /><div className="flex-1 h-8 bg-gray-100 rounded-lg" /></div>)}
+        </div>
+      ) : !data?.pipeline_by_stage?.length || !data.pipeline_by_stage.some(s => s.deal_count > 0) ? (
+        <EmptyState
+          icon={GitBranch}
+          headline="Build your pipeline"
+          subline="Add deals to track their progress from lead to close."
+          ctaLabel="Go to Pipeline"
+          ctaHref="/dashboard/pipeline"
+        />
+      ) : (
+        <>
+          <div className="flex flex-col gap-2.5 flex-1">
+            {data.pipeline_by_stage.slice(0, 6).map((stage) => {
               const maxCount = Math.max(1, ...(data.pipeline_by_stage.map((s) => s.deal_count)));
               const pct = Math.max(20, (stage.deal_count / maxCount) * 100);
               return (
@@ -500,51 +511,65 @@ function PipelineWidget({ data, isLoading }: { data: DashData | undefined; isLoa
                 </div>
               );
             })}
-      </div>
-      <div className="flex gap-6 pt-2 border-t border-gray-100">
-        <div>
-          <p className="text-xs text-gray-400">Pipeline Value</p>
-          <p className="text-sm font-bold" style={{ color: "#1E3A5F" }}>{fmtVal(data?.pipeline_value ?? 0)}</p>
-        </div>
-      </div>
+          </div>
+          <div className="flex gap-6 pt-2 border-t border-gray-100">
+            <div>
+              <p className="text-xs text-gray-400">Pipeline Value</p>
+              <p className="text-sm font-bold" style={{ color: "#1E3A5F" }}>{fmtVal(data?.pipeline_value ?? 0)}</p>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
-function TasksWidget({ tasks, setTasks }: { tasks: typeof initialTasks; setTasks: React.Dispatch<React.SetStateAction<typeof initialTasks>> }) {
-  const overdueCount = tasks.filter((t) => t.overdue && !t.done).length;
+function TasksWidget({ data, isLoading }: { data: DashData | undefined; isLoading: boolean }) {
+  const [doneIds, setDoneIds] = useState<Set<string>>(new Set());
+  const tasks = data?.tasks ?? [];
+  const toggleDone = (id: string) => setDoneIds((prev) => { const s = new Set(prev); if (s.has(id)) s.delete(id); else s.add(id); return s; });
   return (
     <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-col gap-4 h-full">
       <div className="flex items-center gap-2">
-        <h3 className="font-bold" style={{ color: "#1E3A5F" }}>Today&apos;s Tasks</h3>
-        {overdueCount > 0 && <span className="text-xs font-bold text-white bg-red-500 rounded-full px-2 py-0.5">{overdueCount} overdue</span>}
+        <h3 className="font-bold" style={{ color: "#1E3A5F" }}>Tasks</h3>
+        {tasks.length > 0 && <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{tasks.length}</span>}
       </div>
       <div className="flex flex-col gap-2 flex-1">
-        {tasks.map((t) => (
-          <div key={t.id} className={`flex items-center gap-3 p-3 rounded-xl ${t.done ? "opacity-50" : ""} ${t.overdue && !t.done ? "bg-amber-50" : "bg-gray-50"}`}>
-            <span className={`w-2 h-2 rounded-full shrink-0 ${t.overdue && !t.done ? "bg-amber-400" : "bg-green-400"}`} />
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: t.overdue && !t.done ? "#FEF3C7" : "#EFF6FF" }}>
-              <t.icon size={13} style={{ color: t.overdue && !t.done ? "#F59E0B" : "#0EA5E9" }} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className={`text-sm font-semibold truncate ${t.done ? "line-through text-gray-400" : "text-gray-800"}`}>{t.contact}</p>
-              <div className="flex items-center gap-1.5">
-                <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${t.overdue && !t.done ? "bg-amber-100 text-amber-700" : "bg-blue-50 text-blue-600"}`}>{t.type}</span>
-                <span className="text-xs text-gray-400">{t.time}</span>
-              </div>
-            </div>
-            <button
-              onClick={() => setTasks((prev) => prev.map((x) => x.id === t.id ? { ...x, done: !x.done } : x))}
-              className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${t.done ? "border-green-400 bg-green-400" : "border-gray-300 hover:border-green-400"}`}
-            >
-              {t.done && <Check size={11} className="text-white" />}
-            </button>
-          </div>
-        ))}
+        {isLoading
+          ? [...Array(4)].map((_, i) => <div key={i} className="h-14 bg-gray-50 rounded-xl animate-pulse" />)
+          : !tasks.length
+          ? <EmptyState
+              icon={CheckCircle}
+              headline="No tasks yet"
+              subline="Tasks you log for contacts will show up here so nothing slips through the cracks."
+              ctaLabel="View Contacts"
+              ctaHref="/dashboard/contacts"
+            />
+          : tasks.map((t) => {
+              const done = doneIds.has(t.id);
+              return (
+                <div key={t.id} className={`flex items-center gap-3 p-3 rounded-xl ${done ? "opacity-50" : ""} bg-gray-50`}>
+                  <span className="w-2 h-2 rounded-full shrink-0 bg-blue-400" />
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: "#EFF6FF" }}>
+                    <CheckCircle size={13} style={{ color: "#0EA5E9" }} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-semibold truncate ${done ? "line-through text-gray-400" : "text-gray-800"}`}>{t.contact_name}</p>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-gray-500 truncate">{t.body || "Task"}</span>
+                      <span className="text-xs text-gray-400">{timeAgo(t.created_at)}</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => toggleDone(t.id)}
+                    className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${done ? "border-green-400 bg-green-400" : "border-gray-300 hover:border-green-400"}`}
+                  >
+                    {done && <Check size={11} className="text-white" />}
+                  </button>
+                </div>
+              );
+            })}
       </div>
-      <Link href="/dashboard/tasks" className="flex items-center justify-center gap-1 text-xs font-semibold pt-2 border-t border-gray-100" style={{ color: "#0EA5E9" }}>
-        View All Tasks <ChevronRight size={13} />
-      </Link>
     </div>
   );
 }
@@ -564,7 +589,11 @@ function HotLeadsWidget({ data, isLoading }: { data: DashData | undefined; isLoa
         {isLoading
           ? [...Array(4)].map((_, i) => <div key={i} className="h-14 bg-gray-50 rounded-xl animate-pulse" />)
           : !data?.needs_follow_up?.length
-          ? <p className="text-sm text-gray-400 text-center py-6">All up to date!</p>
+          ? <EmptyState
+              icon={Flame}
+              headline="No follow-ups needed"
+              subline="Contacts who haven't heard from you in a while will appear here."
+            />
           : data.needs_follow_up.slice(0, 4).map((lead, i) => (
               <Link key={lead.contact_id} href={`/dashboard/contacts/${lead.contact_id}`}
                 className="flex items-start gap-3 p-3 rounded-xl bg-gray-50 hover:bg-blue-50/50 transition-colors"
@@ -592,44 +621,51 @@ function HotLeadsWidget({ data, isLoading }: { data: DashData | undefined; isLoa
   );
 }
 
-function CommissionWidget() {
-  const [view, setView] = useState<"year" | "month">("year");
-  const data = view === "year" ? commissionYearData : commissionMonthData;
-  const max = Math.max(...data.map((d) => d.value));
+function CommissionWidget({ data, isLoading }: { data: DashData | undefined; isLoading: boolean }) {
+  const chartData = data?.monthly_revenue ?? [];
+  const total = chartData.reduce((s, d) => s + d.value, 0);
+  const bestMonth = chartData.length ? chartData.reduce((best, d) => d.value > best.value ? d : best, chartData[0]) : null;
+  const max = chartData.length ? Math.max(...chartData.map((d) => d.value)) : 0;
+  const hasData = chartData.some((d) => d.value > 0);
   return (
     <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-col gap-4 h-full">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="font-bold" style={{ color: "#1E3A5F" }}>Commission Income</h3>
-          <p className="text-xs text-gray-400 mt-0.5">Earnings over time</p>
-        </div>
-        <div className="flex rounded-xl overflow-hidden border border-gray-200">
-          {(["month", "year"] as const).map((v) => (
-            <button key={v} onClick={() => setView(v)} className={`text-xs font-semibold px-3 py-1.5 capitalize ${view === v ? "text-white" : "text-gray-500 bg-white hover:bg-gray-50"}`} style={view === v ? { backgroundColor: "#0EA5E9" } : {}}>
-              {v}
-            </button>
-          ))}
-        </div>
+      <div>
+        <h3 className="font-bold" style={{ color: "#1E3A5F" }}>Deal Revenue</h3>
+        <p className="text-xs text-gray-400 mt-0.5">Closed deal value over 12 months</p>
       </div>
-      <div className="flex gap-6">
-        <div><p className="text-xs text-gray-400">Total</p><p className="text-xl font-bold" style={{ color: "#1E3A5F" }}>{view === "year" ? "$183.1K" : "$18.4K"}</p></div>
-        <div><p className="text-xs text-gray-400">Best {view === "year" ? "Month" : "Week"}</p><p className="text-xl font-bold text-green-500">{view === "year" ? "$21.5K" : "$5.7K"}</p></div>
-      </div>
-      <div className="flex-1 min-h-0">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} barSize={view === "year" ? 22 : 40} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
-            <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
-            <YAxis tickFormatter={(v) => v >= 1000 ? `$${(v / 1000).toFixed(0)}K` : `$${v}`} tick={{ fontSize: 11, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
-            <Tooltip content={({ active, payload, label }) => active && payload?.length
-              ? <div className="bg-white shadow-lg border border-gray-100 rounded-xl p-3"><p className="text-xs text-gray-500">{label}</p><p className="text-sm font-bold" style={{ color: "#1E3A5F" }}>${(payload[0].value as number).toLocaleString()}</p></div>
-              : null} cursor={{ fill: "rgba(14,165,233,0.06)" }} />
-            <Bar dataKey="value" radius={[6, 6, 0, 0]}>
-              {data.map((e, i) => <Cell key={i} fill={e.value === max ? "#1E3A5F" : "#0EA5E9"} opacity={e.value === max ? 1 : 0.7} />)}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+      {isLoading ? (
+        <div className="flex-1 flex items-center justify-center"><div className="h-32 w-full bg-gray-50 rounded-xl animate-pulse" /></div>
+      ) : !hasData ? (
+        <EmptyState
+          icon={Banknote}
+          headline="Your first close is ahead"
+          subline="Closed deal revenue will be charted here over time."
+          ctaLabel="Go to Pipeline"
+          ctaHref="/dashboard/pipeline"
+        />
+      ) : (
+        <>
+          <div className="flex gap-6">
+            <div><p className="text-xs text-gray-400">Total</p><p className="text-xl font-bold" style={{ color: "#1E3A5F" }}>{fmtVal(total)}</p></div>
+            {bestMonth && <div><p className="text-xs text-gray-400">Best Month</p><p className="text-xl font-bold text-green-500">{fmtVal(bestMonth.value)}</p></div>}
+          </div>
+          <div className="flex-1 min-h-0">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} barSize={22} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
+                <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
+                <YAxis tickFormatter={(v) => v >= 1000 ? `$${(v / 1000).toFixed(0)}K` : `$${v}`} tick={{ fontSize: 11, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
+                <Tooltip content={({ active, payload, label }) => active && payload?.length
+                  ? <div className="bg-white shadow-lg border border-gray-100 rounded-xl p-3"><p className="text-xs text-gray-500">{label}</p><p className="text-sm font-bold" style={{ color: "#1E3A5F" }}>${(payload[0].value as number).toLocaleString()}</p></div>
+                  : null} cursor={{ fill: "rgba(14,165,233,0.06)" }} />
+                <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                  {chartData.map((e, i) => <Cell key={i} fill={e.value === max ? "#1E3A5F" : "#0EA5E9"} opacity={e.value === max ? 1 : 0.7} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -645,7 +681,13 @@ function ActivityWidget({ data, isLoading }: { data: DashData | undefined; isLoa
         {isLoading
           ? [...Array(5)].map((_, i) => <div key={i} className="flex gap-3 py-3 animate-pulse"><div className="w-8 h-8 bg-gray-100 rounded-lg shrink-0" /><div className="flex-1 space-y-1.5"><div className="h-3 bg-gray-100 rounded w-3/4" /><div className="h-2 bg-gray-50 rounded w-1/2" /></div></div>)
           : !data?.recent_activity?.length
-          ? <p className="text-sm text-gray-400 text-center py-8">No recent activity</p>
+          ? <EmptyState
+              icon={Activity}
+              headline="Start logging activity"
+              subline="Calls, emails, and notes you log for contacts will appear in this feed."
+              ctaLabel="View Contacts"
+              ctaHref="/dashboard/contacts"
+            />
           : data.recent_activity.slice(0, 6).map((item, i) => {
               const c = activityIconColors[item.type] || activityIconColors.note;
               const Icon = activityIcons[item.type] || FileText;
@@ -672,88 +714,115 @@ function AIInsightsWidget() {
         <h3 className="font-bold" style={{ color: "#1E3A5F" }}>AI Insights</h3>
         <Sparkles size={15} style={{ color: "#0EA5E9" }} />
       </div>
-      <div className="flex flex-col gap-3 flex-1">
-        {aiInsights.map((ins) => (
-          <div key={ins.id} className="rounded-2xl p-4 flex flex-col gap-3"
-            style={{ background: ins.urgency === "high" ? "linear-gradient(135deg,#EFF6FF,#E0F2FE)" : "linear-gradient(135deg,#F0FDF4,#ECFDF5)", border: `1px solid ${ins.urgency === "high" ? "#BAE6FD" : "#A7F3D0"}` }}>
-            <div className="flex items-start gap-2">
-              <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5" style={{ backgroundColor: ins.urgency === "high" ? "#0EA5E9" : "#22C55E" }}><Sparkles size={11} className="text-white" /></div>
-              <p className="text-xs text-gray-700 leading-relaxed">{ins.text}</p>
-            </div>
-            <button className="flex items-center gap-1 text-xs font-bold self-start px-3 py-1.5 rounded-full text-white hover:opacity-90" style={{ backgroundColor: ins.urgency === "high" ? "#0EA5E9" : "#22C55E" }}>
-              {ins.action} <ChevronRight size={11} />
-            </button>
-          </div>
-        ))}
+      <div className="flex-1 flex flex-col items-center justify-center gap-3 py-8">
+        <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ backgroundColor: "#EFF6FF" }}>
+          <Sparkles size={24} style={{ color: "#0EA5E9" }} />
+        </div>
+        <p className="text-sm font-semibold" style={{ color: "#1E3A5F" }}>Coming Soon</p>
+        <p className="text-xs text-gray-400 text-center max-w-[200px]">AI-powered insights and recommendations will appear here as you add more data.</p>
       </div>
     </div>
   );
 }
 
-function LeadSourceWidget({ total }: { total: number }) {
-  const data = leadSourceData;
-  const displayTotal = total > 0 ? total : data.reduce((s, d) => s + d.value, 0);
+const FALLBACK_COLORS = ["#0EA5E9", "#22C55E", "#1E3A5F", "#F59E0B", "#8B5CF6", "#F97316", "#EC4899", "#06B6D4"];
+
+function LeadSourceWidget({ data, isLoading }: { data: DashData | undefined; isLoading: boolean }) {
+  const sources = data?.lead_sources ?? [];
+  const chartData = sources.map((s, i) => ({
+    name: s.source,
+    value: s.count,
+    color: sourceColors[s.source] || FALLBACK_COLORS[i % FALLBACK_COLORS.length],
+  }));
+  const displayTotal = chartData.reduce((s, d) => s + d.value, 0);
   return (
     <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-col gap-4 h-full">
       <div>
         <h3 className="font-bold" style={{ color: "#1E3A5F" }}>Lead Source Breakdown</h3>
         <p className="text-xs text-gray-400 mt-0.5">Where your leads are coming from</p>
       </div>
-      <div className="flex items-center gap-6 flex-1">
-        <div className="relative shrink-0" style={{ width: 160, height: 160 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie data={data} cx="50%" cy="50%" innerRadius={52} outerRadius={76} paddingAngle={3} dataKey="value" startAngle={90} endAngle={-270}>
-                {data.map((e, i) => <Cell key={i} fill={e.color} stroke="none" />)}
-              </Pie>
-              <Tooltip content={({ active, payload }) => active && payload?.length
-                ? <div className="bg-white shadow-lg border border-gray-100 rounded-xl p-3"><p className="text-xs text-gray-500">{payload[0].payload.name}</p><p className="text-sm font-bold" style={{ color: "#1E3A5F" }}>{payload[0].value} leads ({Math.round(((payload[0].value as number) / displayTotal) * 100)}%)</p></div>
-                : null} />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-            <p className="text-2xl font-bold" style={{ color: "#1E3A5F" }}>{displayTotal}</p>
-            <p className="text-xs text-gray-400">Total Leads</p>
+      {isLoading ? (
+        <div className="flex-1 flex items-center justify-center"><div className="w-32 h-32 bg-gray-50 rounded-full animate-pulse" /></div>
+      ) : !chartData.length ? (
+        <EmptyState
+          icon={Users}
+          headline="Add your first contacts"
+          subline="See where your leads come from as you grow your network."
+          ctaLabel="Add Contact"
+          ctaHref="/dashboard/contacts"
+        />
+      ) : (
+        <div className="flex items-center gap-6 flex-1">
+          <div className="relative shrink-0" style={{ width: 160, height: 160 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={chartData} cx="50%" cy="50%" innerRadius={52} outerRadius={76} paddingAngle={3} dataKey="value" startAngle={90} endAngle={-270}>
+                  {chartData.map((e, i) => <Cell key={i} fill={e.color} stroke="none" />)}
+                </Pie>
+                <Tooltip content={({ active, payload }) => active && payload?.length
+                  ? <div className="bg-white shadow-lg border border-gray-100 rounded-xl p-3"><p className="text-xs text-gray-500">{payload[0].payload.name}</p><p className="text-sm font-bold" style={{ color: "#1E3A5F" }}>{payload[0].value} leads ({Math.round(((payload[0].value as number) / displayTotal) * 100)}%)</p></div>
+                  : null} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+              <p className="text-2xl font-bold" style={{ color: "#1E3A5F" }}>{displayTotal}</p>
+              <p className="text-xs text-gray-400">Total Leads</p>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2.5 flex-1">
+            {chartData.map((item) => (
+              <div key={item.name} className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: item.color }} /><span className="text-sm text-gray-600">{item.name}</span></div>
+                <div className="flex items-center gap-2"><span className="text-sm font-bold" style={{ color: "#1E3A5F" }}>{item.value}</span><span className="text-xs text-gray-400 w-8 text-right">{Math.round((item.value / displayTotal) * 100)}%</span></div>
+              </div>
+            ))}
           </div>
         </div>
-        <div className="flex flex-col gap-2.5 flex-1">
-          {data.map((item) => (
-            <div key={item.name} className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: item.color }} /><span className="text-sm text-gray-600">{item.name}</span></div>
-              <div className="flex items-center gap-2"><span className="text-sm font-bold" style={{ color: "#1E3A5F" }}>{item.value}</span><span className="text-xs text-gray-400 w-8 text-right">{Math.round((item.value / displayTotal) * 100)}%</span></div>
-            </div>
-          ))}
-        </div>
-      </div>
+      )}
     </div>
   );
 }
 
-function SpeedToLeadWidget() {
+function SpeedToLeadWidget({ data, isLoading }: { data: DashData | undefined; isLoading: boolean }) {
+  const leads = data?.speed_to_lead ?? [];
+  const notContacted = leads.filter((l) => !l.contacted).length;
+  const contacted = leads.filter((l) => l.contacted).length;
   return (
     <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-col gap-4 h-full">
       <div className="flex items-center gap-2">
-        <h3 className="font-bold" style={{ color: "#1E3A5F" }}>New Leads — Response Time</h3>
+        <h3 className="font-bold" style={{ color: "#1E3A5F" }}>New Leads</h3>
         <Zap size={16} className="text-amber-400" />
       </div>
-      <div className="overflow-hidden rounded-xl border border-gray-100 flex-1">
-        <div className="grid grid-cols-4 gap-2 px-4 py-2 bg-gray-50 border-b border-gray-100">
-          {["Contact", "Source", "Arrived", "Status"].map((h) => <span key={h} className="text-xs font-semibold text-gray-500">{h}</span>)}
-        </div>
-        {speedLeads.map((lead, i) => (
-          <div key={lead.name} className={`grid grid-cols-4 gap-2 px-4 py-3 items-center ${i !== speedLeads.length - 1 ? "border-b border-gray-50" : ""} ${!lead.contacted ? "bg-amber-50/30" : ""}`}>
-            <span className="text-sm font-semibold text-gray-800 truncate">{lead.name}</span>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full w-fit" style={{ backgroundColor: `${sourceColors[lead.source] || "#94a3b8"}18`, color: sourceColors[lead.source] || "#1E3A5F" }}>{lead.source}</span>
-            <span className="text-xs text-gray-500">{lead.elapsed}</span>
-            <span className={`text-xs font-bold px-2 py-0.5 rounded-full w-fit ${lead.contacted ? "bg-green-100 text-green-600" : "bg-amber-100 text-amber-700"}`}>{lead.contacted ? "Contacted" : "Pending"}</span>
+      {isLoading ? (
+        <div className="flex-1 flex flex-col gap-2">{[...Array(4)].map((_, i) => <div key={i} className="h-10 bg-gray-50 rounded-xl animate-pulse" />)}</div>
+      ) : !leads.length ? (
+        <EmptyState
+          icon={Zap}
+          headline="New leads will appear here"
+          subline="Track how quickly you respond to incoming leads."
+        />
+      ) : (
+        <>
+          <div className="overflow-hidden rounded-xl border border-gray-100 flex-1">
+            <div className="grid grid-cols-4 gap-2 px-4 py-2 bg-gray-50 border-b border-gray-100">
+              {["Contact", "Source", "Added", "Status"].map((h) => <span key={h} className="text-xs font-semibold text-gray-500">{h}</span>)}
+            </div>
+            {leads.map((lead, i) => (
+              <div key={lead.contact_id} className={`grid grid-cols-4 gap-2 px-4 py-3 items-center ${i !== leads.length - 1 ? "border-b border-gray-50" : ""} ${!lead.contacted ? "bg-amber-50/30" : ""}`}>
+                <span className="text-sm font-semibold text-gray-800 truncate">{lead.contact_name}</span>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full w-fit" style={{ backgroundColor: `${sourceColors[lead.source || ""] || "#94a3b8"}18`, color: sourceColors[lead.source || ""] || "#1E3A5F" }}>{lead.source || "Unknown"}</span>
+                <span className="text-xs text-gray-500">{timeAgo(lead.created_at)}</span>
+                <span className={`text-xs font-bold px-2 py-0.5 rounded-full w-fit ${lead.contacted ? "bg-green-100 text-green-600" : "bg-amber-100 text-amber-700"}`}>{lead.contacted ? "Contacted" : "Pending"}</span>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-      <div className="flex gap-4">
-        <div className="flex-1 text-center rounded-xl p-3 bg-amber-50"><p className="text-xl font-bold text-amber-600">{speedLeads.filter((l) => !l.contacted).length}</p><p className="text-xs text-amber-500 mt-0.5">Not yet contacted</p></div>
-        <div className="flex-1 text-center rounded-xl p-3 bg-green-50"><p className="text-xl font-bold text-green-600">{speedLeads.filter((l) => l.contacted).length}</p><p className="text-xs text-green-500 mt-0.5">Contacted today</p></div>
-        <div className="flex-1 text-center rounded-xl p-3" style={{ backgroundColor: "#EFF6FF" }}><p className="text-xl font-bold" style={{ color: "#0EA5E9" }}>4.2h</p><p className="text-xs mt-0.5" style={{ color: "#7CC8F0" }}>Avg. response time</p></div>
-      </div>
+          <div className="flex gap-4">
+            <div className="flex-1 text-center rounded-xl p-3 bg-amber-50"><p className="text-xl font-bold text-amber-600">{notContacted}</p><p className="text-xs text-amber-500 mt-0.5">Not yet contacted</p></div>
+            <div className="flex-1 text-center rounded-xl p-3 bg-green-50"><p className="text-xl font-bold text-green-600">{contacted}</p><p className="text-xs text-green-500 mt-0.5">Contacted</p></div>
+            <div className="flex-1 text-center rounded-xl p-3" style={{ backgroundColor: "#EFF6FF" }}><p className="text-xl font-bold" style={{ color: "#0EA5E9" }}>{leads.length}</p><p className="text-xs mt-0.5" style={{ color: "#7CC8F0" }}>Total New</p></div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -762,7 +831,6 @@ function SpeedToLeadWidget() {
 
 export default function DashboardPage() {
   const { getToken } = useAuth();
-  const [tasks, setTasks] = useState(initialTasks);
   const [newMenuOpen, setNewMenuOpen] = useState(false);
   const newMenuRef = useRef<HTMLDivElement>(null);
 
@@ -798,6 +866,28 @@ export default function DashboardPage() {
     queryFn: async () => { const token = await getToken(); return getDashboardSummary(token!); },
   });
 
+  const { data: layoutData } = useQuery({
+    queryKey: ["dashboard-layout"],
+    queryFn: async () => { const token = await getToken(); return getDashboardLayout(token!); },
+  });
+
+  useEffect(() => {
+    if (!layoutData?.layout) return;
+    const saved = layoutData.layout as { widgets?: LayoutItem[]; kpiOrder?: string[]; hiddenKpis?: string[] };
+    if (saved.widgets) {
+      setLayout(saved.widgets); setSavedLayout(saved.widgets);
+      localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(saved.widgets));
+    }
+    if (saved.kpiOrder) {
+      setKpiOrder(saved.kpiOrder); setSavedKpiOrder(saved.kpiOrder);
+      localStorage.setItem(KPI_STORAGE_KEY, JSON.stringify(saved.kpiOrder));
+    }
+    if (saved.hiddenKpis) {
+      const set = new Set(saved.hiddenKpis);
+      setHiddenKpis(set); setSavedHiddenKpis(set);
+    }
+  }, [layoutData]);
+
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   function handleDragEnd(e: DragEndEvent) {
@@ -828,6 +918,9 @@ export default function DashboardPage() {
 
   function saveCustomization() {
     saveLayout(layout, kpiOrder);
+    getToken().then((token) => {
+      if (token) saveDashboardLayout(token, { widgets: layout, kpiOrder, hiddenKpis: Array.from(hiddenKpis) });
+    });
     setSavedLayout(layout);
     setSavedKpiOrder(kpiOrder);
     setSavedHiddenKpis(new Set(hiddenKpis));
@@ -853,13 +946,13 @@ export default function DashboardPage() {
     switch (id) {
       case "kpi-cards":     return <KpiCards data={data} isLoading={isLoading} editMode={editMode} kpiOrder={kpiOrder} hiddenKpis={hiddenKpis} setKpiOrder={setKpiOrder} setHiddenKpis={setHiddenKpis} />;
       case "pipeline":      return <PipelineWidget data={data} isLoading={isLoading} />;
-      case "tasks":         return <TasksWidget tasks={tasks} setTasks={setTasks} />;
+      case "tasks":         return <TasksWidget data={data} isLoading={isLoading} />;
       case "hot-leads":     return <HotLeadsWidget data={data} isLoading={isLoading} />;
-      case "commission":    return <CommissionWidget />;
+      case "commission":    return <CommissionWidget data={data} isLoading={isLoading} />;
       case "activity":      return <ActivityWidget data={data} isLoading={isLoading} />;
       case "ai-insights":   return <AIInsightsWidget />;
-      case "lead-source":   return <LeadSourceWidget total={data?.total_contacts ?? 0} />;
-      case "speed-to-lead": return <SpeedToLeadWidget />;
+      case "lead-source":   return <LeadSourceWidget data={data} isLoading={isLoading} />;
+      case "speed-to-lead": return <SpeedToLeadWidget data={data} isLoading={isLoading} />;
       default:              return null;
     }
   }

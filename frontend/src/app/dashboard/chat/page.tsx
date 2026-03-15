@@ -194,7 +194,11 @@ export default function ChatPage() {
             const msgs = [...prev];
             const last = msgs[msgs.length - 1];
             if (last && last.id === assistantMsgId) {
-              msgs[msgs.length - 1] = { ...last, isStreaming: false };
+              msgs[msgs.length - 1] = {
+                ...last,
+                isStreaming: false,
+                content: last.content || "Sorry, I couldn\u2019t generate a response. Please try again.",
+              };
             }
             return msgs;
           });
