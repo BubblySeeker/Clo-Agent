@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import { Camera, GripVertical, Plus, Trash2, AlertTriangle, Check } from "lucide-react";
 
@@ -40,9 +41,273 @@ const notificationsData = [
 
 const frequencies = ["Instant", "Daily Digest", "Weekly"];
 
-export default function SettingsPage() {
+type UserType = NonNullable<ReturnType<typeof useUser>["user"]>;
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1 flex-1">
+      <label className="text-xs font-semibold text-gray-500 block mb-1">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function GoogleIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
+      <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615Z" fill="#4285F4"/>
+      <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18Z" fill="#34A853"/>
+      <path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332Z" fill="#FBBC05"/>
+      <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58Z" fill="#EA4335"/>
+    </svg>
+  );
+}
+
+// ─── Profile section sub-tabs ────────────────────────────────────────────────
+
+function InfoTab({ user }: { user: UserType }) {
+  const [firstName, setFirstName] = useState(user.firstName ?? "");
+  const [lastName, setLastName] = useState(user.lastName ?? "");
+  const [brokerage, setBrokerage] = useState("Premier Realty Group");
+  const [status, setStatus] = useState<"idle" | "saving" | "success" | "error">("idle");
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const initials = `${firstName[0] ?? ""}${lastName[0] ?? ""}`.toUpperCase() || "A";
+
+  async function handleSave() {
+    setStatus("saving");
+    setErrorMsg("");
+    try {
+      await user.update({ firstName, lastName });
+      setStatus("success");
+      setTimeout(() => setStatus("idle"), 2500);
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : "Failed to update profile.");
+      setStatus("error");
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex items-center gap-5 pb-5 border-b border-gray-100">
+        <div className="relative">
+          <div className="w-20 h-20 rounded-full flex items-center justify-center text-white text-2xl font-bold" style={{ backgroundColor: "#1E3A5F" }}>
+            {initials}
+          </div>
+          <button className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-white shadow-sm border border-gray-200 flex items-center justify-center">
+            <Camera size={13} className="text-gray-500" />
+          </button>
+        </div>
+        <div>
+          <p className="text-sm font-bold text-gray-800">{firstName} {lastName}</p>
+          <p className="text-xs text-gray-500">Real Estate Agent · CloAgent CRM</p>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="First Name">
+          <input
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+            className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0EA5E9] bg-gray-50 focus:bg-white transition-colors"
+          />
+        </Field>
+        <Field label="Last Name">
+          <input
+            value={lastName}
+            onChange={(e) => setLastName(e.target.value)}
+            className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0EA5E9] bg-gray-50 focus:bg-white transition-colors"
+          />
+        </Field>
+      </div>
+      <Field label="Email Address">
+        <input
+          value={user.primaryEmailAddress?.emailAddress ?? ""}
+          readOnly
+          className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-gray-50 text-gray-400 cursor-not-allowed"
+        />
+      </Field>
+      <Field label="Brokerage Name">
+        <input
+          value={brokerage}
+          onChange={(e) => setBrokerage(e.target.value)}
+          className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0EA5E9] bg-gray-50 focus:bg-white transition-colors"
+        />
+      </Field>
+      {status === "success" && <p className="text-sm text-green-600 font-medium">Profile updated.</p>}
+      {status === "error" && <p className="text-sm text-red-500">{errorMsg}</p>}
+      <div>
+        <button
+          onClick={handleSave}
+          disabled={status === "saving"}
+          className="px-5 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-60 transition-opacity"
+          style={{ backgroundColor: "#0EA5E9" }}
+        >
+          {status === "saving" ? "Saving…" : "Save Changes"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SecurityTab({ user }: { user: UserType }) {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [status, setStatus] = useState<"idle" | "saving" | "success" | "error">("idle");
+  const [errorMsg, setErrorMsg] = useState("");
+
+  async function handleSave() {
+    if (newPassword !== confirmPassword) {
+      setStatus("error");
+      setErrorMsg("New passwords do not match.");
+      return;
+    }
+    if (newPassword.length < 8) {
+      setStatus("error");
+      setErrorMsg("Password must be at least 8 characters.");
+      return;
+    }
+    setStatus("saving");
+    setErrorMsg("");
+    try {
+      await user.updatePassword({ currentPassword, newPassword, signOutOfOtherSessions: true });
+      setStatus("success");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setTimeout(() => setStatus("idle"), 2500);
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : "Failed to update password.");
+      setStatus("error");
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Field label="Current Password">
+        <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)}
+          placeholder="••••••••"
+          className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0EA5E9] bg-gray-50 focus:bg-white transition-colors"
+        />
+      </Field>
+      <Field label="New Password">
+        <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
+          placeholder="••••••••"
+          className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0EA5E9] bg-gray-50 focus:bg-white transition-colors"
+        />
+      </Field>
+      <Field label="Confirm New Password">
+        <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
+          placeholder="••••••••"
+          className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0EA5E9] bg-gray-50 focus:bg-white transition-colors"
+        />
+      </Field>
+      {status === "success" && <p className="text-sm text-green-600 font-medium">Password updated. Other sessions signed out.</p>}
+      {status === "error" && <p className="text-sm text-red-500">{errorMsg}</p>}
+      <div>
+        <button
+          onClick={handleSave}
+          disabled={status === "saving"}
+          className="px-5 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-60 transition-opacity"
+          style={{ backgroundColor: "#0EA5E9" }}
+        >
+          {status === "saving" ? "Saving…" : "Update Password"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ConnectedAccountsTab({ user }: { user: UserType }) {
+  const [disconnectStatus, setDisconnectStatus] = useState<Record<string, "disconnecting">>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [connectError, setConnectError] = useState("");
+
+  const accounts = user.externalAccounts;
+  const hasPassword = user.passwordEnabled;
+
+  async function handleDisconnect(accountId: string) {
+    const account = accounts.find((a) => a.id === accountId);
+    if (!account) return;
+    if (!hasPassword && accounts.length <= 1) {
+      setErrors((prev) => ({ ...prev, [accountId]: "Cannot disconnect — you have no password set. Add a password first." }));
+      return;
+    }
+    setDisconnectStatus((prev) => ({ ...prev, [accountId]: "disconnecting" }));
+    setErrors((prev) => { const n = { ...prev }; delete n[accountId]; return n; });
+    try {
+      await account.destroy();
+    } catch (err: unknown) {
+      setErrors((prev) => ({ ...prev, [accountId]: err instanceof Error ? err.message : "Failed to disconnect." }));
+      setDisconnectStatus((prev) => { const n = { ...prev }; delete n[accountId]; return n; });
+    }
+  }
+
+  async function handleConnectGoogle() {
+    setConnectError("");
+    try {
+      await user.createExternalAccount({ strategy: "oauth_google", redirectUrl: window.location.href });
+    } catch (err: unknown) {
+      setConnectError(err instanceof Error ? err.message : "Failed to connect Google.");
+    }
+  }
+
+  const providerLabel = (p: string) => p.charAt(0).toUpperCase() + p.slice(1);
+  const hasGoogle = accounts.some((a) => a.provider === "google" || a.verification?.strategy === "oauth_google");
+
+  return (
+    <div className="flex flex-col gap-4">
+      {accounts.length === 0 ? (
+        <p className="text-sm text-gray-500">No connected accounts.</p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {accounts.map((account) => {
+            const isBusy = disconnectStatus[account.id] === "disconnecting";
+            return (
+              <div key={account.id} className="flex items-center justify-between rounded-xl px-4 py-3 border border-gray-200 bg-gray-50">
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">{providerLabel(account.provider ?? "unknown")}</p>
+                  {account.emailAddress && <p className="text-xs text-gray-400">{account.emailAddress}</p>}
+                  {errors[account.id] && <p className="text-xs text-red-500 mt-0.5">{errors[account.id]}</p>}
+                </div>
+                <button
+                  onClick={() => handleDisconnect(account.id)}
+                  disabled={isBusy}
+                  className="text-xs font-semibold text-red-500 hover:text-red-600 disabled:opacity-50 transition-colors"
+                >
+                  {isBusy ? "Disconnecting…" : "Disconnect"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {!hasGoogle && (
+        <div>
+          <button
+            onClick={handleConnectGoogle}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50 transition-colors"
+          >
+            <GoogleIcon />
+            Connect Google
+          </button>
+          {connectError && <p className="text-xs text-red-500 mt-1.5">{connectError}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main Settings Content ───────────────────────────────────────────────────
+
+function SettingsContent() {
+  const searchParams = useSearchParams();
   const { user } = useUser();
-  const [activeSection, setActiveSection] = useState("profile");
+
+  const [activeSection, setActiveSection] = useState(
+    () => searchParams.get("section") ?? "profile"
+  );
+  const [activeProfileTab, setActiveProfileTab] = useState<"info" | "security" | "accounts">("info");
   const [stages, setStages] = useState(initialStages);
   const [notifs, setNotifs] = useState(notificationsData);
   const [notifFreqs, setNotifFreqs] = useState<Record<string, string>>({
@@ -51,13 +316,14 @@ export default function SettingsPage() {
   const [commRate, setCommRate] = useState("2.5");
   const [commSplit, setCommSplit] = useState("70/30");
 
-  const toggleNotif = (id: string) => {
+  const toggleNotif = (id: string) =>
     setNotifs((prev) => prev.map((n) => (n.id === id ? { ...n, enabled: !n.enabled } : n)));
-  };
 
-  const initials = user
-    ? `${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}`.toUpperCase() || "A"
-    : "A";
+  const profileTabs = [
+    { id: "info" as const, label: "Info" },
+    ...(user?.passwordEnabled ? [{ id: "security" as const, label: "Security" }] : []),
+    { id: "accounts" as const, label: "Connected Accounts" },
+  ];
 
   return (
     <div className="p-6">
@@ -96,43 +362,30 @@ export default function SettingsPage() {
         <div className="flex-1">
 
           {/* Profile */}
-          {activeSection === "profile" && (
+          {activeSection === "profile" && user && (
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
               <h3 className="font-bold mb-5" style={{ color: "#1E3A5F" }}>Profile</h3>
-              <div className="flex items-center gap-5 mb-6 pb-6 border-b border-gray-100">
-                <div className="relative">
-                  <div className="w-20 h-20 rounded-full flex items-center justify-center text-white text-2xl font-bold" style={{ backgroundColor: "#1E3A5F" }}>
-                    {initials}
-                  </div>
-                  <button className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-white shadow-sm border border-gray-200 flex items-center justify-center">
-                    <Camera size={13} className="text-gray-500" />
+
+              {/* Sub-tabs */}
+              <div className="flex gap-0 border-b border-gray-100 mb-6">
+                {profileTabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveProfileTab(tab.id)}
+                    className="relative px-4 py-2.5 text-sm font-medium transition-colors"
+                    style={{ color: activeProfileTab === tab.id ? "#0EA5E9" : "#6B7280" }}
+                  >
+                    {tab.label}
+                    {activeProfileTab === tab.id && (
+                      <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-t" style={{ backgroundColor: "#0EA5E9" }} />
+                    )}
                   </button>
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-gray-800">{user?.firstName} {user?.lastName}</p>
-                  <p className="text-xs text-gray-500">Real Estate Agent · CloAgent CRM</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                {[
-                  { label: "First Name", value: user?.firstName ?? "", type: "text" },
-                  { label: "Last Name", value: user?.lastName ?? "", type: "text" },
-                  { label: "Email Address", value: user?.primaryEmailAddress?.emailAddress ?? "", type: "email" },
-                  { label: "Brokerage Name", value: "Premier Realty Group", type: "text" },
-                ].map((f) => (
-                  <div key={f.label}>
-                    <label className="text-xs font-semibold text-gray-500 block mb-1">{f.label}</label>
-                    <input
-                      type={f.type}
-                      defaultValue={f.value}
-                      className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0EA5E9] bg-gray-50 focus:bg-white transition-colors"
-                    />
-                  </div>
                 ))}
               </div>
-              <button className="mt-5 px-5 py-2.5 rounded-xl text-white text-sm font-semibold" style={{ backgroundColor: "#0EA5E9" }}>
-                Save Changes
-              </button>
+
+              {activeProfileTab === "info" && <InfoTab user={user} />}
+              {activeProfileTab === "security" && user.passwordEnabled && <SecurityTab user={user} />}
+              {activeProfileTab === "accounts" && <ConnectedAccountsTab user={user} />}
             </div>
           )}
 
@@ -295,5 +548,13 @@ export default function SettingsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-gray-400">Loading settings…</div>}>
+      <SettingsContent />
+    </Suspense>
   );
 }

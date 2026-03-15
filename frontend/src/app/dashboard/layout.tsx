@@ -139,14 +139,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       className="flex h-screen w-screen overflow-hidden"
       style={{ backgroundColor: "#F5F7FA", fontFamily: "'Inter', sans-serif" }}
     >
-      {/* ------------------------------------------------------------------ */}
-      {/* Sidebar                                                              */}
-      {/* ------------------------------------------------------------------ */}
+      {/* Sidebar */}
       <aside
         className="flex flex-col h-full shrink-0 transition-all duration-200 ease-in-out overflow-hidden"
         style={{ width: sidebarW, backgroundColor: "#0F1E36" }}
       >
-        {/* User avatar at top */}
+        {/* User avatar at top — links to settings */}
         <Link
           href="/dashboard/settings"
           className="flex items-center h-16 border-b border-white/10 shrink-0 px-3 gap-3 overflow-hidden hover:bg-white/5 transition-colors"
@@ -226,12 +224,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Right side                                                           */}
-      {/* ------------------------------------------------------------------ */}
+      {/* Right side */}
       <div className="flex flex-col flex-1 overflow-hidden min-w-0">
 
-        {/* Top bar — hamburger + bell + profile only */}
+        {/* Top bar */}
         <div className="flex items-center gap-3 px-4 h-14 bg-white border-b border-gray-100 shrink-0">
           <button
             onClick={toggleSidebar}
@@ -270,7 +266,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
               {notifOpen && (
                 <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden">
-                  {/* Header */}
                   <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-bold" style={{ color: "#1E3A5F" }}>Notifications</span>
@@ -281,16 +276,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       )}
                     </div>
                     {unreadCount > 0 && (
-                      <button
-                        onClick={markAllRead}
-                        className="text-xs font-medium text-[#0EA5E9] hover:text-[#0284C7] transition-colors"
-                      >
+                      <button onClick={markAllRead} className="text-xs font-medium text-[#0EA5E9] hover:text-[#0284C7] transition-colors">
                         Mark all read
                       </button>
                     )}
                   </div>
 
-                  {/* Notification list */}
                   <div className="max-h-[360px] overflow-y-auto divide-y divide-gray-50">
                     {NOTIFICATIONS.map((n) => {
                       const isUnread = !readIds.has(n.id);
@@ -304,17 +295,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                           }}
                           className={`flex items-start gap-3 px-4 py-3.5 hover:bg-gray-50 transition-colors ${isUnread ? "bg-blue-50/30" : ""}`}
                         >
-                          <div
-                            className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
-                            style={{ backgroundColor: n.iconBg }}
-                          >
+                          <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5" style={{ backgroundColor: n.iconBg }}>
                             <n.icon size={14} style={{ color: n.iconColor }} />
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between gap-2">
-                              <p className={`text-xs font-semibold truncate ${isUnread ? "text-gray-900" : "text-gray-600"}`}>
-                                {n.title}
-                              </p>
+                              <p className={`text-xs font-semibold truncate ${isUnread ? "text-gray-900" : "text-gray-600"}`}>{n.title}</p>
                               <span className="text-[10px] text-gray-400 shrink-0">{n.time}</span>
                             </div>
                             <p className="text-xs text-gray-500 mt-0.5 leading-snug">{n.body}</p>
@@ -327,13 +313,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     })}
                   </div>
 
-                  {/* Footer */}
                   <div className="px-4 py-2.5 border-t border-gray-100 text-center">
-                    <Link
-                      href="/dashboard/activities"
-                      onClick={() => setNotifOpen(false)}
-                      className="text-xs font-medium text-[#0EA5E9] hover:text-[#0284C7] transition-colors"
-                    >
+                    <Link href="/dashboard/activities" onClick={() => setNotifOpen(false)} className="text-xs font-medium text-[#0EA5E9] hover:text-[#0284C7] transition-colors">
                       View all activity →
                     </Link>
                   </div>
@@ -354,9 +335,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   {initials}
                 </div>
                 <div className="text-left hidden sm:block">
-                  <p className="text-sm font-semibold text-gray-800 leading-tight">
-                    {user?.firstName ?? "Agent"}
-                  </p>
+                  <p className="text-sm font-semibold text-gray-800 leading-tight">{user?.firstName ?? "Agent"}</p>
                   <p className="text-xs text-gray-400">Real Estate Agent</p>
                 </div>
               </button>
@@ -364,12 +343,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               {userMenuOpen && (
                 <div className="absolute right-0 top-full mt-2 w-52 bg-white rounded-2xl shadow-xl border border-gray-100 py-1.5 z-50 overflow-hidden">
                   <div className="px-4 py-2.5 border-b border-gray-100">
-                    <p className="text-sm font-semibold text-gray-800">
-                      {user?.firstName} {user?.lastName}
-                    </p>
-                    <p className="text-xs text-gray-400 truncate">
-                      {user?.primaryEmailAddress?.emailAddress}
-                    </p>
+                    <p className="text-sm font-semibold text-gray-800">{user?.firstName} {user?.lastName}</p>
+                    <p className="text-xs text-gray-400 truncate">{user?.primaryEmailAddress?.emailAddress}</p>
                   </div>
                   <Link
                     href="/dashboard/settings"

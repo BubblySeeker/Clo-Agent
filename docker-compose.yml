@@ -43,6 +43,8 @@ services:
       REDIS_URL: redis://redis:6379
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
       PORT: "8080"
+      AI_SERVICE_URL: http://ai-service:8000
+      AI_SERVICE_SECRET: ${AI_SERVICE_SECRET}
     depends_on:
       postgres:
         condition: service_healthy
@@ -60,6 +62,8 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
+      AI_SERVICE_SECRET: ${AI_SERVICE_SECRET}
+      BACKEND_URL: http://backend:8080
     depends_on:
       postgres:
         condition: service_healthy
@@ -67,13 +71,18 @@ services:
       - cloagent
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+        NEXT_PUBLIC_API_URL: http://localhost:8080
     restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+      NEXT_PUBLIC_API_URL: http://localhost:8080
     depends_on:
       - backend
       - ai-service

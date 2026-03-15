@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
 
@@ -142,5 +143,61 @@ func GetDashboardSummary(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx.Commit(r.Context())
 		respondJSON(w, http.StatusOK, summary)
+	}
+}
+
+// GetDashboardLayout returns the agent's saved widget layout (null if not set).
+func GetDashboardLayout(pool *pgxpool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		agentID := middleware.AgentUUIDFromContext(r.Context())
+
+		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "database error")
+			return
+		}
+		defer tx.Rollback(r.Context())
+
+		var layout *json.RawMessage
+		tx.QueryRow(r.Context(),
+			`SELECT dashboard_layout FROM users WHERE id = $1`, agentID,
+		).Scan(&layout)
+
+		tx.Commit(r.Context())
+		respondJSON(w, http.StatusOK, map[string]interface{}{"layout": layout})
+	}
+}
+
+// SaveDashboardLayout persists the agent's widget layout as JSONB.
+func SaveDashboardLayout(pool *pgxpool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		agentID := middleware.AgentUUIDFromContext(r.Context())
+
+		var body struct {
+			Layout json.RawMessage `json:"layout"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			respondError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+
+		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "database error")
+			return
+		}
+		defer tx.Rollback(r.Context())
+
+		_, err = tx.Exec(r.Context(),
+			`UPDATE users SET dashboard_layout = $1 WHERE id = $2`,
+			body.Layout, agentID,
+		)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "failed to save layout")
+			return
+		}
+
+		tx.Commit(r.Context())
+		respondJSON(w, http.StatusOK, map[string]string{"status": "saved"})
 	}
 }

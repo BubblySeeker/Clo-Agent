@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { usePathname } from "next/navigation";
-import { Bot, X, Send, Minimize2, Check, XCircle, Loader2 } from "lucide-react";
+import { Bot, Send, Minimize2, Check, XCircle, Loader2 } from "lucide-react";
 import {
   streamMessage,
   createConversation,
@@ -11,7 +11,7 @@ import {
   confirmToolAction,
   type SSEEvent,
 } from "@/lib/api/conversations";
-import { useUIStore, type ChatMessage } from "@/store/ui-store";
+import { useUIStore } from "@/store/ui-store";
 
 export default function AIChatBubble() {
   const { getToken } = useAuth();
