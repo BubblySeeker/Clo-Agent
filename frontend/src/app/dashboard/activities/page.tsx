@@ -5,7 +5,7 @@ import { useAuth } from "@clerk/nextjs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { listAllActivities, createActivity } from "@/lib/api/activities";
 import { listContacts } from "@/lib/api/contacts";
-import { Phone, Mail, FileText, Home, CheckSquare, ChevronDown, Plus, X, User, Calendar } from "lucide-react";
+import { Phone, Mail, FileText, Home, CheckSquare, ChevronDown, Plus, X, User } from "lucide-react";
 
 const typeColors: Record<string, { bg: string; color: string }> = {
   call: { bg: "#EFF6FF", color: "#0EA5E9" },
