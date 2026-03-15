@@ -2,3 +2,5 @@
 .env.local
 .env.production
 design-reference/
+.venv/
+ai-service/.venv/
