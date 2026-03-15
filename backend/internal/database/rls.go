@@ -18,7 +18,7 @@ func BeginWithRLS(ctx context.Context, pool *pgxpool.Pool, agentID string) (pgx.
 		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 
-	_, err = tx.Exec(ctx, "SET LOCAL app.current_agent_id = $1", agentID)
+	_, err = tx.Exec(ctx, "SELECT set_config('app.current_agent_id', $1, true)", agentID)
 	if err != nil {
 		tx.Rollback(ctx)
 		return nil, fmt.Errorf("set RLS context: %w", err)

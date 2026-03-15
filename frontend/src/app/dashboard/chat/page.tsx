@@ -97,6 +97,7 @@ export default function ChatPage() {
       setActiveConvId(conv.id);
       setLocalMessages([]);
     },
+    onError: () => {}, // handled in handleSend try/catch
   });
 
   useEffect(() => {
@@ -106,11 +107,23 @@ export default function ChatPage() {
   const handleSend = useCallback(
     async (text?: string) => {
       const msg = (text ?? input).trim();
-      if (!msg || !activeConvId || isStreaming) return;
-      setInput("");
+      if (!msg || isStreaming) return;
 
       const token = await getToken();
       if (!token) return;
+
+      // Auto-create conversation if none active
+      let convId = activeConvId;
+      if (!convId) {
+        try {
+          const conv = await createConvMutation.mutateAsync();
+          convId = conv.id;
+        } catch {
+          return; // leave input intact so user can retry
+        }
+      }
+
+      setInput("");
 
       // Optimistic user message
       const userMsgId = crypto.randomUUID();
@@ -128,7 +141,7 @@ export default function ChatPage() {
 
       cleanupRef.current = streamMessage(
         token,
-        activeConvId,
+        convId,
         msg,
         (event: SSEEvent) => {
           if (event.type === "text") {
@@ -205,7 +218,7 @@ export default function ChatPage() {
         }
       );
     },
-    [input, activeConvId, isStreaming, getToken]
+    [input, activeConvId, isStreaming, getToken, createConvMutation]
   );
 
   const handleConfirm = async (pendingId: string, assistantMsgId: string) => {
@@ -311,195 +324,189 @@ export default function ChatPage() {
       </div>
 
       {/* RIGHT — Active Chat */}
-      <div className="flex-1 flex flex-col bg-gray-50">
-        {!activeConvId ? (
-          <div className="flex-1 flex flex-col items-center justify-center gap-4">
+      <div className="flex-1 flex flex-col bg-gray-50 min-h-0">
+        {/* Chat header — only when conversation active */}
+        {activeConvId && (
+          <div className="bg-white border-b border-gray-100 px-6 py-3 flex items-center gap-3 shrink-0">
             <div
-              className="w-16 h-16 rounded-full flex items-center justify-center"
+              className="w-8 h-8 rounded-full flex items-center justify-center"
               style={{ backgroundColor: "#EFF6FF" }}
             >
-              <Sparkles size={28} style={{ color: "#0EA5E9" }} />
+              <Sparkles size={14} style={{ color: "#0EA5E9" }} />
             </div>
-            <div className="text-center">
-              <p className="font-bold text-gray-800 mb-1">CloAgent AI</p>
-              <p className="text-sm text-gray-500">Start a new conversation or select one from the list.</p>
+            <span className="text-sm font-bold" style={{ color: "#1E3A5F" }}>
+              {activeConv?.contact_name ? `Chat — ${activeConv.contact_name}` : "General Chat"}
+            </span>
+          </div>
+        )}
+
+        {/* Message area */}
+        <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-4 min-h-0">
+          {!activeConvId ? (
+            /* Empty state */
+            <div className="flex-1 flex flex-col items-center justify-center gap-4 h-full">
+              <div
+                className="w-16 h-16 rounded-full flex items-center justify-center"
+                style={{ backgroundColor: "#EFF6FF" }}
+              >
+                <Sparkles size={28} style={{ color: "#0EA5E9" }} />
+              </div>
+              <div className="text-center">
+                <p className="font-bold text-gray-800 mb-1">CloAgent AI</p>
+                <p className="text-sm text-gray-500">Ask anything or pick a suggestion below.</p>
+              </div>
+              <div className="flex flex-wrap gap-2 justify-center max-w-md">
+                {suggestedPrompts.map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => handleSend(p)}
+                    className="text-xs px-3 py-1.5 rounded-full border border-gray-200 text-gray-600 hover:border-[#0EA5E9] hover:text-[#0EA5E9] transition-colors"
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="flex flex-wrap gap-2 justify-center max-w-md">
+          ) : messagesLoading ? (
+            <div className="flex justify-center py-8">
+              <div className="w-6 h-6 border-2 border-[#0EA5E9] border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : localMessages.length === 0 ? (
+            <div className="flex flex-col items-center justify-center flex-1 gap-3">
+              <p className="text-sm text-gray-500">Send a message to start the conversation.</p>
+              <div className="flex gap-2 flex-wrap justify-center">
+                {suggestedPrompts.map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => handleSend(p)}
+                    className="text-xs px-3 py-1.5 rounded-full border border-gray-200 text-gray-600 hover:border-[#0EA5E9] hover:text-[#0EA5E9] transition-colors"
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            localMessages.map((msg) => (
+              <div key={msg.id} className={`flex flex-col gap-1.5 ${msg.role === "user" ? "items-end" : "items-start"}`}>
+                <div className={`flex gap-3 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
+                  {/* Avatar */}
+                  <div
+                    className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-1"
+                    style={{
+                      backgroundColor: msg.role === "assistant" ? "#0EA5E9" : "#1E3A5F",
+                    }}
+                  >
+                    {msg.role === "assistant" ? (
+                      <Sparkles size={14} className="text-white" />
+                    ) : (
+                      <User size={14} className="text-white" />
+                    )}
+                  </div>
+
+                  <div className={`flex flex-col gap-1.5 max-w-[72%] ${msg.role === "user" ? "items-end" : "items-start"}`}>
+                    {/* Tool call indicator */}
+                    {msg.role === "assistant" && msg.isStreaming && activeToolName && (
+                      <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                        <Loader2 size={11} className="animate-spin" />
+                        <span>{toolLabel[activeToolName] ?? activeToolName}…</span>
+                      </div>
+                    )}
+
+                    {/* Message bubble */}
+                    {(msg.content || (msg.isStreaming && !activeToolName)) && (
+                      <div
+                        className={`px-4 py-3 rounded-2xl text-sm leading-relaxed ${
+                          msg.role === "user"
+                            ? "text-white rounded-tr-sm"
+                            : "bg-white text-gray-800 shadow-sm rounded-tl-sm"
+                        }`}
+                        style={msg.role === "user" ? { backgroundColor: "#0EA5E9" } : {}}
+                      >
+                        {msg.content || (
+                          <span className="flex items-center gap-1">
+                            {[0, 1, 2].map((i) => (
+                              <span
+                                key={i}
+                                className="w-2 h-2 rounded-full bg-gray-400 animate-bounce"
+                                style={{ animationDelay: `${i * 0.15}s` }}
+                              />
+                            ))}
+                          </span>
+                        )}
+                        {msg.isStreaming && msg.content && (
+                          <span className="inline-block w-1 h-3 ml-0.5 bg-gray-400 animate-pulse rounded-sm align-middle" />
+                        )}
+                      </div>
+                    )}
+
+                    {/* Confirmation card */}
+                    {msg.confirmationData && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 w-full text-xs">
+                        <p className="font-semibold text-amber-800 mb-2">
+                          Confirm: {toolLabel[msg.confirmationData.tool] ?? msg.confirmationData.tool}
+                        </p>
+                        <pre className="text-gray-700 whitespace-pre-wrap text-[10px] mb-2 bg-white rounded p-2 border border-amber-100 overflow-auto max-h-32">
+                          {JSON.stringify(msg.confirmationData.preview, null, 2)}
+                        </pre>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleConfirm(msg.confirmationData!.pending_id, msg.id)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500 text-white rounded-lg hover:bg-green-600 text-xs font-medium"
+                          >
+                            <Check size={11} /> Confirm
+                          </button>
+                          <button
+                            onClick={() => handleCancel(msg.id)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 text-xs font-medium"
+                          >
+                            <XCircle size={11} /> Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+          <div ref={bottomRef} />
+        </div>
+
+        {/* Input area — always visible */}
+        <div className="bg-white border-t border-gray-100 px-6 py-4 shrink-0">
+          {!activeConvId && input === "" && (
+            <div className="flex gap-2 flex-wrap mb-3">
               {suggestedPrompts.map((p) => (
                 <button
                   key={p}
-                  onClick={async () => {
-                    const conv = await createConvMutation.mutateAsync();
-                    setActiveConvId(conv.id);
-                    setLocalMessages([]);
-                    setTimeout(() => handleSend(p), 100);
-                  }}
+                  onClick={() => handleSend(p)}
                   className="text-xs px-3 py-1.5 rounded-full border border-gray-200 text-gray-600 hover:border-[#0EA5E9] hover:text-[#0EA5E9] transition-colors"
                 >
                   {p}
                 </button>
               ))}
             </div>
+          )}
+          <div className="flex items-center gap-3 bg-gray-50 rounded-2xl px-4 py-3 border border-gray-200 focus-within:border-[#0EA5E9] transition-colors">
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
+              placeholder={activeConvId ? "Ask anything about your clients..." : "Start a new conversation..."}
+              disabled={isStreaming || createConvMutation.isPending}
+              className="flex-1 text-sm text-gray-700 placeholder-gray-400 outline-none bg-transparent disabled:opacity-50"
+            />
+            <button
+              onClick={() => handleSend()}
+              disabled={!input.trim() || isStreaming || createConvMutation.isPending}
+              className="w-8 h-8 rounded-xl flex items-center justify-center text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+              style={{ backgroundColor: "#0EA5E9" }}
+            >
+              {isStreaming || createConvMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Send size={15} />}
+            </button>
           </div>
-        ) : (
-          <>
-            {/* Chat header */}
-            <div className="bg-white border-b border-gray-100 px-6 py-3 flex items-center gap-3">
-              <div
-                className="w-8 h-8 rounded-full flex items-center justify-center"
-                style={{ backgroundColor: "#EFF6FF" }}
-              >
-                <Sparkles size={14} style={{ color: "#0EA5E9" }} />
-              </div>
-              <span className="text-sm font-bold" style={{ color: "#1E3A5F" }}>
-                {activeConv?.contact_name ? `Chat — ${activeConv.contact_name}` : "General Chat"}
-              </span>
-            </div>
-
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-4">
-              {messagesLoading ? (
-                <div className="flex justify-center py-8">
-                  <div className="w-6 h-6 border-2 border-[#0EA5E9] border-t-transparent rounded-full animate-spin" />
-                </div>
-              ) : localMessages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center flex-1 gap-3">
-                  <p className="text-sm text-gray-500">Send a message to start the conversation.</p>
-                  <div className="flex gap-2 flex-wrap justify-center">
-                    {suggestedPrompts.map((p) => (
-                      <button
-                        key={p}
-                        onClick={() => handleSend(p)}
-                        className="text-xs px-3 py-1.5 rounded-full border border-gray-200 text-gray-600 hover:border-[#0EA5E9] hover:text-[#0EA5E9] transition-colors"
-                      >
-                        {p}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                localMessages.map((msg) => (
-                  <div key={msg.id} className={`flex flex-col gap-1.5 ${msg.role === "user" ? "items-end" : "items-start"}`}>
-                    <div className={`flex gap-3 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
-                      {/* Avatar */}
-                      <div
-                        className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-1"
-                        style={{
-                          backgroundColor: msg.role === "assistant" ? "#0EA5E9" : "#1E3A5F",
-                        }}
-                      >
-                        {msg.role === "assistant" ? (
-                          <Sparkles size={14} className="text-white" />
-                        ) : (
-                          <User size={14} className="text-white" />
-                        )}
-                      </div>
-
-                      <div className={`flex flex-col gap-1.5 max-w-[72%] ${msg.role === "user" ? "items-end" : "items-start"}`}>
-                        {/* Tool call indicator */}
-                        {msg.role === "assistant" && msg.isStreaming && activeToolName && (
-                          <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                            <Loader2 size={11} className="animate-spin" />
-                            <span>{toolLabel[activeToolName] ?? activeToolName}…</span>
-                          </div>
-                        )}
-
-                        {/* Message bubble */}
-                        {(msg.content || (msg.isStreaming && !activeToolName)) && (
-                          <div
-                            className={`px-4 py-3 rounded-2xl text-sm leading-relaxed ${
-                              msg.role === "user"
-                                ? "text-white rounded-tr-sm"
-                                : "bg-white text-gray-800 shadow-sm rounded-tl-sm"
-                            }`}
-                            style={msg.role === "user" ? { backgroundColor: "#0EA5E9" } : {}}
-                          >
-                            {msg.content || (
-                              <span className="flex items-center gap-1">
-                                {[0, 1, 2].map((i) => (
-                                  <span
-                                    key={i}
-                                    className="w-2 h-2 rounded-full bg-gray-400 animate-bounce"
-                                    style={{ animationDelay: `${i * 0.15}s` }}
-                                  />
-                                ))}
-                              </span>
-                            )}
-                            {msg.isStreaming && msg.content && (
-                              <span className="inline-block w-1 h-3 ml-0.5 bg-gray-400 animate-pulse rounded-sm align-middle" />
-                            )}
-                          </div>
-                        )}
-
-                        {/* Confirmation card */}
-                        {msg.confirmationData && (
-                          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 w-full text-xs">
-                            <p className="font-semibold text-amber-800 mb-2">
-                              Confirm: {toolLabel[msg.confirmationData.tool] ?? msg.confirmationData.tool}
-                            </p>
-                            <pre className="text-gray-700 whitespace-pre-wrap text-[10px] mb-2 bg-white rounded p-2 border border-amber-100 overflow-auto max-h-32">
-                              {JSON.stringify(msg.confirmationData.preview, null, 2)}
-                            </pre>
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => handleConfirm(msg.confirmationData!.pending_id, msg.id)}
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500 text-white rounded-lg hover:bg-green-600 text-xs font-medium"
-                              >
-                                <Check size={11} /> Confirm
-                              </button>
-                              <button
-                                onClick={() => handleCancel(msg.id)}
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 text-xs font-medium"
-                              >
-                                <XCircle size={11} /> Cancel
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-              <div ref={bottomRef} />
-            </div>
-
-            {/* Input area */}
-            <div className="bg-white border-t border-gray-100 px-6 py-4">
-              {input === "" && localMessages.length === 0 && (
-                <div className="flex gap-2 flex-wrap mb-3">
-                  {suggestedPrompts.map((p) => (
-                    <button
-                      key={p}
-                      onClick={() => handleSend(p)}
-                      className="text-xs px-3 py-1.5 rounded-full border border-gray-200 text-gray-600 hover:border-[#0EA5E9] hover:text-[#0EA5E9] transition-colors"
-                    >
-                      {p}
-                    </button>
-                  ))}
-                </div>
-              )}
-              <div className="flex items-center gap-3 bg-gray-50 rounded-2xl px-4 py-3 border border-gray-200 focus-within:border-[#0EA5E9] transition-colors">
-                <input
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-                  placeholder="Ask anything about your clients..."
-                  disabled={isStreaming}
-                  className="flex-1 text-sm text-gray-700 placeholder-gray-400 outline-none bg-transparent disabled:opacity-50"
-                />
-                <button
-                  onClick={() => handleSend()}
-                  disabled={!input.trim() || isStreaming}
-                  className="w-8 h-8 rounded-xl flex items-center justify-center text-white transition-opacity hover:opacity-90 disabled:opacity-40"
-                  style={{ backgroundColor: "#0EA5E9" }}
-                >
-                  {isStreaming ? <Loader2 size={14} className="animate-spin" /> : <Send size={15} />}
-                </button>
-              </div>
-            </div>
-          </>
-        )}
+        </div>
       </div>
     </div>
   );

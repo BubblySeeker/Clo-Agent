@@ -49,10 +49,14 @@ export default function AIChatBubble() {
     if (chatConversationId) return;
 
     (async () => {
-      const token = await getToken();
-      if (!token) return;
-      const conv = await createConversation(token, contactId ?? undefined);
-      setChatConversationId(conv.id);
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const conv = await createConversation(token, contactId ?? undefined);
+        setChatConversationId(conv.id);
+      } catch {
+        // will retry next time bubble opens
+      }
     })();
   }, [chatOpen, chatConversationId, contactId, getToken, setChatConversationId]);
 
@@ -60,16 +64,20 @@ export default function AIChatBubble() {
   useEffect(() => {
     if (!chatConversationId) return;
     (async () => {
-      const token = await getToken();
-      if (!token) return;
-      const msgs = await getMessages(token, chatConversationId);
-      setChatMessages(
-        msgs.map((m) => ({
-          id: m.id,
-          role: m.role as "user" | "assistant",
-          content: m.content,
-        }))
-      );
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const msgs = await getMessages(token, chatConversationId);
+        setChatMessages(
+          msgs.map((m) => ({
+            id: m.id,
+            role: m.role as "user" | "assistant",
+            content: m.content,
+          }))
+        );
+      } catch {
+        // ignore — messages will be empty
+      }
     })();
   }, [chatConversationId, getToken, setChatMessages]);
 
