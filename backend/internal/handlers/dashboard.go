@@ -19,6 +19,46 @@ type DashboardSummary struct {
 	RecentActivity  []ActivityItem   `json:"recent_activity"`
 	NeedsFollowUp   []FollowUpItem   `json:"needs_follow_up"`
 	PipelineByStage []StageAggregate `json:"pipeline_by_stage"`
+	Trends          KPITrends        `json:"trends"`
+	LeadSources     []LeadSourceItem  `json:"lead_sources"`
+	Tasks           []TaskItem        `json:"tasks"`
+	MonthlyRevenue  []MonthlyRevenue  `json:"monthly_revenue"`
+	SpeedToLead     []SpeedToLeadItem `json:"speed_to_lead"`
+}
+
+type KPITrends struct {
+	PrevTotalContacts    int     `json:"prev_total_contacts"`
+	PrevActiveDeals      int     `json:"prev_active_deals"`
+	PrevPipelineValue    float64 `json:"prev_pipeline_value"`
+	PrevClosedThisMonth  int     `json:"prev_closed_this_month"`
+	ClosedThisMonthValue float64 `json:"closed_this_month_value"`
+	PrevClosedMonthValue float64 `json:"prev_closed_month_value"`
+}
+
+type LeadSourceItem struct {
+	Source string `json:"source"`
+	Count  int    `json:"count"`
+}
+
+type TaskItem struct {
+	ID          string    `json:"id"`
+	ContactID   string    `json:"contact_id"`
+	ContactName string    `json:"contact_name"`
+	Body        *string   `json:"body"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+type MonthlyRevenue struct {
+	Month string  `json:"month"`
+	Value float64 `json:"value"`
+}
+
+type SpeedToLeadItem struct {
+	ContactID   string    `json:"contact_id"`
+	ContactName string    `json:"contact_name"`
+	Source      *string   `json:"source"`
+	CreatedAt   time.Time `json:"created_at"`
+	Contacted   bool      `json:"contacted"`
 }
 
 type ActivityItem struct {
@@ -137,6 +177,129 @@ func GetDashboardSummary(pool *pgxpool.Pool) http.HandlerFunc {
 				var s StageAggregate
 				if err := stageRows.Scan(&s.StageID, &s.StageName, &s.StageColor, &s.DealCount, &s.TotalValue); err == nil {
 					summary.PipelineByStage = append(summary.PipelineByStage, s)
+				}
+			}
+		}
+
+		// ── KPI Trends ──────────────────────────────────────────────────
+		// Previous month's total contacts (created before this month)
+		tx.QueryRow(r.Context(),
+			`SELECT COUNT(*) FROM contacts WHERE created_at < $1`, monthStart,
+		).Scan(&summary.Trends.PrevTotalContacts)
+
+		// Previous month's active deals & pipeline value
+		tx.QueryRow(r.Context(),
+			`SELECT COUNT(*), COALESCE(SUM(COALESCE(d.value, 0)), 0)
+			 FROM deals d
+			 JOIN deal_stages ds ON ds.id = d.stage_id
+			 WHERE ds.name NOT IN ('Closed', 'Lost') AND d.created_at < $1`, monthStart,
+		).Scan(&summary.Trends.PrevActiveDeals, &summary.Trends.PrevPipelineValue)
+
+		// Previous month closed deals count & value
+		prevMonthStart := monthStart.AddDate(0, -1, 0)
+		tx.QueryRow(r.Context(),
+			`SELECT COUNT(*), COALESCE(SUM(COALESCE(d.value, 0)), 0)
+			 FROM deals d
+			 JOIN deal_stages ds ON ds.id = d.stage_id
+			 WHERE ds.name = 'Closed' AND d.updated_at >= $1 AND d.updated_at < $2`,
+			prevMonthStart, monthStart,
+		).Scan(&summary.Trends.PrevClosedThisMonth, &summary.Trends.PrevClosedMonthValue)
+
+		// This month's closed deal value
+		tx.QueryRow(r.Context(),
+			`SELECT COALESCE(SUM(COALESCE(d.value, 0)), 0)
+			 FROM deals d
+			 JOIN deal_stages ds ON ds.id = d.stage_id
+			 WHERE ds.name = 'Closed' AND d.updated_at >= $1`, monthStart,
+		).Scan(&summary.Trends.ClosedThisMonthValue)
+
+		// ── Lead Sources ────────────────────────────────────────────────
+		summary.LeadSources = make([]LeadSourceItem, 0)
+		leadRows, err := tx.Query(r.Context(),
+			`SELECT COALESCE(source, 'Unknown'), COUNT(*) FROM contacts GROUP BY 1 ORDER BY 2 DESC`,
+		)
+		if err == nil {
+			defer leadRows.Close()
+			for leadRows.Next() {
+				var item LeadSourceItem
+				if err := leadRows.Scan(&item.Source, &item.Count); err == nil {
+					summary.LeadSources = append(summary.LeadSources, item)
+				}
+			}
+		}
+
+		// ── Task Activities (recent 10) ─────────────────────────────────
+		summary.Tasks = make([]TaskItem, 0)
+		taskRows, err := tx.Query(r.Context(),
+			`SELECT a.id, a.contact_id, c.first_name || ' ' || c.last_name, a.body, a.created_at
+			 FROM activities a
+			 JOIN contacts c ON c.id = a.contact_id
+			 WHERE a.type = 'task'
+			 ORDER BY a.created_at DESC LIMIT 10`,
+		)
+		if err == nil {
+			defer taskRows.Close()
+			for taskRows.Next() {
+				var item TaskItem
+				if err := taskRows.Scan(&item.ID, &item.ContactID, &item.ContactName, &item.Body, &item.CreatedAt); err == nil {
+					summary.Tasks = append(summary.Tasks, item)
+				}
+			}
+		}
+
+		// ── Monthly Revenue (last 12 months) ────────────────────────────
+		summary.MonthlyRevenue = make([]MonthlyRevenue, 0)
+		// Build 12-month slot list
+		type monthSlot struct {
+			key   time.Time
+			label string
+		}
+		slots := make([]monthSlot, 12)
+		for i := 11; i >= 0; i-- {
+			m := monthStart.AddDate(0, -i, 0)
+			slots[11-i] = monthSlot{key: m, label: m.Format("Jan")}
+		}
+		revenueMap := make(map[string]float64)
+		revRows, err := tx.Query(r.Context(),
+			`SELECT DATE_TRUNC('month', d.updated_at) AS m, COALESCE(SUM(COALESCE(d.value, 0)), 0)
+			 FROM deals d
+			 JOIN deal_stages ds ON ds.id = d.stage_id
+			 WHERE ds.name = 'Closed' AND d.updated_at >= $1
+			 GROUP BY m ORDER BY m`,
+			slots[0].key,
+		)
+		if err == nil {
+			defer revRows.Close()
+			for revRows.Next() {
+				var mTime time.Time
+				var val float64
+				if err := revRows.Scan(&mTime, &val); err == nil {
+					key := mTime.Format("2006-01")
+					revenueMap[key] = val
+				}
+			}
+		}
+		for _, s := range slots {
+			summary.MonthlyRevenue = append(summary.MonthlyRevenue, MonthlyRevenue{
+				Month: s.label,
+				Value: revenueMap[s.key.Format("2006-01")],
+			})
+		}
+
+		// ── Speed to Lead (10 newest contacts) ──────────────────────────
+		summary.SpeedToLead = make([]SpeedToLeadItem, 0)
+		stlRows, err := tx.Query(r.Context(),
+			`SELECT c.id, c.first_name || ' ' || c.last_name, c.source, c.created_at,
+			        EXISTS(SELECT 1 FROM activities a WHERE a.contact_id = c.id)
+			 FROM contacts c
+			 ORDER BY c.created_at DESC LIMIT 10`,
+		)
+		if err == nil {
+			defer stlRows.Close()
+			for stlRows.Next() {
+				var item SpeedToLeadItem
+				if err := stlRows.Scan(&item.ContactID, &item.ContactName, &item.Source, &item.CreatedAt, &item.Contacted); err == nil {
+					summary.SpeedToLead = append(summary.SpeedToLead, item)
 				}
 			}
 		}
