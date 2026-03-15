@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, MoreHorizontal, Zap, RefreshCw, CheckSquare, Mail, MessageSquare, GitBranch, Clock, Play, Pause, Copy, Trash2 } from "lucide-react";
+import { Plus, MoreHorizontal, Zap, RefreshCw, CheckSquare, Mail, MessageSquare, GitBranch, Clock, Play, Pause, Copy, Trash2, X } from "lucide-react";
 
 type WorkflowStatus = "active" | "paused" | "draft";
 
@@ -126,10 +126,19 @@ const categoryColors: Record<string, string> = {
   "Lead Capture": "#1E3A5F",
 };
 
+const CATEGORIES = ["Lead Nurture", "Re-engagement", "Pipeline", "Reminders", "Post-Close", "Lead Capture"];
+const TRIGGERS = ["New Contact Added", "Lead Goes Stale (14 days)", "Deal Stage Change", "Task Overdue", "Manual Trigger"];
+
 export default function WorkflowsPage() {
   const [workflows, setWorkflows] = useState(workflowsData);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | WorkflowStatus>("all");
+
+  const [showAdd, setShowAdd] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newDescription, setNewDescription] = useState("");
+  const [newTrigger, setNewTrigger] = useState(TRIGGERS[0]);
+  const [newCategory, setNewCategory] = useState(CATEGORIES[0]);
 
   const toggleStatus = (id: string) => {
     setWorkflows((prev) =>
@@ -142,6 +151,26 @@ export default function WorkflowsPage() {
   const deleteWorkflow = (id: string) => {
     setWorkflows((prev) => prev.filter((w) => w.id !== id));
     setOpenMenu(null);
+  };
+
+  const handleCreateWorkflow = () => {
+    const newWorkflow: Workflow = {
+      id: `w${Date.now()}`,
+      name: newName,
+      description: newDescription,
+      status: "draft",
+      trigger: newTrigger,
+      actions: [],
+      lastRun: null,
+      runCount: 0,
+      category: newCategory,
+    };
+    setWorkflows((prev) => [...prev, newWorkflow]);
+    setShowAdd(false);
+    setNewName("");
+    setNewDescription("");
+    setNewTrigger(TRIGGERS[0]);
+    setNewCategory(CATEGORIES[0]);
   };
 
   const filtered = filter === "all" ? workflows : workflows.filter((w) => w.status === filter);
@@ -163,6 +192,7 @@ export default function WorkflowsPage() {
             <p className="text-sm text-gray-500 mt-0.5">Automate follow-ups, tasks, and reminders</p>
           </div>
           <button
+            onClick={() => setShowAdd(true)}
             className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-semibold"
             style={{ backgroundColor: "#0EA5E9" }}
           >
@@ -302,7 +332,7 @@ export default function WorkflowsPage() {
           })}
 
           {/* Add new card */}
-          <button className="bg-white rounded-2xl p-5 shadow-sm border-2 border-dashed border-gray-200 flex flex-col items-center justify-center gap-3 hover:border-[#0EA5E9] hover:text-[#0EA5E9] text-gray-400 transition-all min-h-[200px]">
+          <button onClick={() => setShowAdd(true)} className="bg-white rounded-2xl p-5 shadow-sm border-2 border-dashed border-gray-200 flex flex-col items-center justify-center gap-3 hover:border-[#0EA5E9] hover:text-[#0EA5E9] text-gray-400 transition-all min-h-[200px]">
             <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-gray-50">
               <Plus size={22} />
             </div>
@@ -338,6 +368,124 @@ export default function WorkflowsPage() {
         </div>
 
       </div>
+
+      {/* New Workflow Modal */}
+      {showAdd && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div>
+                <h2 className="text-lg font-bold" style={{ color: "#1E3A5F" }}>New Workflow</h2>
+                <p className="text-xs text-gray-400 mt-0.5">Create an automation to save time on repetitive tasks</p>
+              </div>
+              <button
+                onClick={() => setShowAdd(false)}
+                className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors"
+              >
+                <X size={14} className="text-gray-500" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="px-6 py-5 space-y-5 max-h-[60vh] overflow-y-auto">
+              {/* Name */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Workflow Name</label>
+                <input
+                  type="text"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="e.g. New Lead Welcome Sequence"
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-[#0EA5E9]"
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Description</label>
+                <textarea
+                  value={newDescription}
+                  onChange={(e) => setNewDescription(e.target.value)}
+                  placeholder="What does this workflow do?"
+                  rows={3}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-[#0EA5E9] resize-none"
+                />
+              </div>
+
+              {/* Category */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Category</label>
+                <div className="flex flex-wrap gap-2">
+                  {CATEGORIES.map((cat) => {
+                    const selected = newCategory === cat;
+                    const color = categoryColors[cat] || "#1E3A5F";
+                    return (
+                      <button
+                        key={cat}
+                        onClick={() => setNewCategory(cat)}
+                        className="px-3 py-1.5 rounded-xl text-xs font-semibold border-2 transition-all"
+                        style={{
+                          borderColor: selected ? color : "#f3f4f6",
+                          backgroundColor: selected ? `${color}18` : "white",
+                          color: selected ? color : "#6b7280",
+                        }}
+                      >
+                        {cat}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Trigger */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Trigger</label>
+                <div className="flex flex-col gap-2">
+                  {TRIGGERS.map((trigger) => {
+                    const selected = newTrigger === trigger;
+                    return (
+                      <button
+                        key={trigger}
+                        onClick={() => setNewTrigger(trigger)}
+                        className="flex items-center gap-3 px-4 py-2.5 rounded-xl border-2 text-left transition-all"
+                        style={{
+                          borderColor: selected ? "#0EA5E9" : "#f3f4f6",
+                          backgroundColor: selected ? "#EFF6FF" : "white",
+                        }}
+                      >
+                        <Zap size={14} style={{ color: selected ? "#0EA5E9" : "#9ca3af" }} />
+                        <span className="text-xs font-semibold" style={{ color: selected ? "#0EA5E9" : "#6b7280" }}>
+                          {trigger}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-3 px-6 py-4 bg-gray-50 border-t border-gray-100">
+              <button
+                onClick={() => setShowAdd(false)}
+                className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-gray-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateWorkflow}
+                disabled={!newName.trim()}
+                className="flex items-center gap-2 px-5 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-50 transition-all"
+                style={{ backgroundColor: "#0EA5E9" }}
+              >
+                <Plus size={14} />
+                Create Workflow
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

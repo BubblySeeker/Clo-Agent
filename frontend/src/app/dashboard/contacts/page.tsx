@@ -80,6 +80,11 @@ export default function ContactsPage() {
   const [newEmail, setNewEmail] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [newSource, setNewSource] = useState("");
+  const [newType, setNewType] = useState<"buyer" | "seller" | "both" | "">("");
+  const [newNotes, setNewNotes] = useState("");
+  const [newBudgetMin, setNewBudgetMin] = useState("");
+  const [newBudgetMax, setNewBudgetMax] = useState("");
+  const [newLocation, setNewLocation] = useState("");
   const filterRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -134,7 +139,7 @@ export default function ContactsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["contacts"] });
       setShowAdd(false);
-      setNewFirst(""); setNewLast(""); setNewEmail(""); setNewPhone(""); setNewSource("");
+      setNewFirst(""); setNewLast(""); setNewEmail(""); setNewPhone(""); setNewSource(""); setNewType(""); setNewNotes(""); setNewBudgetMin(""); setNewBudgetMax(""); setNewLocation("");
     },
   });
 
@@ -215,58 +220,181 @@ export default function ContactsPage() {
       {/* Add Contact Modal */}
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-2xl p-6 shadow-xl w-full max-w-md">
-            <h3 className="text-lg font-bold mb-4" style={{ color: "#1E3A5F" }}>New Contact</h3>
-            <div className="flex flex-col gap-3">
-              <div className="grid grid-cols-2 gap-3">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div>
+                <h3 className="text-lg font-bold" style={{ color: "#1E3A5F" }}>Add New Contact</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Fill in the details to add a new lead or client</p>
+              </div>
+              <button onClick={() => setShowAdd(false)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-gray-100 transition-colors">
+                <X size={16} className="text-gray-400" />
+              </button>
+            </div>
+
+            <div className="px-6 py-5 flex flex-col gap-5 max-h-[70vh] overflow-y-auto">
+              {/* Contact Type */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Contact Type</label>
+                <div className="flex gap-2">
+                  {([
+                    { value: "buyer", label: "Buyer" },
+                    { value: "seller", label: "Seller" },
+                    { value: "both", label: "Both" },
+                  ] as const).map((t) => (
+                    <button
+                      key={t.value}
+                      onClick={() => setNewType(newType === t.value ? "" : t.value)}
+                      className={`flex-1 py-2 rounded-xl text-sm font-semibold border transition-all ${
+                        newType === t.value
+                          ? "bg-[#1E3A5F] text-white border-[#1E3A5F]"
+                          : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Name */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Full Name <span className="text-red-400">*</span></label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <input
+                      placeholder="First name"
+                      value={newFirst}
+                      onChange={(e) => setNewFirst(e.target.value)}
+                      className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0EA5E9] bg-gray-50 focus:bg-white transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <input
+                      placeholder="Last name"
+                      value={newLast}
+                      onChange={(e) => setNewLast(e.target.value)}
+                      className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0EA5E9] bg-gray-50 focus:bg-white transition-colors"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Contact Info */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Contact Information</label>
+                <div className="flex flex-col gap-3">
+                  <div className="relative">
+                    <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="email"
+                      placeholder="Email address"
+                      value={newEmail}
+                      onChange={(e) => setNewEmail(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0EA5E9] bg-gray-50 focus:bg-white transition-colors"
+                    />
+                  </div>
+                  <div className="relative">
+                    <Phone size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="tel"
+                      placeholder="Phone number"
+                      value={newPhone}
+                      onChange={(e) => setNewPhone(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0EA5E9] bg-gray-50 focus:bg-white transition-colors"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Lead Source */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Lead Source</label>
+                <div className="flex flex-wrap gap-2">
+                  {SOURCES.map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => setNewSource(newSource === s ? "" : s)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                        newSource === s
+                          ? "bg-[#0EA5E9] text-white border-[#0EA5E9]"
+                          : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
+                      }`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Budget Range */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Budget Range</label>
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">$</span>
+                    <input
+                      type="number"
+                      placeholder="Min"
+                      value={newBudgetMin}
+                      onChange={(e) => setNewBudgetMin(e.target.value)}
+                      className="w-full pl-7 pr-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0EA5E9] bg-gray-50 focus:bg-white transition-colors"
+                    />
+                  </div>
+                  <span className="text-gray-400 text-xs shrink-0">to</span>
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">$</span>
+                    <input
+                      type="number"
+                      placeholder="Max"
+                      value={newBudgetMax}
+                      onChange={(e) => setNewBudgetMax(e.target.value)}
+                      className="w-full pl-7 pr-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0EA5E9] bg-gray-50 focus:bg-white transition-colors"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Location */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Preferred Location</label>
                 <input
-                  placeholder="First name *"
-                  value={newFirst}
-                  onChange={(e) => setNewFirst(e.target.value)}
-                  className="px-3 py-2 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0EA5E9]"
-                />
-                <input
-                  placeholder="Last name *"
-                  value={newLast}
-                  onChange={(e) => setNewLast(e.target.value)}
-                  className="px-3 py-2 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0EA5E9]"
+                  type="text"
+                  placeholder="City, neighborhood, or zip code"
+                  value={newLocation}
+                  onChange={(e) => setNewLocation(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0EA5E9] bg-gray-50 focus:bg-white transition-colors"
                 />
               </div>
-              <input
-                placeholder="Email"
-                value={newEmail}
-                onChange={(e) => setNewEmail(e.target.value)}
-                className="px-3 py-2 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0EA5E9]"
-              />
-              <input
-                placeholder="Phone"
-                value={newPhone}
-                onChange={(e) => setNewPhone(e.target.value)}
-                className="px-3 py-2 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0EA5E9]"
-              />
-              <select
-                value={newSource}
-                onChange={(e) => setNewSource(e.target.value)}
-                className="px-3 py-2 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0EA5E9] bg-white text-gray-700"
-              >
-                <option value="">Source (optional)</option>
-                {SOURCES.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
+
+              {/* Notes */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Notes</label>
+                <textarea
+                  placeholder="Any initial notes about this contact..."
+                  value={newNotes}
+                  onChange={(e) => setNewNotes(e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0EA5E9] bg-gray-50 focus:bg-white transition-colors resize-none"
+                />
+              </div>
             </div>
-            <div className="flex gap-2 mt-5">
+
+            {/* Footer */}
+            <div className="flex gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50/50">
               <button
                 onClick={() => setShowAdd(false)}
-                className="flex-1 py-2 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50"
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-colors"
               >
                 Cancel
               </button>
               <button
                 disabled={!newFirst || !newLast || createMutation.isPending}
                 onClick={() => createMutation.mutate()}
-                className="flex-1 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-50"
+                className="flex-1 py-2.5 rounded-xl text-white text-sm font-bold disabled:opacity-50 transition-opacity"
                 style={{ backgroundColor: "#0EA5E9" }}
               >
-                {createMutation.isPending ? "Creating..." : "Create Contact"}
+                {createMutation.isPending ? "Creating..." : "Add Contact"}
               </button>
             </div>
           </div>

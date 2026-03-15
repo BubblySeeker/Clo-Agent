@@ -1,7 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Phone, Mail, Calendar, Users, AlertCircle, CheckCircle, Clock, Edit2, RefreshCw, Trash2 } from "lucide-react";
+import { useAuth } from "@clerk/nextjs";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { createActivity } from "@/lib/api/activities";
+import { listContacts } from "@/lib/api/contacts";
+import { Plus, Phone, Mail, Calendar, Users, AlertCircle, CheckCircle, Clock, Edit2, RefreshCw, Trash2, X, User, ChevronDown } from "lucide-react";
 
 const tasksRaw = [
   { id: 1, title: "Call Marcus Rivera re: counter-offer", contact: "Marcus Rivera", deal: "327 Maple Ave", dueDate: "Mar 12", type: "call", priority: "high", done: false, group: "Overdue" },
@@ -28,9 +32,40 @@ const groups = ["Overdue", "Today", "Tomorrow", "This Week"];
 const filterTabs = ["All", "Today", "Overdue", "Upcoming", "Completed"];
 
 export default function TasksPage() {
+  const { getToken } = useAuth();
+  const queryClient = useQueryClient();
   const [tasks, setTasks] = useState(tasksRaw);
   const [filter, setFilter] = useState("All");
   const [hoveredTask, setHoveredTask] = useState<number | null>(null);
+
+  const [showAdd, setShowAdd] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newContactId, setNewContactId] = useState("");
+  const [newPriority, setNewPriority] = useState<"high" | "medium" | "low">("medium");
+
+  const { data: contactsData } = useQuery({
+    queryKey: ["contacts", { limit: 100 }],
+    queryFn: async () => {
+      const token = await getToken();
+      return listContacts(token!, { limit: 100 });
+    },
+  });
+
+  const contacts = contactsData?.contacts ?? [];
+
+  const createTaskMutation = useMutation({
+    mutationFn: async () => {
+      const token = await getToken();
+      return createActivity(token!, newContactId, { type: "task", body: newTitle || undefined });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["all-activities"] });
+      setShowAdd(false);
+      setNewTitle("");
+      setNewContactId("");
+      setNewPriority("medium");
+    },
+  });
 
   const toggleDone = (id: number) => {
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
@@ -58,7 +93,7 @@ export default function TasksPage() {
           <h1 className="text-2xl font-bold" style={{ color: "#1E3A5F" }}>Tasks</h1>
           <p className="text-sm text-gray-500 mt-0.5">Stay on top of follow-ups and action items</p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-semibold" style={{ backgroundColor: "#0EA5E9" }}>
+        <button onClick={() => setShowAdd(true)} className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-semibold" style={{ backgroundColor: "#0EA5E9" }}>
           <Plus size={16} /> Add Task
         </button>
       </div>
@@ -178,6 +213,116 @@ export default function TasksPage() {
           </div>
         )}
       </div>
+
+      {/* Add Task Modal */}
+      {showAdd && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div>
+                <h2 className="text-lg font-bold" style={{ color: "#1E3A5F" }}>Add Task</h2>
+                <p className="text-xs text-gray-400 mt-0.5">Create a new follow-up or action item</p>
+              </div>
+              <button
+                onClick={() => setShowAdd(false)}
+                className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors"
+              >
+                <X size={14} className="text-gray-500" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="px-6 py-5 space-y-5 max-h-[60vh] overflow-y-auto">
+              {/* Task Title */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Task Title</label>
+                <input
+                  type="text"
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  placeholder="e.g. Follow up with client about showing feedback"
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-[#0EA5E9]"
+                />
+              </div>
+
+              {/* Contact */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Contact</label>
+                <div className="relative">
+                  <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <select
+                    value={newContactId}
+                    onChange={(e) => setNewContactId(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-[#0EA5E9] appearance-none"
+                  >
+                    <option value="">Select a contact...</option>
+                    {contacts.map((c: { id: string; first_name: string; last_name: string }) => (
+                      <option key={c.id} value={c.id}>
+                        {c.first_name} {c.last_name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* Priority */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Priority</label>
+                <div className="flex gap-2">
+                  {([
+                    { value: "high" as const, label: "High", color: "#EF4444", bg: "#FEF2F2" },
+                    { value: "medium" as const, label: "Medium", color: "#F59E0B", bg: "#FFFBEB" },
+                    { value: "low" as const, label: "Low", color: "#22C55E", bg: "#F0FDF4" },
+                  ]).map((p) => {
+                    const selected = newPriority === p.value;
+                    return (
+                      <button
+                        key={p.value}
+                        onClick={() => setNewPriority(p.value)}
+                        className="flex items-center gap-2 flex-1 py-2.5 rounded-xl border-2 justify-center transition-all"
+                        style={{
+                          borderColor: selected ? p.color : "#f3f4f6",
+                          backgroundColor: selected ? p.bg : "white",
+                        }}
+                      >
+                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: p.color }} />
+                        <span className="text-xs font-semibold" style={{ color: selected ? p.color : "#6b7280" }}>
+                          {p.label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-3 px-6 py-4 bg-gray-50 border-t border-gray-100">
+              <button
+                onClick={() => setShowAdd(false)}
+                className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-gray-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => createTaskMutation.mutate()}
+                disabled={!newContactId || !newTitle.trim() || createTaskMutation.isPending}
+                className="flex items-center gap-2 px-5 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-50 transition-all"
+                style={{ backgroundColor: "#0EA5E9" }}
+              >
+                {createTaskMutation.isPending ? (
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <Plus size={14} />
+                )}
+                Add Task
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
