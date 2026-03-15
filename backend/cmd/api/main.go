@@ -68,27 +68,72 @@ func run() error {
 	// -------------------------------------------------------------------------
 	r := chi.NewRouter()
 
-	// Global middleware stack (applied to every request).
-	r.Use(chimiddleware.RequestID)       // Inject X-Request-ID header
-	r.Use(chimiddleware.RealIP)          // Trust X-Real-IP / X-Forwarded-For
-	r.Use(chimiddleware.Logger)          // Structured request logging
-	r.Use(chimiddleware.Recoverer)       // Recover from panics gracefully
-	r.Use(chimiddleware.Compress(5))     // Gzip responses at level 5
-	r.Use(middleware.CORSHandler())      // CORS headers
+	// Global middleware stack
+	r.Use(chimiddleware.RequestID)
+	r.Use(chimiddleware.RealIP)
+	r.Use(chimiddleware.Logger)
+	r.Use(chimiddleware.Recoverer)
+	r.Use(chimiddleware.Compress(5))
+	r.Use(middleware.CORSHandler())
 
 	// -------------------------------------------------------------------------
 	// Routes
 	// -------------------------------------------------------------------------
 
-	// Public endpoints — no authentication required.
+	// Public
 	r.Get("/health", handlers.Health)
 
-	// Protected endpoints — Clerk JWT required.
+	// Protected — Clerk JWT + user sync required
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.ClerkAuth(clerkClient))
+		r.Use(middleware.UserSync(pool, clerkClient))
 
-		// Future authenticated routes go here, e.g.:
-		// r.Get("/api/v1/contacts", handlers.ListContacts(pool))
+		// Dashboard
+		r.Get("/api/dashboard/summary", handlers.GetDashboardSummary(pool))
+
+		// Contacts
+		r.Get("/api/contacts", handlers.ListContacts(pool))
+		r.Post("/api/contacts", handlers.CreateContact(pool))
+		r.Get("/api/contacts/{id}", handlers.GetContact(pool))
+		r.Patch("/api/contacts/{id}", handlers.UpdateContact(pool))
+		r.Delete("/api/contacts/{id}", handlers.DeleteContact(pool))
+
+		// Buyer Profiles
+		r.Get("/api/contacts/{id}/buyer-profile", handlers.GetBuyerProfile(pool))
+		r.Post("/api/contacts/{id}/buyer-profile", handlers.CreateBuyerProfile(pool))
+		r.Patch("/api/contacts/{id}/buyer-profile", handlers.UpdateBuyerProfile(pool))
+
+		// Activities
+		r.Get("/api/contacts/{id}/activities", handlers.ListActivities(pool))
+		r.Post("/api/contacts/{id}/activities", handlers.CreateActivity(pool))
+		r.Get("/api/activities", handlers.ListAllActivities(pool))
+
+		// AI Profile
+		r.Get("/api/contacts/{id}/ai-profile", handlers.GetAIProfile(pool))
+		r.Post("/api/contacts/{id}/ai-profile/regenerate", handlers.RegenerateAIProfile(pool, cfg))
+
+		// Deals
+		r.Get("/api/deals", handlers.ListDeals(pool))
+		r.Post("/api/deals", handlers.CreateDeal(pool))
+		r.Get("/api/deals/{id}", handlers.GetDeal(pool))
+		r.Patch("/api/deals/{id}", handlers.UpdateDeal(pool))
+		r.Delete("/api/deals/{id}", handlers.DeleteDeal(pool))
+
+		// Deal stages
+		r.Get("/api/deal-stages", handlers.ListDealStages(pool))
+
+		// Conversations
+		r.Get("/api/ai/conversations", handlers.ListConversations(pool))
+		r.Post("/api/ai/conversations", handlers.CreateConversation(pool))
+		r.Get("/api/ai/conversations/{id}", handlers.GetConversation(pool))
+		r.Get("/api/ai/conversations/{id}/messages", handlers.GetMessages(pool))
+		r.Post("/api/ai/conversations/{id}/messages", handlers.SendMessage(pool, cfg))
+		r.Post("/api/ai/conversations/{id}/confirm", handlers.ConfirmToolAction(cfg))
+
+		// Analytics
+		r.Get("/api/analytics/pipeline", handlers.GetPipelineAnalytics(pool))
+		r.Get("/api/analytics/activities", handlers.GetActivityAnalytics(pool))
+		r.Get("/api/analytics/contacts", handlers.GetContactAnalytics(pool))
 	})
 
 	// -------------------------------------------------------------------------
@@ -102,7 +147,6 @@ func run() error {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Run the server in a goroutine so we can listen for shutdown signals.
 	serverErr := make(chan error, 1)
 	go func() {
 		slog.Info("HTTP server starting", "addr", srv.Addr)
@@ -111,7 +155,6 @@ func run() error {
 		}
 	}()
 
-	// Wait for an OS signal or a server error.
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
@@ -122,7 +165,6 @@ func run() error {
 		slog.Info("shutdown signal received", "signal", sig)
 	}
 
-	// Graceful shutdown: give in-flight requests up to 30 s to complete.
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 

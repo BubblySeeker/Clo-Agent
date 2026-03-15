@@ -21,7 +21,7 @@ export default function Home() {
     <main className="flex min-h-screen flex-col items-center justify-center gap-6">
       <h1 className="text-4xl font-bold tracking-tight">CloAgent</h1>
       <p className="text-muted-foreground">AI-powered customer relationship management</p>
-      <SignInButton mode="modal" afterSignInUrl="/dashboard">
+      <SignInButton mode="modal" forceRedirectUrl="/dashboard">
         <Button size="lg">Sign In</Button>
       </SignInButton>
     </main>

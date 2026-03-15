@@ -1,110 +1,212 @@
 "use client";
 
-import { UserButton } from "@clerk/nextjs";
+import { UserButton, useUser } from "@clerk/nextjs";
 import {
-  BarChart3,
-  ChevronLeft,
-  ChevronRight,
-  ContactRound,
-  MessageSquare,
-  TrendingUp,
+  LayoutDashboard,
+  Users,
+  GitBranch,
+  Bot,
+  Activity,
+  CheckSquare,
+  BarChart2,
+  Settings,
+  Building2,
+  Bell,
+  Search,
+  Plus,
+  FileText,
+  Briefcase,
+  Workflow,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useUIStore } from "@/store/ui-store";
-import { cn } from "@/lib/utils";
+import AIChatBubble from "@/components/shared/AIChatBubble";
 
-const navLinks = [
-  { href: "/dashboard/contacts", label: "Contacts", icon: ContactRound },
-  { href: "/dashboard/pipeline", label: "Pipeline", icon: TrendingUp },
-  { href: "/dashboard/chat", label: "Chat", icon: MessageSquare },
-  { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
+const navItems = [
+  { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard", exact: true },
+  { icon: Users, label: "Contacts", href: "/dashboard/contacts" },
+  { icon: GitBranch, label: "Pipeline", href: "/dashboard/pipeline" },
+  { icon: Bot, label: "AI Chat", href: "/dashboard/chat" },
+  { icon: Activity, label: "Activities", href: "/dashboard/activities" },
+  { icon: CheckSquare, label: "Tasks", href: "/dashboard/tasks" },
+  { icon: BarChart2, label: "Reports", href: "/dashboard/analytics" },
+  { icon: Workflow, label: "Workflows", href: "/dashboard/workflows" },
+  { icon: Settings, label: "Settings", href: "/dashboard/settings" },
 ];
 
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+const pageTitles: Record<string, string> = {
+  "/dashboard": "Dashboard",
+  "/dashboard/contacts": "Contacts",
+  "/dashboard/pipeline": "Pipeline",
+  "/dashboard/chat": "AI Chat",
+  "/dashboard/activities": "Activities",
+  "/dashboard/tasks": "Tasks",
+  "/dashboard/analytics": "Reports",
+  "/dashboard/workflows": "Workflows",
+  "/dashboard/settings": "Settings",
+};
+
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { sidebarCollapsed, toggleSidebar } = useUIStore();
+  const { user } = useUser();
+
+  const base = "/" + pathname.split("/").slice(1, 3).join("/");
+  const pageTitle = pageTitles[base] || "CloAgent";
+
+  const isActive = (href: string, exact?: boolean) =>
+    exact ? pathname === href : pathname.startsWith(href);
+
+  const initials = user
+    ? `${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}`.toUpperCase() || "A"
+    : "A";
 
   return (
-    <div className="flex min-h-screen">
-      {/* Sidebar */}
+    <div
+      className="flex h-screen w-screen overflow-hidden"
+      style={{ backgroundColor: "#F5F7FA", fontFamily: "'Inter', sans-serif", minWidth: 1200 }}
+    >
+      {/* Sidebar — dark, icon-only, 72px */}
       <aside
-        className={cn(
-          "fixed inset-y-0 left-0 z-40 flex flex-col border-r bg-background transition-all duration-300",
-          sidebarCollapsed ? "w-16" : "w-60"
-        )}
+        className="flex flex-col h-full w-[72px] shrink-0"
+        style={{ backgroundColor: "#0F1E36" }}
       >
         {/* Logo */}
-        <div className="flex h-16 items-center border-b px-4">
-          <span
-            className={cn(
-              "text-lg font-bold tracking-tight transition-opacity duration-200",
-              sidebarCollapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100"
-            )}
+        <div className="flex items-center justify-center h-16 border-b border-white/10">
+          <div
+            className="w-10 h-10 rounded-xl flex items-center justify-center"
+            style={{ backgroundColor: "#0EA5E9" }}
           >
-            CloAgent
-          </span>
-          {sidebarCollapsed && (
-            <span className="text-lg font-bold">Clo</span>
-          )}
+            <Building2 size={20} className="text-white" />
+          </div>
         </div>
 
-        {/* Nav links */}
-        <nav className="flex-1 space-y-1 p-2 pt-4">
-          {navLinks.map(({ href, label, icon: Icon }) => (
-            <Link
-              key={href}
-              href={href}
-              className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground",
-                pathname.startsWith(href)
-                  ? "bg-accent text-accent-foreground"
-                  : "text-muted-foreground"
-              )}
-            >
-              <Icon className="h-5 w-5 shrink-0" />
-              {!sidebarCollapsed && <span>{label}</span>}
-            </Link>
-          ))}
+        {/* Nav items */}
+        <nav className="flex-1 flex flex-col items-center gap-1 py-4 overflow-y-auto">
+          {navItems.map((item) => {
+            const active = isActive(item.href, item.exact);
+            return (
+              <Link
+                key={item.label}
+                href={item.href}
+                title={item.label}
+                className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all cursor-pointer group relative ${
+                  active ? "bg-[#0EA5E9]/20" : "hover:bg-white/10"
+                }`}
+              >
+                <item.icon
+                  size={20}
+                  className={active ? "text-[#0EA5E9]" : "text-white/50 group-hover:text-white/80"}
+                />
+                {active && (
+                  <span
+                    className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 rounded-r-full"
+                    style={{ backgroundColor: "#0EA5E9" }}
+                  />
+                )}
+              </Link>
+            );
+          })}
         </nav>
 
-        {/* Bottom: collapse toggle + user */}
-        <div className="border-t p-2 space-y-2">
-          <div
-            className={cn(
-              "flex items-center",
-              sidebarCollapsed ? "justify-center" : "px-2"
-            )}
-          >
-            <UserButton afterSignOutUrl="/" />
-          </div>
-          <button
-            onClick={toggleSidebar}
-            className="flex w-full items-center justify-center rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-            {sidebarCollapsed ? (
-              <ChevronRight className="h-4 w-4" />
-            ) : (
-              <ChevronLeft className="h-4 w-4" />
-            )}
-          </button>
+        {/* User avatar */}
+        <div className="flex flex-col items-center pb-4 gap-2">
+          <UserButton afterSignOutUrl="/" />
         </div>
       </aside>
 
-      {/* Main content */}
-      <main
-        className={cn(
-          "flex-1 transition-all duration-300",
-          sidebarCollapsed ? "ml-16" : "ml-60"
-        )}
-      >
-        {children}
-      </main>
+      {/* Right side: TopBar + content */}
+      <div className="flex flex-col flex-1 overflow-hidden">
+        {/* TopBar */}
+        <div className="flex flex-col gap-3 px-6 pt-4 pb-3 bg-white border-b border-gray-100 shrink-0">
+          <div className="flex items-center gap-4">
+            {/* Page title */}
+            <div className="flex items-center gap-3 min-w-[140px]">
+              <span className="text-lg font-bold" style={{ color: "#1E3A5F" }}>
+                {pageTitle}
+              </span>
+            </div>
+
+            {/* Search */}
+            <div className="flex-1 max-w-md mx-auto">
+              <div className="relative">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search contacts, deals, properties..."
+                  className="w-full pl-9 pr-4 py-2 rounded-full border border-gray-200 bg-gray-50 text-sm text-gray-700 outline-none focus:border-[#0EA5E9] focus:bg-white transition-all"
+                />
+              </div>
+            </div>
+
+            <div className="flex-1" />
+
+            {/* Notifications + user */}
+            <div className="flex items-center gap-3">
+              <button className="relative w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors">
+                <Bell size={18} className="text-gray-600" />
+                <span
+                  className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full"
+                  style={{ backgroundColor: "#F59E0B" }}
+                />
+              </button>
+              <div className="flex items-center gap-2">
+                <div
+                  className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-semibold"
+                  style={{ backgroundColor: "#1E3A5F" }}
+                >
+                  {initials}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-800 leading-tight">
+                    {user?.firstName ?? "Agent"} {user?.lastName ?? ""}
+                  </p>
+                  <p className="text-xs text-gray-500">Real Estate Agent</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick actions — only on dashboard */}
+          {pathname === "/dashboard" && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-gray-500 mr-1">Quick:</span>
+              <Link
+                href="/dashboard/contacts"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-gray-200 text-sm text-gray-700 hover:border-[#1E3A5F] hover:text-[#1E3A5F] transition-colors"
+              >
+                <Plus size={14} /> Add Contact
+              </Link>
+              <Link
+                href="/dashboard/activities"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-gray-200 text-sm text-gray-700 hover:border-[#1E3A5F] hover:text-[#1E3A5F] transition-colors"
+              >
+                <FileText size={14} /> Log Activity
+              </Link>
+              <Link
+                href="/dashboard/pipeline"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-gray-200 text-sm text-gray-700 hover:border-[#1E3A5F] hover:text-[#1E3A5F] transition-colors"
+              >
+                <Briefcase size={14} /> Create Deal
+              </Link>
+              <Link
+                href="/dashboard/chat"
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm text-white font-semibold transition-opacity hover:opacity-90"
+                style={{ backgroundColor: "#0EA5E9" }}
+              >
+                <Bot size={14} /> Start AI Chat
+              </Link>
+            </div>
+          )}
+        </div>
+
+        {/* Page content */}
+        <main className="flex-1 overflow-y-auto">
+          {children}
+        </main>
+      </div>
+
+      {/* Floating AI chat bubble */}
+      <AIChatBubble />
     </div>
   );
 }
