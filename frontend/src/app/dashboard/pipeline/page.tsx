@@ -6,7 +6,7 @@ import { useAuth } from "@clerk/nextjs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { listDeals, listDealStages, updateDeal, createDeal, type Deal } from "@/lib/api/deals";
 import { listContacts } from "@/lib/api/contacts";
-import { Plus, Search, AlertTriangle, GripVertical } from "lucide-react";
+import { Plus, Search, AlertTriangle, GripVertical, X, DollarSign, FileText, User } from "lucide-react";
 
 function getAvatarColor(id: string) {
   const colors = ["#0EA5E9", "#22C55E", "#F59E0B", "#8B5CF6", "#EF4444", "#1E3A5F"];
@@ -39,6 +39,7 @@ export default function PipelinePage() {
   const [newContactId, setNewContactId] = useState("");
   const [newStageId, setNewStageId] = useState("");
   const [newValue, setNewValue] = useState("");
+  const [newNotes, setNewNotes] = useState("");
 
   const { data: stagesData, isLoading: stagesLoading } = useQuery({
     queryKey: ["deal-stages"],
@@ -89,6 +90,7 @@ export default function PipelinePage() {
       setNewContactId("");
       setNewStageId("");
       setNewValue("");
+      setNewNotes("");
     },
   });
 
@@ -135,59 +137,123 @@ export default function PipelinePage() {
       {/* Add Deal Modal */}
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-2xl p-6 shadow-xl w-full max-w-md">
-            <h3 className="text-lg font-bold mb-4" style={{ color: "#1E3A5F" }}>New Deal</h3>
-            <div className="flex flex-col gap-3">
-              <input
-                placeholder="Deal title *"
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-                className="px-3 py-2 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0EA5E9]"
-              />
-              <select
-                value={newContactId}
-                onChange={(e) => setNewContactId(e.target.value)}
-                className="px-3 py-2 rounded-xl border border-gray-200 text-sm outline-none"
-              >
-                <option value="">Select contact *</option>
-                {contacts.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.first_name} {c.last_name}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={newStageId}
-                onChange={(e) => setNewStageId(e.target.value)}
-                className="px-3 py-2 rounded-xl border border-gray-200 text-sm outline-none"
-              >
-                <option value="">Select stage *</option>
-                {stages.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-              <input
-                placeholder="Deal value (e.g. 500000)"
-                value={newValue}
-                onChange={(e) => setNewValue(e.target.value)}
-                type="number"
-                className="px-3 py-2 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0EA5E9]"
-              />
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div>
+                <h3 className="text-lg font-bold" style={{ color: "#1E3A5F" }}>Add New Deal</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Create a new deal in your pipeline</p>
+              </div>
+              <button onClick={() => setShowAdd(false)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-gray-100 transition-colors">
+                <X size={16} className="text-gray-400" />
+              </button>
             </div>
-            <div className="flex gap-2 mt-5">
+
+            <div className="px-6 py-5 flex flex-col gap-5 max-h-[70vh] overflow-y-auto">
+              {/* Deal Title */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Deal Title <span className="text-red-400">*</span></label>
+                <div className="relative">
+                  <FileText size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    placeholder="e.g. 123 Maple St — Purchase"
+                    value={newTitle}
+                    onChange={(e) => setNewTitle(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0EA5E9] bg-gray-50 focus:bg-white transition-colors"
+                  />
+                </div>
+              </div>
+
+              {/* Contact */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Contact <span className="text-red-400">*</span></label>
+                <div className="relative">
+                  <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <select
+                    value={newContactId}
+                    onChange={(e) => setNewContactId(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0EA5E9] bg-gray-50 focus:bg-white transition-colors appearance-none"
+                  >
+                    <option value="">Select a contact...</option>
+                    {contacts.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.first_name} {c.last_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Pipeline Stage */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Pipeline Stage <span className="text-red-400">*</span></label>
+                <div className="flex flex-wrap gap-2">
+                  {stages.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => setNewStageId(newStageId === s.id ? "" : s.id)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                        newStageId === s.id
+                          ? "text-white border-transparent"
+                          : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
+                      }`}
+                      style={newStageId === s.id ? { backgroundColor: s.color } : {}}
+                    >
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: newStageId === s.id ? "white" : s.color }} />
+                      {s.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Deal Value */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Deal Value</label>
+                <div className="relative">
+                  <DollarSign size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="number"
+                    placeholder="e.g. 450000"
+                    value={newValue}
+                    onChange={(e) => setNewValue(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0EA5E9] bg-gray-50 focus:bg-white transition-colors"
+                  />
+                </div>
+                {newValue && (
+                  <p className="text-xs text-gray-400 mt-1 pl-1">
+                    {formatValue(parseFloat(newValue))}
+                  </p>
+                )}
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Notes</label>
+                <textarea
+                  placeholder="Any details about this deal..."
+                  value={newNotes}
+                  onChange={(e) => setNewNotes(e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0EA5E9] bg-gray-50 focus:bg-white transition-colors resize-none"
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50/50">
               <button
                 onClick={() => setShowAdd(false)}
-                className="flex-1 py-2 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50"
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-colors"
               >
                 Cancel
               </button>
               <button
                 disabled={!newTitle || !newContactId || !newStageId || createMutation.isPending}
                 onClick={() => createMutation.mutate()}
-                className="flex-1 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-50"
+                className="flex-1 py-2.5 rounded-xl text-white text-sm font-bold disabled:opacity-50 transition-opacity"
                 style={{ backgroundColor: "#0EA5E9" }}
               >
-                {createMutation.isPending ? "Creating..." : "Create Deal"}
+                {createMutation.isPending ? "Creating..." : "Add Deal"}
               </button>
             </div>
           </div>

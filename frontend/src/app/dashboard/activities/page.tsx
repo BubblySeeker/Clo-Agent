@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { useAuth } from "@clerk/nextjs";
-import { useQuery } from "@tanstack/react-query";
-import { listAllActivities } from "@/lib/api/activities";
-import { Phone, Mail, FileText, Home, CheckSquare, ChevronDown, Plus } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { listAllActivities, createActivity } from "@/lib/api/activities";
+import { listContacts } from "@/lib/api/contacts";
+import { Phone, Mail, FileText, Home, CheckSquare, ChevronDown, Plus, X, User, Calendar } from "lucide-react";
 
 const typeColors: Record<string, { bg: string; color: string }> = {
   call: { bg: "#EFF6FF", color: "#0EA5E9" },
@@ -43,11 +44,25 @@ function timeAgo(dateStr: string) {
   return new Date(dateStr).toLocaleDateString();
 }
 
+const ACTIVITY_TYPES = [
+  { value: "call" as const, label: "Call", icon: Phone, color: "#0EA5E9", bg: "#EFF6FF" },
+  { value: "email" as const, label: "Email", icon: Mail, color: "#22C55E", bg: "#F0FDF4" },
+  { value: "note" as const, label: "Note", icon: FileText, color: "#F59E0B", bg: "#FFFBEB" },
+  { value: "showing" as const, label: "Showing", icon: Home, color: "#8B5CF6", bg: "#EDE9FE" },
+  { value: "task" as const, label: "Task", icon: CheckSquare, color: "#F59E0B", bg: "#FEF3C7" },
+];
+
 export default function ActivitiesPage() {
   const { getToken } = useAuth();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("All");
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const [showAdd, setShowAdd] = useState(false);
+  const [newType, setNewType] = useState<"call" | "email" | "note" | "showing" | "task">("call");
+  const [newContactId, setNewContactId] = useState("");
+  const [newBody, setNewBody] = useState("");
 
   const typeFilter = tabTypeMap[activeTab];
 
@@ -56,6 +71,30 @@ export default function ActivitiesPage() {
     queryFn: async () => {
       const token = await getToken();
       return listAllActivities(token!, typeFilter);
+    },
+  });
+
+  const { data: contactsData } = useQuery({
+    queryKey: ["contacts", { limit: 100 }],
+    queryFn: async () => {
+      const token = await getToken();
+      return listContacts(token!, { limit: 100 });
+    },
+  });
+
+  const contacts = contactsData?.contacts ?? [];
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      const token = await getToken();
+      return createActivity(token!, newContactId, { type: newType, body: newBody || undefined });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["all-activities"] });
+      setShowAdd(false);
+      setNewType("call");
+      setNewContactId("");
+      setNewBody("");
     },
   });
 
@@ -86,6 +125,7 @@ export default function ActivitiesPage() {
           <p className="text-sm text-gray-500 mt-0.5">All logged interactions across your contacts</p>
         </div>
         <button
+          onClick={() => setShowAdd(true)}
           className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-semibold"
           style={{ backgroundColor: "#0EA5E9" }}
         >
@@ -206,6 +246,121 @@ export default function ActivitiesPage() {
           })
         )}
       </div>
+
+      {/* Log Activity Modal */}
+      {showAdd && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div>
+                <h2 className="text-lg font-bold" style={{ color: "#1E3A5F" }}>Log Activity</h2>
+                <p className="text-xs text-gray-400 mt-0.5">Record a new interaction with a contact</p>
+              </div>
+              <button
+                onClick={() => setShowAdd(false)}
+                className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors"
+              >
+                <X size={14} className="text-gray-500" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="px-6 py-5 space-y-5 max-h-[60vh] overflow-y-auto">
+              {/* Activity Type */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Activity Type</label>
+                <div className="flex gap-2">
+                  {ACTIVITY_TYPES.map((t) => {
+                    const Icon = t.icon;
+                    const selected = newType === t.value;
+                    return (
+                      <button
+                        key={t.value}
+                        onClick={() => setNewType(t.value)}
+                        className="flex flex-col items-center gap-1.5 flex-1 py-3 rounded-xl border-2 transition-all"
+                        style={{
+                          borderColor: selected ? t.color : "#f3f4f6",
+                          backgroundColor: selected ? t.bg : "white",
+                        }}
+                      >
+                        <Icon size={18} style={{ color: selected ? t.color : "#9ca3af" }} />
+                        <span className="text-xs font-semibold" style={{ color: selected ? t.color : "#6b7280" }}>
+                          {t.label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Contact */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Contact</label>
+                <div className="relative">
+                  <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <select
+                    value={newContactId}
+                    onChange={(e) => setNewContactId(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-[#0EA5E9] appearance-none"
+                  >
+                    <option value="">Select a contact...</option>
+                    {contacts.map((c: { id: string; first_name: string; last_name: string }) => (
+                      <option key={c.id} value={c.id}>
+                        {c.first_name} {c.last_name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* Notes / Body */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">
+                  {newType === "note" ? "Note" : newType === "task" ? "Task Description" : "Details"}
+                </label>
+                <textarea
+                  value={newBody}
+                  onChange={(e) => setNewBody(e.target.value)}
+                  placeholder={
+                    newType === "call" ? "Call summary, key points discussed..."
+                    : newType === "email" ? "Email subject or summary..."
+                    : newType === "note" ? "Write your note..."
+                    : newType === "showing" ? "Property address, client feedback..."
+                    : "Describe the task..."
+                  }
+                  rows={4}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-[#0EA5E9] resize-none"
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-3 px-6 py-4 bg-gray-50 border-t border-gray-100">
+              <button
+                onClick={() => setShowAdd(false)}
+                className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-gray-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => createMutation.mutate()}
+                disabled={!newContactId || createMutation.isPending}
+                className="flex items-center gap-2 px-5 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-50 transition-all"
+                style={{ backgroundColor: "#0EA5E9" }}
+              >
+                {createMutation.isPending ? (
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <Plus size={14} />
+                )}
+                Log Activity
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
