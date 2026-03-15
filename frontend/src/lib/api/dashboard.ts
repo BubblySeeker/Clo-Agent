@@ -36,3 +36,14 @@ export interface DashboardSummary {
 export function getDashboardSummary(token: string): Promise<DashboardSummary> {
   return apiRequest("/dashboard/summary", token);
 }
+
+export function getDashboardLayout(token: string): Promise<{ layout: unknown | null }> {
+  return apiRequest("/dashboard/layout", token);
+}
+
+export function saveDashboardLayout(token: string, layout: unknown): Promise<{ status: string }> {
+  return apiRequest("/dashboard/layout", token, {
+    method: "PUT",
+    body: JSON.stringify({ layout }),
+  });
+}

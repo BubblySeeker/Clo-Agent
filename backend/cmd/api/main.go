@@ -90,6 +90,8 @@ func run() error {
 
 		// Dashboard
 		r.Get("/api/dashboard/summary", handlers.GetDashboardSummary(pool))
+		r.Get("/api/dashboard/layout", handlers.GetDashboardLayout(pool))
+		r.Put("/api/dashboard/layout", handlers.SaveDashboardLayout(pool))
 
 		// Contacts
 		r.Get("/api/contacts", handlers.ListContacts(pool))

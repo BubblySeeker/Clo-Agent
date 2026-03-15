@@ -1,6 +1,6 @@
 "use client";
 
-import { UserButton, useUser } from "@clerk/nextjs";
+import { useClerk, useUser } from "@clerk/nextjs";
 import {
   LayoutDashboard,
   Users,
@@ -17,9 +17,12 @@ import {
   FileText,
   Briefcase,
   Workflow,
+  LogOut,
+  UserCircle,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
 import AIChatBubble from "@/components/shared/AIChatBubble";
 
 const navItems = [
@@ -48,7 +51,10 @@ const pageTitles: Record<string, string> = {
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { user } = useUser();
+  const { signOut } = useClerk();
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
 
   const base = "/" + pathname.split("/").slice(1, 3).join("/");
   const pageTitle = pageTitles[base] || "CloAgent";
@@ -108,9 +114,56 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           })}
         </nav>
 
-        {/* User avatar */}
-        <div className="flex flex-col items-center pb-4 gap-2">
-          <UserButton afterSignOutUrl="/" />
+        {/* User account menu */}
+        <div className="flex flex-col items-center pb-4 gap-2 relative">
+          <button
+            onClick={() => setAccountMenuOpen((v) => !v)}
+            className="w-10 h-10 rounded-full flex items-center justify-center text-white text-xs font-semibold hover:ring-2 hover:ring-white/30 transition-all"
+            style={{ backgroundColor: "#1E3A5F" }}
+            title="Account"
+          >
+            {initials}
+          </button>
+
+          {accountMenuOpen && (
+            <>
+              {/* Backdrop */}
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setAccountMenuOpen(false)}
+              />
+              {/* Dropdown (opens upward, anchored to left edge) */}
+              <div
+                className="absolute bottom-12 left-0 z-50 w-56 rounded-xl shadow-xl border border-white/10 overflow-hidden"
+                style={{ backgroundColor: "#0F1E36" }}
+              >
+                {/* User info */}
+                <div className="px-4 py-3 border-b border-white/10">
+                  <p className="text-sm font-semibold text-white leading-tight truncate">
+                    {user?.firstName ?? ""} {user?.lastName ?? ""}
+                  </p>
+                  <p className="text-xs text-white/50 truncate">
+                    {user?.emailAddresses[0]?.emailAddress ?? ""}
+                  </p>
+                </div>
+                {/* Actions */}
+                <button
+                  onClick={() => { setAccountMenuOpen(false); router.push("/dashboard/settings?section=profile"); }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-white/80 hover:bg-white/10 transition-colors"
+                >
+                  <UserCircle size={16} />
+                  Manage Account
+                </button>
+                <button
+                  onClick={() => signOut({ redirectUrl: "/" })}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-400 hover:bg-white/10 transition-colors"
+                >
+                  <LogOut size={16} />
+                  Sign Out
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </aside>
 
@@ -140,7 +193,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
             <div className="flex-1" />
 
-            {/* Notifications + user */}
+            {/* Notifications */}
             <div className="flex items-center gap-3">
               <button className="relative w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors">
                 <Bell size={18} className="text-gray-600" />
@@ -149,20 +202,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   style={{ backgroundColor: "#F59E0B" }}
                 />
               </button>
-              <div className="flex items-center gap-2">
-                <div
-                  className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-semibold"
-                  style={{ backgroundColor: "#1E3A5F" }}
-                >
-                  {initials}
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-gray-800 leading-tight">
-                    {user?.firstName ?? "Agent"} {user?.lastName ?? ""}
-                  </p>
-                  <p className="text-xs text-gray-500">Real Estate Agent</p>
-                </div>
-              </div>
             </div>
           </div>
 
