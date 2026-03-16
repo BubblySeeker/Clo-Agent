@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { LinkButton } from "@/components/marketing/LinkButton";
 import { Check, ArrowRight, Sparkles } from "lucide-react";
 
@@ -71,42 +71,90 @@ const faqs = [
   { question: "Do you offer discounts for non-profits?", answer: "Yes! We offer 50% off for qualified non-profit organizations. Contact sales for details." },
 ];
 
+const comparisonRows = [
+  { feature: "Contacts", values: ["500", "Unlimited", "Unlimited"] },
+  { feature: "AI Insights", values: ["-", "check", "check"] },
+  { feature: "Automation", values: ["-", "check", "check"] },
+  { feature: "Custom Fields", values: ["-", "check", "check"] },
+  { feature: "API Access", values: ["-", "-", "check"] },
+  { feature: "SSO/SAML", values: ["-", "-", "check"] },
+];
+
+const stagger = {
+  hidden: {},
+  visible: {
+    transition: { staggerChildren: 0.08 },
+  },
+};
+
+const fadeUp = {
+  hidden: { opacity: 0, y: 24 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] } },
+};
+
 export default function PricingPage() {
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">("monthly");
 
   return (
     <div className="overflow-hidden">
       {/* Hero */}
-      <section className="pt-32 pb-20">
+      <section className="pt-32 pb-16">
         <div className="max-w-7xl mx-auto px-6">
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
+            initial="hidden"
+            animate="visible"
+            variants={stagger}
             className="text-center max-w-3xl mx-auto"
           >
-            <div className="inline-block px-4 py-2 rounded-full bg-[#0EA5E9]/10 border border-[#0EA5E9]/20 mb-6">
-              <span className="text-[#0EA5E9] text-sm font-medium">Pricing</span>
-            </div>
-            <h1 className="text-5xl md:text-6xl font-bold text-white mb-6">Simple, transparent pricing</h1>
-            <p className="text-xl text-white/70 mb-8">
+            <motion.div variants={fadeUp} className="inline-block px-4 py-2 rounded-full bg-[#0EA5E9]/10 border border-[#0EA5E9]/20 mb-8">
+              <span className="text-[#0EA5E9] text-sm font-medium tracking-wide uppercase">Pricing</span>
+            </motion.div>
+            <motion.h1
+              variants={fadeUp}
+              className="font-[family-name:var(--font-sora)] text-5xl md:text-6xl lg:text-7xl font-bold text-white mb-6 tracking-tight"
+            >
+              Simple, <span className="text-gradient">transparent</span> pricing
+            </motion.h1>
+            <motion.p variants={fadeUp} className="text-lg md:text-xl text-white/50 mb-10 leading-relaxed">
               Choose the perfect plan for your business. All plans include a 14-day free trial.
-            </p>
-            <div className="inline-flex items-center gap-3 p-1 rounded-full bg-white/5 border border-white/10">
+            </motion.p>
+
+            {/* Billing Toggle */}
+            <motion.div variants={fadeUp} className="inline-flex items-center gap-1 p-1.5 rounded-full bg-white/[0.04] border border-white/[0.06] backdrop-blur-sm">
               <button
                 onClick={() => setBillingPeriod("monthly")}
-                className={`px-6 py-2 rounded-full transition-all ${billingPeriod === "monthly" ? "bg-[#0EA5E9] text-white" : "text-white/60 hover:text-white"}`}
+                className="relative px-6 py-2.5 rounded-full text-sm font-medium transition-colors duration-300"
               >
-                Monthly
+                {billingPeriod === "monthly" && (
+                  <motion.div
+                    layoutId="billing-indicator"
+                    className="absolute inset-0 rounded-full bg-[#0EA5E9]"
+                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                  />
+                )}
+                <span className={`relative z-10 ${billingPeriod === "monthly" ? "text-white" : "text-white/40 hover:text-white/60"}`}>
+                  Monthly
+                </span>
               </button>
               <button
                 onClick={() => setBillingPeriod("annual")}
-                className={`px-6 py-2 rounded-full transition-all flex items-center gap-2 ${billingPeriod === "annual" ? "bg-[#0EA5E9] text-white" : "text-white/60 hover:text-white"}`}
+                className="relative px-6 py-2.5 rounded-full text-sm font-medium transition-colors duration-300 flex items-center gap-2"
               >
-                Annual
-                <span className="text-xs bg-white/20 px-2 py-1 rounded-full">Save 20%</span>
+                {billingPeriod === "annual" && (
+                  <motion.div
+                    layoutId="billing-indicator"
+                    className="absolute inset-0 rounded-full bg-[#0EA5E9]"
+                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                  />
+                )}
+                <span className={`relative z-10 ${billingPeriod === "annual" ? "text-white" : "text-white/40 hover:text-white/60"}`}>
+                  Annual
+                </span>
+                <span className="relative z-10 text-xs bg-white/20 px-2 py-0.5 rounded-full text-white/80">
+                  Save 20%
+                </span>
               </button>
-            </div>
+            </motion.div>
           </motion.div>
         </div>
       </section>
@@ -114,112 +162,153 @@ export default function PricingPage() {
       {/* Pricing Cards */}
       <section className="py-12">
         <div className="max-w-7xl mx-auto px-6">
-          <div className="grid md:grid-cols-3 gap-8">
-            {plans.map((plan, index) => (
+          <motion.div
+            initial="hidden"
+            animate="visible"
+            variants={stagger}
+            className="grid md:grid-cols-3 gap-6 lg:gap-8 items-start"
+          >
+            {plans.map((plan) => (
               <motion.div
                 key={plan.name}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1 }}
-                whileHover={{ y: -5 }}
-                className={`relative p-8 rounded-2xl border backdrop-blur-sm ${
+                variants={fadeUp}
+                whileHover={{ y: -6, transition: { duration: 0.3 } }}
+                className={`relative glass-card p-8 lg:p-10 ${
                   plan.popular
-                    ? "bg-gradient-to-b from-[#0EA5E9]/10 to-transparent border-[#0EA5E9]/30 shadow-2xl scale-105"
-                    : "bg-white/5 border-white/10"
+                    ? "border-[#0EA5E9]/20 shadow-[0_0_60px_-12px_rgba(14,165,233,0.15)] md:scale-[1.04]"
+                    : ""
                 }`}
               >
                 {plan.popular && (
                   <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                    <div className="px-4 py-1 rounded-full bg-[#0EA5E9] text-white text-sm font-medium flex items-center gap-1">
-                      <Sparkles size={14} />
-                      Most Popular
+                    <div className="relative px-5 py-1.5 rounded-full bg-gradient-to-r from-[#0EA5E9] to-[#38BDF8] text-white text-xs font-semibold tracking-wide uppercase flex items-center gap-1.5 overflow-hidden">
+                      <div className="absolute inset-0 shimmer-btn" />
+                      <Sparkles size={13} className="relative z-10" />
+                      <span className="relative z-10">Most Popular</span>
                     </div>
                   </div>
                 )}
-                <div className="mb-6">
-                  <h3 className="text-2xl font-bold text-white mb-2">{plan.name}</h3>
-                  <p className="text-white/60 text-sm">{plan.description}</p>
+
+                <div className="mb-8">
+                  <h3 className="font-[family-name:var(--font-sora)] text-xl font-semibold text-white mb-2">{plan.name}</h3>
+                  <p className="text-white/30 text-sm">{plan.description}</p>
                 </div>
-                <div className="mb-6">
+
+                <div className="mb-8">
                   <div className="flex items-baseline gap-2">
-                    <span className="text-5xl font-bold text-white">
-                      ${billingPeriod === "monthly" ? plan.monthlyPrice : plan.annualPrice}
-                    </span>
-                    <span className="text-white/60">/month</span>
+                    <span className="text-white/30 text-2xl">$</span>
+                    <AnimatePresence mode="wait">
+                      <motion.span
+                        key={`${plan.name}-${billingPeriod}`}
+                        initial={{ opacity: 0, scale: 0.9, y: 4 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.9, y: -4 }}
+                        transition={{ duration: 0.25 }}
+                        className="text-5xl font-bold text-white font-[family-name:var(--font-sora)] tabular-nums"
+                      >
+                        {billingPeriod === "monthly" ? plan.monthlyPrice : plan.annualPrice}
+                      </motion.span>
+                    </AnimatePresence>
+                    <span className="text-white/30 text-sm">/month</span>
                   </div>
-                  {billingPeriod === "annual" && (
-                    <p className="text-white/40 text-sm mt-2">Billed annually at ${plan.annualPrice * 12}</p>
-                  )}
+                  <div className="h-5 mt-2">
+                    {billingPeriod === "annual" && (
+                      <motion.p
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="text-white/20 text-sm"
+                      >
+                        Billed annually at ${plan.annualPrice * 12}
+                      </motion.p>
+                    )}
+                  </div>
                 </div>
+
                 <LinkButton
                   href={plan.name === "Enterprise" ? "mailto:sales@cloagent.com" : "/sign-up"}
                   variant={plan.popular ? "primary" : "outline"}
-                  className={`w-full mb-6${plan.popular ? "" : " bg-white/10 hover:bg-white/20"}`}
+                  className={`w-full mb-8 ${!plan.popular ? "bg-white/[0.04] border-white/[0.08] hover:bg-white/[0.08]" : ""}`}
                 >
                   {plan.cta}
                   {plan.name !== "Enterprise" && <ArrowRight size={16} className="ml-2" />}
                 </LinkButton>
-                <div className="space-y-3">
+
+                <div className="space-y-3.5">
                   {plan.features.map((feature) => (
                     <div key={feature} className="flex items-start gap-3">
-                      <div className="w-5 h-5 rounded-full bg-[#0EA5E9]/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <Check size={14} className="text-[#0EA5E9]" />
+                      <div className="w-5 h-5 rounded-full bg-[#0EA5E9]/[0.08] flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <Check size={12} className="text-[#0EA5E9]" />
                       </div>
-                      <span className="text-white/80 text-sm">{feature}</span>
+                      <span className="text-white/50 text-sm leading-relaxed">{feature}</span>
                     </div>
                   ))}
                 </div>
               </motion.div>
             ))}
-          </div>
+          </motion.div>
         </div>
       </section>
 
       {/* Feature Comparison */}
-      <section className="py-24 bg-black/20">
+      <section className="py-24 bg-white/[0.02]">
         <div className="max-w-5xl mx-auto px-6">
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-12"
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: "-60px" }}
+            variants={stagger}
+            className="text-center mb-14"
           >
-            <h2 className="text-4xl font-bold text-white mb-4">Compare all features</h2>
-            <p className="text-white/60">See what's included in each plan</p>
+            <motion.h2 variants={fadeUp} className="font-[family-name:var(--font-sora)] text-4xl font-bold text-white mb-4">
+              Compare all <span className="text-gradient">features</span>
+            </motion.h2>
+            <motion.p variants={fadeUp} className="text-white/30">See what&apos;s included in each plan</motion.p>
           </motion.div>
+
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="overflow-x-auto"
+            transition={{ duration: 0.5 }}
+            className="glass-card overflow-hidden"
           >
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-white/10">
-                  <th className="text-left py-4 px-4 text-white font-semibold">Feature</th>
-                  <th className="text-center py-4 px-4 text-white font-semibold">Starter</th>
-                  <th className="text-center py-4 px-4 text-white font-semibold">Professional</th>
-                  <th className="text-center py-4 px-4 text-white font-semibold">Enterprise</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[
-                  { feature: "Contacts", values: ["500", "Unlimited", "Unlimited"] },
-                  { feature: "AI Insights", values: ["-", "✓", "✓"] },
-                  { feature: "Automation", values: ["-", "✓", "✓"] },
-                  { feature: "Custom Fields", values: ["-", "✓", "✓"] },
-                  { feature: "API Access", values: ["-", "-", "✓"] },
-                  { feature: "SSO/SAML", values: ["-", "-", "✓"] },
-                ].map((row) => (
-                  <tr key={row.feature} className="border-b border-white/5">
-                    <td className="py-4 px-4 text-white/80">{row.feature}</td>
-                    {row.values.map((value, i) => (
-                      <td key={i} className="text-center py-4 px-4 text-white/60">{value}</td>
-                    ))}
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-white/[0.06]">
+                    <th className="text-left py-5 px-6 text-white/50 text-xs font-semibold uppercase tracking-wider">Feature</th>
+                    <th className="text-center py-5 px-6 text-white/50 text-xs font-semibold uppercase tracking-wider">Starter</th>
+                    <th className="text-center py-5 px-6 text-white/50 text-xs font-semibold uppercase tracking-wider">
+                      <span className="text-gradient">Professional</span>
+                    </th>
+                    <th className="text-center py-5 px-6 text-white/50 text-xs font-semibold uppercase tracking-wider">Enterprise</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {comparisonRows.map((row, rowIndex) => (
+                    <tr
+                      key={row.feature}
+                      className={`border-b border-white/[0.04] ${rowIndex % 2 === 0 ? "bg-white/[0.01]" : ""}`}
+                    >
+                      <td className="py-4 px-6 text-white/50 text-sm">{row.feature}</td>
+                      {row.values.map((value, i) => (
+                        <td key={i} className="text-center py-4 px-6">
+                          {value === "check" ? (
+                            <div className="inline-flex w-5 h-5 rounded-full bg-[#0EA5E9]/[0.08] items-center justify-center">
+                              <Check size={12} className="text-[#0EA5E9]" />
+                            </div>
+                          ) : value === "-" ? (
+                            <span className="text-white/20">&mdash;</span>
+                          ) : (
+                            <span className="text-white/50 text-sm">{value}</span>
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </motion.div>
         </div>
       </section>
@@ -228,48 +317,75 @@ export default function PricingPage() {
       <section className="py-24">
         <div className="max-w-4xl mx-auto px-6">
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-12"
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: "-60px" }}
+            variants={stagger}
+            className="text-center mb-14"
           >
-            <h2 className="text-4xl font-bold text-white mb-4">Frequently asked questions</h2>
-            <p className="text-white/60">Everything you need to know about pricing</p>
+            <motion.h2 variants={fadeUp} className="font-[family-name:var(--font-sora)] text-4xl font-bold text-white mb-4">
+              Frequently asked <span className="text-gradient">questions</span>
+            </motion.h2>
+            <motion.p variants={fadeUp} className="text-white/30">Everything you need to know about pricing</motion.p>
           </motion.div>
-          <div className="grid md:grid-cols-2 gap-8">
-            {faqs.map((faq, index) => (
+
+          <motion.div
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: "-40px" }}
+            variants={stagger}
+            className="grid md:grid-cols-2 gap-4"
+          >
+            {faqs.map((faq) => (
               <motion.div
                 key={faq.question}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.05 }}
+                variants={fadeUp}
+                className="glass-card p-6 transition-all duration-300 hover:bg-white/[0.06] hover:border-white/[0.12]"
               >
-                <h3 className="text-lg font-semibold text-white mb-2">{faq.question}</h3>
-                <p className="text-white/60">{faq.answer}</p>
+                <h3 className="font-[family-name:var(--font-sora)] text-base font-semibold text-white mb-2">{faq.question}</h3>
+                <p className="text-white/30 text-sm leading-relaxed">{faq.answer}</p>
               </motion.div>
             ))}
-          </div>
+          </motion.div>
         </div>
       </section>
 
       {/* CTA */}
-      <section className="py-24 bg-black/20">
+      <section className="py-24 bg-white/[0.02]">
         <div className="max-w-4xl mx-auto px-6">
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 24 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="relative p-12 rounded-3xl bg-gradient-to-br from-[#0EA5E9]/20 to-transparent border border-[#0EA5E9]/30 backdrop-blur-sm text-center"
+            transition={{ duration: 0.6 }}
+            className="relative p-12 md:p-16 rounded-3xl text-center overflow-hidden"
           >
-            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">Still have questions?</h2>
-            <p className="text-xl text-white/70 mb-8">Our team is here to help. Schedule a demo or reach out to sales.</p>
-            <div className="flex flex-wrap gap-4 justify-center">
-              <LinkButton href="/sign-up" variant="primary">
-                Start Free Trial
-                <ArrowRight size={18} className="ml-2" />
-              </LinkButton>
-              <a href="mailto:sales@cloagent.com" className="inline-flex items-center justify-center gap-2 rounded-lg px-8 py-3 text-sm font-medium transition-all border border-white/20 text-white hover:bg-white/10">Contact Sales</a>
+            {/* Gradient border glow */}
+            <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-[#0EA5E9]/20 via-[#38BDF8]/10 to-[#6366F1]/10 p-px">
+              <div className="absolute inset-px rounded-[23px] bg-[#0a0a0f]" />
+            </div>
+            {/* Glow effect */}
+            <div className="absolute inset-0 rounded-3xl shadow-[0_0_80px_-20px_rgba(14,165,233,0.2)]" />
+
+            <div className="relative z-10">
+              <h2 className="font-[family-name:var(--font-sora)] text-4xl md:text-5xl font-bold text-white mb-4 tracking-tight">
+                Still have <span className="text-gradient">questions</span>?
+              </h2>
+              <p className="text-lg text-white/30 mb-10 max-w-lg mx-auto leading-relaxed">
+                Our team is here to help. Schedule a demo or reach out to sales.
+              </p>
+              <div className="flex flex-wrap gap-4 justify-center">
+                <LinkButton href="/sign-up" variant="primary">
+                  Start Free Trial
+                  <ArrowRight size={18} className="ml-2" />
+                </LinkButton>
+                <a
+                  href="mailto:sales@cloagent.com"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl px-8 py-3 text-sm font-medium transition-all duration-300 border border-white/[0.08] text-white/50 hover:text-white hover:bg-white/[0.04] hover:border-white/[0.15]"
+                >
+                  Contact Sales
+                </a>
+              </div>
             </div>
           </motion.div>
         </div>

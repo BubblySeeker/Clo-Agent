@@ -26,6 +26,9 @@ const stats = [
   { icon: Award, value: "98%", label: "Satisfaction Rate" },
 ];
 
+const spring = { type: "spring", stiffness: 80, damping: 20 };
+const springFast = { type: "spring", stiffness: 120, damping: 18 };
+
 export default function AboutPage() {
   return (
     <div className="overflow-hidden">
@@ -33,44 +36,54 @@ export default function AboutPage() {
       <section className="pt-32 pb-20">
         <div className="max-w-7xl mx-auto px-6">
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
+            transition={spring}
             className="text-center max-w-3xl mx-auto"
           >
-            <div className="inline-block px-4 py-2 rounded-full bg-[#0EA5E9]/10 border border-[#0EA5E9]/20 mb-6">
-              <span className="text-[#0EA5E9] text-sm font-medium">About Us</span>
-            </div>
-            <h1 className="text-5xl md:text-6xl font-bold text-white mb-6">
-              We're building the future of
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ ...springFast, delay: 0.1 }}
+              className="inline-block px-4 py-2 rounded-full bg-white/[0.04] border border-white/[0.06] backdrop-blur-sm mb-8"
+            >
+              <span className="text-white/50 text-sm font-medium tracking-wide uppercase">About Us</span>
+            </motion.div>
+            <h1 className="font-[family-name:var(--font-sora)] text-5xl md:text-6xl lg:text-7xl font-bold text-white mb-6 leading-[1.1]">
+              We&apos;re building the future of
               <br />
-              <span className="text-[#0EA5E9]">real estate CRM</span>
+              <span className="text-gradient">real estate CRM</span>
             </h1>
-            <p className="text-xl text-white/70">
-              CloAgent was founded by real estate professionals who were tired of clunky, outdated CRM systems. We set out to build something better—a platform that's powerful yet intuitive, and designed specifically for the way agents work today.
-            </p>
+            <motion.p
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ ...spring, delay: 0.2 }}
+              className="text-lg md:text-xl text-white/50 leading-relaxed max-w-2xl mx-auto"
+            >
+              CloAgent was founded by real estate professionals who were tired of clunky, outdated CRM systems. We set out to build something better—a platform that&apos;s powerful yet intuitive, and designed specifically for the way agents work today.
+            </motion.p>
           </motion.div>
         </div>
       </section>
 
       {/* Stats */}
-      <section className="py-20 bg-black/20">
+      <section className="py-20 bg-white/[0.02]">
         <div className="max-w-7xl mx-auto px-6">
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="grid md:grid-cols-3 gap-6">
             {stats.map((stat, index) => (
               <motion.div
                 key={stat.label}
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 25 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                transition={{ delay: index * 0.1 }}
-                className="text-center p-8 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm"
+                transition={{ ...spring, delay: index * 0.1 }}
+                className="glass-card text-center p-10 group"
               >
-                <div className="w-16 h-16 rounded-2xl bg-[#0EA5E9]/10 flex items-center justify-center mx-auto mb-4">
-                  <stat.icon size={32} className="text-[#0EA5E9]" />
+                <div className="relative w-16 h-16 rounded-2xl bg-[#0EA5E9]/10 flex items-center justify-center mx-auto mb-5 transition-all duration-500 group-hover:bg-[#0EA5E9]/20 group-hover:shadow-[0_0_30px_rgba(14,165,233,0.2)]">
+                  <stat.icon size={30} className="text-[#0EA5E9] transition-transform duration-500 group-hover:scale-110" />
                 </div>
-                <div className="text-4xl font-bold text-white mb-2">{stat.value}</div>
-                <div className="text-white/60">{stat.label}</div>
+                <div className="font-[family-name:var(--font-sora)] text-4xl font-bold text-white mb-2">{stat.value}</div>
+                <div className="text-white/30 text-sm tracking-wide uppercase">{stat.label}</div>
               </motion.div>
             ))}
           </div>
@@ -80,10 +93,15 @@ export default function AboutPage() {
       {/* Story */}
       <section className="py-24">
         <div className="max-w-7xl mx-auto px-6">
-          <div className="grid md:grid-cols-2 gap-12 items-center">
-            <motion.div initial={{ opacity: 0, x: -30 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }}>
-              <h2 className="text-4xl font-bold text-white mb-6">Our Story</h2>
-              <div className="space-y-4 text-white/70 text-lg">
+          <div className="grid md:grid-cols-2 gap-16 items-center">
+            <motion.div
+              initial={{ opacity: 0, x: -30 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              transition={spring}
+            >
+              <h2 className="font-[family-name:var(--font-sora)] text-4xl md:text-5xl font-bold text-white mb-8">Our Story</h2>
+              <div className="space-y-5 text-white/50 text-lg leading-relaxed">
                 <p>
                   In 2021, our founders—experienced real estate agents and technology leaders—sat down over coffee to discuss a shared frustration: existing CRM tools were built for generic sales teams, not real estate professionals.
                 </p>
@@ -91,19 +109,30 @@ export default function AboutPage() {
                   They envisioned a platform that understood the unique challenges of real estate—long sales cycles, complex relationships, and the need for mobility. A tool that would save time instead of creating busywork.
                 </p>
                 <p>
-                  That vision became CloAgent. Today, we're proud to serve thousands of agents, brokers, and teams who are closing more deals and spending less time on administrative tasks.
+                  That vision became CloAgent. Today, we&apos;re proud to serve thousands of agents, brokers, and teams who are closing more deals and spending less time on administrative tasks.
                 </p>
               </div>
             </motion.div>
-            <motion.div initial={{ opacity: 0, x: 30 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} className="relative">
-              <div className="relative rounded-2xl overflow-hidden border border-white/10 shadow-2xl">
-                <div className="absolute inset-0 bg-gradient-to-br from-[#0EA5E9]/20 to-transparent backdrop-blur-sm z-10" />
-                <div className="bg-[#0F1E36] p-12 aspect-[4/3] flex items-center justify-center">
-                  <div className="text-center">
-                    <div className="w-24 h-24 rounded-2xl bg-[#0EA5E9] mx-auto mb-4 flex items-center justify-center">
+            <motion.div
+              initial={{ opacity: 0, x: 30 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              transition={spring}
+              className="relative"
+            >
+              <div className="relative rounded-2xl overflow-hidden border border-white/[0.06] shadow-2xl">
+                {/* Layered gradient overlays for depth */}
+                <div className="absolute inset-0 bg-gradient-to-br from-[#0EA5E9]/20 via-transparent to-transparent z-10" />
+                <div className="absolute inset-0 bg-gradient-to-tl from-[#6366F1]/10 via-transparent to-transparent z-10" />
+                <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/20 to-black/40 z-10" />
+                <div className="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-[#0EA5E9]/10 to-transparent z-10" />
+                <div className="bg-[#060B14] p-12 aspect-[4/3] flex items-center justify-center relative">
+                  <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'radial-gradient(circle at 30% 40%, rgba(14, 165, 233, 0.15) 0%, transparent 60%), radial-gradient(circle at 70% 60%, rgba(99, 102, 241, 0.1) 0%, transparent 50%)' }} />
+                  <div className="text-center relative z-20">
+                    <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-[#0EA5E9] to-[#0EA5E9]/70 mx-auto mb-4 flex items-center justify-center shadow-[0_0_40px_rgba(14,165,233,0.3)]">
                       <Users size={48} className="text-white" />
                     </div>
-                    <div className="text-white/40 text-sm">Building the future together</div>
+                    <div className="text-white/30 text-sm tracking-wide">Building the future together</div>
                   </div>
                 </div>
               </div>
@@ -113,28 +142,36 @@ export default function AboutPage() {
       </section>
 
       {/* Values */}
-      <section className="py-24 bg-black/20">
+      <section className="py-24 bg-white/[0.02]">
         <div className="max-w-7xl mx-auto px-6">
-          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">Our Core Values</h2>
-            <p className="text-xl text-white/60 max-w-2xl mx-auto">The principles that guide everything we do</p>
+          <motion.div
+            initial={{ opacity: 0, y: 25 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={spring}
+            className="text-center mb-16"
+          >
+            <h2 className="font-[family-name:var(--font-sora)] text-4xl md:text-5xl font-bold text-white mb-4">Our Core Values</h2>
+            <p className="text-lg text-white/30 max-w-2xl mx-auto">The principles that guide everything we do</p>
           </motion.div>
           <div className="grid md:grid-cols-2 gap-6">
             {values.map((value, index) => (
               <motion.div
                 key={value.title}
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 25 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                transition={{ delay: index * 0.1 }}
-                whileHover={{ y: -5 }}
-                className="p-8 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm hover:bg-white/10 transition-all group"
+                transition={{ ...spring, delay: index * 0.1 }}
+                className="glass-card-hover p-8 group cursor-default"
               >
-                <div className="w-14 h-14 rounded-xl bg-[#0EA5E9]/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                  <value.icon size={28} className="text-[#0EA5E9]" />
+                <div className="w-14 h-14 rounded-xl bg-[#0EA5E9]/10 flex items-center justify-center mb-5 transition-all duration-500 group-hover:bg-[#0EA5E9]/15">
+                  <value.icon
+                    size={28}
+                    className="text-[#0EA5E9] transition-all duration-500 group-hover:scale-110 group-hover:rotate-6"
+                  />
                 </div>
-                <h3 className="text-xl font-semibold text-white mb-3">{value.title}</h3>
-                <p className="text-white/60">{value.description}</p>
+                <h3 className="font-[family-name:var(--font-sora)] text-xl font-semibold text-white mb-3">{value.title}</h3>
+                <p className="text-white/50 leading-relaxed">{value.description}</p>
               </motion.div>
             ))}
           </div>
@@ -143,57 +180,103 @@ export default function AboutPage() {
 
       {/* Timeline */}
       <section className="py-24">
-        <div className="max-w-5xl mx-auto px-6">
-          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">Our Journey</h2>
-            <p className="text-xl text-white/60">Key milestones that shaped CloAgent</p>
+        <div className="max-w-4xl mx-auto px-6">
+          <motion.div
+            initial={{ opacity: 0, y: 25 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={spring}
+            className="text-center mb-20"
+          >
+            <h2 className="font-[family-name:var(--font-sora)] text-4xl md:text-5xl font-bold text-white mb-4">Our Journey</h2>
+            <p className="text-lg text-white/30">Key milestones that shaped CloAgent</p>
           </motion.div>
-          <div className="space-y-8">
-            {milestones.map((milestone, index) => (
-              <motion.div
-                key={milestone.year}
-                initial={{ opacity: 0, x: index % 2 === 0 ? -30 : 30 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.1 }}
-                className="flex gap-6 items-start"
-              >
-                <div className="flex flex-col items-center">
-                  <div className="w-12 h-12 rounded-full bg-[#0EA5E9] flex items-center justify-center text-white font-bold flex-shrink-0">
-                    {milestone.year.slice(-2)}
+          <div className="relative">
+            {/* Vertical glowing line */}
+            <div className="absolute left-6 md:left-8 top-0 bottom-0 w-px">
+              <div
+                className="absolute inset-0"
+                style={{
+                  background: 'linear-gradient(to bottom, #0EA5E9 0%, rgba(14, 165, 233, 0.4) 50%, transparent 100%)',
+                }}
+              />
+              <div
+                className="absolute inset-0 blur-sm"
+                style={{
+                  background: 'linear-gradient(to bottom, #0EA5E9 0%, rgba(14, 165, 233, 0.3) 40%, transparent 100%)',
+                }}
+              />
+            </div>
+
+            <div className="space-y-8">
+              {milestones.map((milestone, index) => (
+                <motion.div
+                  key={milestone.year}
+                  initial={{ opacity: 0, x: 30 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ ...spring, delay: index * 0.08 }}
+                  className="relative flex gap-8 items-start pl-0"
+                >
+                  {/* Glowing node */}
+                  <div className="relative flex-shrink-0 w-12 md:w-16 flex justify-center">
+                    <div className="relative">
+                      {/* Pulse glow */}
+                      <div className="absolute inset-0 w-4 h-4 rounded-full bg-[#0EA5E9]/40 animate-ping" style={{ animationDuration: '3s' }} />
+                      {/* Outer glow */}
+                      <div className="absolute -inset-1 rounded-full bg-[#0EA5E9]/20 blur-sm" />
+                      {/* Core dot */}
+                      <div className="relative w-4 h-4 rounded-full bg-[#0EA5E9] shadow-[0_0_12px_rgba(14,165,233,0.5)]" />
+                    </div>
                   </div>
-                  {index < milestones.length - 1 && (
-                    <div className="w-0.5 h-full bg-[#0EA5E9]/20 mt-2" />
-                  )}
-                </div>
-                <div className="flex-1 pb-8">
-                  <div className="text-[#0EA5E9] font-semibold mb-1">{milestone.year}</div>
-                  <h3 className="text-xl font-semibold text-white mb-2">{milestone.title}</h3>
-                  <p className="text-white/60">{milestone.description}</p>
-                </div>
-              </motion.div>
-            ))}
+
+                  {/* Content card */}
+                  <div className="flex-1 glass-card p-6 mb-2">
+                    <div className="text-[#0EA5E9]/70 text-sm font-medium tracking-wider uppercase mb-1">{milestone.year}</div>
+                    <h3 className="font-[family-name:var(--font-sora)] text-lg font-semibold text-white mb-2">{milestone.title}</h3>
+                    <p className="text-white/50 leading-relaxed">{milestone.description}</p>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
 
       {/* CTA */}
-      <section className="py-24 bg-black/20">
+      <section className="py-24 bg-white/[0.02]">
         <div className="max-w-4xl mx-auto px-6">
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 25 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="relative p-12 rounded-3xl bg-gradient-to-br from-[#0EA5E9]/20 to-transparent border border-[#0EA5E9]/30 backdrop-blur-sm text-center"
+            transition={spring}
+            className="relative p-12 md:p-16 rounded-3xl text-center"
           >
-            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">Join us on our mission</h2>
-            <p className="text-xl text-white/70 mb-8">We're looking for talented people to help shape the future of real estate technology.</p>
-            <div className="flex flex-wrap gap-4 justify-center">
-              <LinkButton href="/team" variant="primary">
-                Meet the Team
-                <ArrowRight size={18} className="ml-2" />
-              </LinkButton>
-              <a href="mailto:careers@cloagent.com" className="inline-flex items-center justify-center gap-2 rounded-lg px-8 py-3 text-sm font-medium transition-all border border-white/20 text-white hover:bg-white/10">Join Our Team</a>
+            {/* Gradient border effect */}
+            <div className="absolute inset-0 rounded-3xl p-px bg-gradient-to-br from-[#0EA5E9]/40 via-[#0EA5E9]/10 to-transparent">
+              <div className="w-full h-full rounded-[calc(1.5rem-1px)] bg-[#060B14]" />
+            </div>
+            {/* Ambient glow */}
+            <div className="absolute -inset-px rounded-3xl opacity-50 blur-xl bg-gradient-to-br from-[#0EA5E9]/10 via-transparent to-transparent pointer-events-none" />
+
+            <div className="relative z-10">
+              <h2 className="font-[family-name:var(--font-sora)] text-4xl md:text-5xl font-bold text-white mb-4">Join us on our mission</h2>
+              <p className="text-lg text-white/50 mb-10 max-w-xl mx-auto leading-relaxed">
+                We&apos;re looking for talented people to help shape the future of real estate technology.
+              </p>
+              <div className="flex flex-wrap gap-4 justify-center">
+                <LinkButton href="/team" variant="primary">
+                  Meet the Team
+                  <ArrowRight size={18} className="ml-2" />
+                </LinkButton>
+                <a
+                  href="mailto:careers@cloagent.com"
+                  className="inline-flex items-center justify-center gap-2 rounded-lg px-8 py-3 text-sm font-medium transition-all duration-300 border border-white/[0.06] text-white/50 hover:text-white hover:bg-white/[0.04] hover:border-white/[0.12]"
+                >
+                  Join Our Team
+                </a>
+              </div>
             </div>
           </motion.div>
         </div>

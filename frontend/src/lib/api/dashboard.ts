@@ -39,9 +39,12 @@ export interface LeadSourceItem {
 
 export interface TaskItem {
   id: string;
-  contact_id: string;
+  contact_id: string | null;
   contact_name: string;
   body: string | null;
+  due_date: string | null;
+  priority: string | null;
+  completed_at: string | null;
   created_at: string;
 }
 
@@ -77,7 +80,13 @@ export function getDashboardSummary(token: string): Promise<DashboardSummary> {
   return apiRequest("/dashboard/summary", token);
 }
 
-export function getDashboardLayout(token: string): Promise<{ layout: unknown | null }> {
+export interface DashboardLayout {
+  widgets?: { id: string; size: "full" | "half" }[];
+  kpiOrder?: string[];
+  hiddenKpis?: string[];
+}
+
+export function getDashboardLayout(token: string): Promise<{ layout: DashboardLayout | null }> {
   return apiRequest("/dashboard/layout", token);
 }
 

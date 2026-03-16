@@ -12,6 +12,7 @@ import {
   type SSEEvent,
 } from "@/lib/api/conversations";
 import { useUIStore } from "@/store/ui-store";
+import { toolLabel, confirmLabel, formatPreview } from "@/lib/ai-chat-helpers";
 
 export default function AIChatBubble() {
   const { getToken } = useAuth();
@@ -170,28 +171,6 @@ export default function AIChatBubble() {
     updateLastMessage({ confirmationData: undefined, content: "Action cancelled." });
   };
 
-  const toolLabel: Record<string, string> = {
-    search_contacts: "Searching contacts",
-    get_dashboard_summary: "Fetching dashboard",
-    get_contact_details: "Loading contact",
-    get_contact_activities: "Loading activities",
-    get_deal: "Loading deal details",
-    get_buyer_profile: "Loading buyer profile",
-    get_all_activities: "Loading recent activities",
-    list_deals: "Fetching deals",
-    get_deal_stages: "Loading pipeline",
-    get_analytics: "Crunching analytics",
-    create_contact: "Creating contact",
-    update_contact: "Updating contact",
-    delete_contact: "Deleting contact",
-    log_activity: "Logging activity",
-    create_deal: "Creating deal",
-    update_deal: "Updating deal",
-    delete_deal: "Deleting deal",
-    create_buyer_profile: "Creating buyer profile",
-    update_buyer_profile: "Updating buyer profile",
-  };
-
   const placeholder = contactId
     ? "Ask about this contact..."
     : "Ask anything about your clients...";
@@ -296,17 +275,17 @@ export default function AIChatBubble() {
 
             {/* Confirmation card */}
             {msg.confirmationData && (
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 w-full max-w-[90%] text-xs">
-                <p className="font-semibold text-amber-800 mb-2">
-                  Confirm: {toolLabel[msg.confirmationData.tool] ?? msg.confirmationData.tool}
+              <div className="bg-blue-50 border border-[#0EA5E9]/20 rounded-xl p-3 w-full max-w-[90%] text-xs">
+                <p className="font-semibold text-[#1E3A5F] mb-2">
+                  {confirmLabel[msg.confirmationData.tool] ?? msg.confirmationData.tool}
                 </p>
-                <pre className="text-gray-700 whitespace-pre-wrap text-[10px] mb-2 bg-white rounded p-1.5 border border-amber-100 overflow-auto max-h-24">
-                  {JSON.stringify(msg.confirmationData.preview, null, 2)}
-                </pre>
+                <p className="text-[#1E3A5F]/80 mb-2">
+                  {formatPreview(msg.confirmationData.tool, msg.confirmationData.preview)}
+                </p>
                 <div className="flex gap-2">
                   <button
                     onClick={() => handleConfirm(msg.confirmationData!.pending_id)}
-                    className="flex items-center gap-1 px-2.5 py-1 bg-green-500 text-white rounded-lg hover:bg-green-600 text-xs"
+                    className="flex items-center gap-1 px-2.5 py-1 bg-[#0EA5E9] text-white rounded-lg hover:bg-[#0EA5E9]/90 text-xs"
                   >
                     <Check size={10} /> Confirm
                   </button>

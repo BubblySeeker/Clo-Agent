@@ -690,8 +690,13 @@ def _create_contact(agent_id: str, inp: dict) -> dict:
         return dict(cur.fetchone())
 
 
+_CONTACT_FIELDS = {"first_name", "last_name", "email", "phone", "source"}
+
 def _update_contact(agent_id: str, inp: dict) -> dict:
+    inp = dict(inp)  # copy to avoid mutating pending_actions
     contact_id = inp.pop("contact_id")
+    # Only allow known contact fields
+    inp = {k: v for k, v in inp.items() if k in _CONTACT_FIELDS}
     if not inp:
         return {"error": "No fields to update"}
     fields = ", ".join(f"{k} = %s" for k in inp)
@@ -736,7 +741,10 @@ def _create_deal(agent_id: str, inp: dict) -> dict:
         return dict(cur.fetchone())
 
 
+_DEAL_FIELDS = {"stage_id", "title", "value", "notes"}
+
 def _update_deal(agent_id: str, inp: dict) -> dict:
+    inp = dict(inp)  # copy to avoid mutating pending_actions
     deal_id = inp.pop("deal_id")
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -746,6 +754,8 @@ def _update_deal(agent_id: str, inp: dict) -> dict:
             row = cur.fetchone()
             if row:
                 inp["stage_id"] = str(row["id"])
+        # Only allow known deal fields
+        inp = {k: v for k, v in inp.items() if k in _DEAL_FIELDS}
         if not inp:
             return {"error": "No fields to update"}
         fields = ", ".join(f"{k} = %s" for k in inp)
@@ -761,24 +771,31 @@ def _update_deal(agent_id: str, inp: dict) -> dict:
 def _delete_contact(agent_id: str, inp: dict) -> dict:
     contact_id = inp["contact_id"]
     with get_conn() as conn:
-        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        # Get contact name before deleting for confirmation message
-        cur.execute(
-            "SELECT first_name, last_name FROM contacts WHERE id = %s AND agent_id = %s",
-            (contact_id, agent_id),
-        )
-        contact = cur.fetchone()
-        if not contact:
-            return {"error": "Contact not found"}
-        # Cascade: delete activities, deals, buyer_profile, ai_profile, then contact
-        cur.execute("DELETE FROM activities WHERE contact_id = %s AND agent_id = %s", (contact_id, agent_id))
-        cur.execute("DELETE FROM deals WHERE contact_id = %s AND agent_id = %s", (contact_id, agent_id))
-        cur.execute("DELETE FROM buyer_profiles WHERE contact_id = %s", (contact_id,))
-        cur.execute("DELETE FROM ai_profiles WHERE contact_id = %s", (contact_id,))
-        cur.execute("DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE contact_id = %s AND agent_id = %s)", (contact_id, agent_id))
-        cur.execute("DELETE FROM conversations WHERE contact_id = %s AND agent_id = %s", (contact_id, agent_id))
-        cur.execute("DELETE FROM contacts WHERE id = %s AND agent_id = %s", (contact_id, agent_id))
-        return {"deleted": True, "contact": f"{contact['first_name']} {contact['last_name']}"}
+        conn.autocommit = False
+        try:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            # Get contact name before deleting for confirmation message
+            cur.execute(
+                "SELECT first_name, last_name FROM contacts WHERE id = %s AND agent_id = %s",
+                (contact_id, agent_id),
+            )
+            contact = cur.fetchone()
+            if not contact:
+                conn.rollback()
+                return {"error": "Contact not found"}
+            # Cascade: delete activities, deals, buyer_profile, ai_profile, then contact
+            cur.execute("DELETE FROM activities WHERE contact_id = %s AND agent_id = %s", (contact_id, agent_id))
+            cur.execute("DELETE FROM deals WHERE contact_id = %s AND agent_id = %s", (contact_id, agent_id))
+            cur.execute("DELETE FROM buyer_profiles WHERE contact_id = %s", (contact_id,))
+            cur.execute("DELETE FROM ai_profiles WHERE contact_id = %s", (contact_id,))
+            cur.execute("DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE contact_id = %s AND agent_id = %s)", (contact_id, agent_id))
+            cur.execute("DELETE FROM conversations WHERE contact_id = %s AND agent_id = %s", (contact_id, agent_id))
+            cur.execute("DELETE FROM contacts WHERE id = %s AND agent_id = %s", (contact_id, agent_id))
+            conn.commit()
+            return {"deleted": True, "contact": f"{contact['first_name']} {contact['last_name']}"}
+        except Exception:
+            conn.rollback()
+            raise
 
 
 def _delete_deal(agent_id: str, inp: dict) -> dict:
@@ -797,6 +814,7 @@ def _delete_deal(agent_id: str, inp: dict) -> dict:
 
 
 def _create_buyer_profile(agent_id: str, inp: dict) -> dict:
+    inp = dict(inp)  # copy to avoid mutating pending_actions
     contact_id = inp.pop("contact_id")
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -822,8 +840,16 @@ def _create_buyer_profile(agent_id: str, inp: dict) -> dict:
         return dict(cur.fetchone())
 
 
+_BUYER_PROFILE_FIELDS = {
+    "budget_min", "budget_max", "bedrooms", "bathrooms", "locations",
+    "must_haves", "deal_breakers", "property_type", "pre_approved", "timeline", "notes",
+}
+
 def _update_buyer_profile(agent_id: str, inp: dict) -> dict:
+    inp = dict(inp)  # copy to avoid mutating pending_actions
     contact_id = inp.pop("contact_id")
+    # Only allow known buyer profile fields
+    inp = {k: v for k, v in inp.items() if k in _BUYER_PROFILE_FIELDS}
     if not inp:
         return {"error": "No fields to update"}
     with get_conn() as conn:

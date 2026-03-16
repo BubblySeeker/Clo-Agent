@@ -61,6 +61,23 @@ const perks = [
   { title: "Unlimited PTO", description: "Take the time you need to recharge. We encourage it." },
 ];
 
+const stagger = {
+  container: {
+    hidden: {},
+    visible: {
+      transition: { staggerChildren: 0.08 },
+    },
+  },
+  item: {
+    hidden: { opacity: 0, y: 24 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: { type: "spring", stiffness: 120, damping: 20 },
+    },
+  },
+};
+
 export default function TeamPage() {
   return (
     <div className="overflow-hidden">
@@ -70,18 +87,23 @@ export default function TeamPage() {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
+            transition={{ duration: 0.7, ease: [0.25, 0.46, 0.45, 0.94] }}
             className="text-center max-w-3xl mx-auto"
           >
-            <div className="inline-block px-4 py-2 rounded-full bg-[#0EA5E9]/10 border border-[#0EA5E9]/20 mb-6">
-              <span className="text-[#0EA5E9] text-sm font-medium">Our Team</span>
-            </div>
-            <h1 className="text-5xl md:text-6xl font-bold text-white mb-6">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.1, duration: 0.5 }}
+              className="inline-block px-4 py-2 rounded-full bg-white/[0.04] backdrop-blur-sm border border-white/[0.06] mb-6"
+            >
+              <span className="text-gradient text-sm font-medium">Our Team</span>
+            </motion.div>
+            <h1 className="font-[family-name:var(--font-sora)] text-5xl md:text-6xl font-bold text-white mb-6 tracking-tight">
               Meet the people behind
               <br />
-              <span className="text-[#0EA5E9]">CloAgent</span>
+              <span className="text-gradient">CloAgent</span>
             </h1>
-            <p className="text-xl text-white/70">
+            <p className="text-xl text-white/50 leading-relaxed">
               We're a diverse team of engineers, designers, and real estate experts united by a passion for building exceptional products.
             </p>
           </motion.div>
@@ -89,148 +111,251 @@ export default function TeamPage() {
       </section>
 
       {/* Leadership */}
-      <section className="py-20">
+      <section className="py-20 bg-white/[0.02]">
         <div className="max-w-7xl mx-auto px-6">
-          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-12">
-            <h2 className="text-4xl font-bold text-white mb-4">Leadership Team</h2>
-            <p className="text-white/60">The visionaries guiding CloAgent's mission</p>
-          </motion.div>
-          <div className="grid md:grid-cols-3 gap-8">
-            {leadership.map((member, index) => (
-              <motion.div
-                key={member.name}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.1 }}
-                whileHover={{ y: -5 }}
-                className="group"
-              >
-                <div className="p-8 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm hover:bg-white/10 transition-all text-center">
-                  <div className="w-32 h-32 rounded-full bg-gradient-to-br from-[#0EA5E9] to-[#0EA5E9]/60 flex items-center justify-center mx-auto mb-4 text-white text-2xl font-bold group-hover:scale-110 transition-transform">
-                    {member.avatar}
-                  </div>
-                  <h3 className="text-xl font-semibold text-white mb-1">{member.name}</h3>
-                  <p className="text-[#0EA5E9] mb-4">{member.role}</p>
-                  <p className="text-white/60 text-sm mb-6">{member.bio}</p>
-                  <div className="flex gap-3 justify-center">
-                    <a href={member.linkedin} className="w-9 h-9 rounded-lg bg-white/5 hover:bg-[#0EA5E9] flex items-center justify-center transition-colors group/icon">
-                      <Linkedin size={16} className="text-white/60 group-hover/icon:text-white" />
-                    </a>
-                    <a href={member.twitter} className="w-9 h-9 rounded-lg bg-white/5 hover:bg-[#0EA5E9] flex items-center justify-center transition-colors group/icon">
-                      <Twitter size={16} className="text-white/60 group-hover/icon:text-white" />
-                    </a>
-                    <a href={`mailto:${member.email}`} className="w-9 h-9 rounded-lg bg-white/5 hover:bg-[#0EA5E9] flex items-center justify-center transition-colors group/icon">
-                      <Mail size={16} className="text-white/60 group-hover/icon:text-white" />
-                    </a>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Team Grid */}
-      <section className="py-24 bg-black/20">
-        <div className="max-w-7xl mx-auto px-6">
-          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-12">
-            <h2 className="text-4xl font-bold text-white mb-4">The Team</h2>
-            <p className="text-white/60">Talented individuals making it all happen</p>
-          </motion.div>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {team.map((member, index) => (
-              <motion.div
-                key={member.name}
-                initial={{ opacity: 0, scale: 0.9 }}
-                whileInView={{ opacity: 1, scale: 1 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.05 }}
-                whileHover={{ y: -5 }}
-                className="p-6 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm hover:bg-white/10 transition-all text-center group"
-              >
-                <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#0EA5E9]/60 to-[#0EA5E9]/30 flex items-center justify-center mx-auto mb-3 text-white text-lg font-bold group-hover:scale-110 transition-transform">
-                  {member.avatar}
-                </div>
-                <h3 className="text-white font-semibold mb-1">{member.name}</h3>
-                <p className="text-white/60 text-sm">{member.role}</p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Departments */}
-      <section className="py-24">
-        <div className="max-w-7xl mx-auto px-6">
-          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-12">
-            <h2 className="text-4xl font-bold text-white mb-4">Our Departments</h2>
-            <p className="text-white/60">Cross-functional teams working in harmony</p>
-          </motion.div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {departments.map((dept, index) => (
-              <motion.div
-                key={dept.name}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.1 }}
-                className="p-6 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm text-center"
-              >
-                <div className="text-4xl font-bold text-[#0EA5E9] mb-2">{dept.count}</div>
-                <h3 className="text-xl font-semibold text-white mb-2">{dept.name}</h3>
-                <p className="text-white/60 text-sm">{dept.description}</p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Join Us */}
-      <section className="py-24 bg-black/20">
-        <div className="max-w-4xl mx-auto px-6">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="relative p-12 rounded-3xl bg-gradient-to-br from-[#0EA5E9]/20 to-transparent border border-[#0EA5E9]/30 backdrop-blur-sm text-center"
+            transition={{ duration: 0.6 }}
+            className="text-center mb-16"
           >
-            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">Join our growing team</h2>
-            <p className="text-xl text-white/70 mb-8">We're always looking for talented, passionate people to join us on our mission.</p>
-            <div className="flex flex-col md:flex-row gap-4 justify-center">
-              <a href="mailto:careers@cloagent.com" className="inline-flex items-center justify-center px-8 py-3 rounded-lg bg-[#0EA5E9] hover:bg-[#0EA5E9]/90 text-white font-medium transition-colors">
-                View Open Positions
-              </a>
-              <a href="mailto:careers@cloagent.com" className="inline-flex items-center justify-center px-8 py-3 rounded-lg border border-white/20 text-white hover:bg-white/10 font-medium transition-colors">
-                Send Your Resume
-              </a>
+            <h2 className="font-[family-name:var(--font-sora)] text-4xl font-bold text-white mb-4 tracking-tight">
+              Leadership Team
+            </h2>
+            <p className="text-white/50">The visionaries guiding CloAgent's mission</p>
+          </motion.div>
+          <motion.div
+            variants={stagger.container}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true }}
+            className="grid md:grid-cols-3 gap-8"
+          >
+            {leadership.map((member) => (
+              <motion.div
+                key={member.name}
+                variants={stagger.item}
+                whileHover={{ y: -6, transition: { type: "spring", stiffness: 300, damping: 20 } }}
+                className="group"
+              >
+                <div className="glass-card-hover p-8 text-center relative overflow-hidden">
+                  {/* Ambient glow behind avatar on hover */}
+                  <div className="absolute top-12 left-1/2 -translate-x-1/2 w-40 h-40 rounded-full bg-[#0EA5E9]/0 group-hover:bg-[#0EA5E9]/10 blur-3xl transition-all duration-700 pointer-events-none" />
+
+                  <div className="relative mx-auto mb-5 w-32 h-32">
+                    <div className="absolute inset-0 rounded-full bg-gradient-to-br from-[#0EA5E9]/40 to-[#38BDF8]/10 blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                    <div className="relative w-32 h-32 rounded-full ring-2 ring-[#0EA5E9]/30 flex items-center justify-center bg-gradient-to-br from-[#0EA5E9]/20 to-[#0EA5E9]/5 text-white text-2xl font-bold group-hover:scale-105 transition-transform duration-500">
+                      {member.avatar}
+                    </div>
+                  </div>
+
+                  <h3 className="font-[family-name:var(--font-sora)] text-xl font-semibold text-white mb-1">
+                    {member.name}
+                  </h3>
+                  <p className="text-gradient text-sm font-medium mb-4">{member.role}</p>
+                  <p className="text-white/50 text-sm leading-relaxed mb-6">{member.bio}</p>
+
+                  <div className="flex gap-3 justify-center">
+                    <a
+                      href={member.linkedin}
+                      className="w-9 h-9 rounded-lg bg-white/[0.04] backdrop-blur-sm border border-white/[0.06] hover:border-[#0EA5E9]/30 hover:bg-[#0EA5E9]/10 hover:shadow-[0_0_16px_rgba(14,165,233,0.15)] flex items-center justify-center transition-all duration-300 group/icon"
+                    >
+                      <Linkedin size={15} className="text-white/30 group-hover/icon:text-white/80 transition-colors" />
+                    </a>
+                    <a
+                      href={member.twitter}
+                      className="w-9 h-9 rounded-lg bg-white/[0.04] backdrop-blur-sm border border-white/[0.06] hover:border-[#0EA5E9]/30 hover:bg-[#0EA5E9]/10 hover:shadow-[0_0_16px_rgba(14,165,233,0.15)] flex items-center justify-center transition-all duration-300 group/icon"
+                    >
+                      <Twitter size={15} className="text-white/30 group-hover/icon:text-white/80 transition-colors" />
+                    </a>
+                    <a
+                      href={`mailto:${member.email}`}
+                      className="w-9 h-9 rounded-lg bg-white/[0.04] backdrop-blur-sm border border-white/[0.06] hover:border-[#0EA5E9]/30 hover:bg-[#0EA5E9]/10 hover:shadow-[0_0_16px_rgba(14,165,233,0.15)] flex items-center justify-center transition-all duration-300 group/icon"
+                    >
+                      <Mail size={15} className="text-white/30 group-hover/icon:text-white/80 transition-colors" />
+                    </a>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Team Grid */}
+      <section className="py-24">
+        <div className="max-w-7xl mx-auto px-6">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+            className="text-center mb-16"
+          >
+            <h2 className="font-[family-name:var(--font-sora)] text-4xl font-bold text-white mb-4 tracking-tight">
+              The Team
+            </h2>
+            <p className="text-white/50">Talented individuals making it all happen</p>
+          </motion.div>
+          <motion.div
+            variants={stagger.container}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true }}
+            className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5"
+          >
+            {team.map((member) => (
+              <motion.div
+                key={member.name}
+                variants={stagger.item}
+                whileHover={{ y: -4, transition: { type: "spring", stiffness: 300, damping: 20 } }}
+                className="glass-card-hover p-5 text-center group"
+              >
+                <div className="relative mx-auto mb-3 w-20 h-20">
+                  <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#0EA5E9]/15 to-[#38BDF8]/5 border border-white/[0.06] flex items-center justify-center text-white text-lg font-bold group-hover:scale-110 transition-transform duration-500">
+                    {member.avatar}
+                  </div>
+                </div>
+                <h3 className="font-[family-name:var(--font-sora)] text-white font-semibold text-sm mb-1">
+                  {member.name}
+                </h3>
+                <p className="text-white/30 text-xs">{member.role}</p>
+              </motion.div>
+            ))}
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Departments */}
+      <section className="py-24 bg-white/[0.02]">
+        <div className="max-w-7xl mx-auto px-6">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+            className="text-center mb-16"
+          >
+            <h2 className="font-[family-name:var(--font-sora)] text-4xl font-bold text-white mb-4 tracking-tight">
+              Our Departments
+            </h2>
+            <p className="text-white/50">Cross-functional teams working in harmony</p>
+          </motion.div>
+          <motion.div
+            variants={stagger.container}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true }}
+            className="grid md:grid-cols-2 lg:grid-cols-4 gap-6"
+          >
+            {departments.map((dept) => (
+              <motion.div
+                key={dept.name}
+                variants={stagger.item}
+                whileHover={{ y: -4, transition: { type: "spring", stiffness: 300, damping: 20 } }}
+                className="glass-card p-6 text-center"
+              >
+                <div className="text-5xl font-bold text-gradient mb-3 font-[family-name:var(--font-sora)]">
+                  {dept.count}
+                </div>
+                <h3 className="font-[family-name:var(--font-sora)] text-xl font-semibold text-white mb-2">
+                  {dept.name}
+                </h3>
+                <p className="text-white/50 text-sm">{dept.description}</p>
+              </motion.div>
+            ))}
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Join Us */}
+      <section className="py-24">
+        <div className="max-w-4xl mx-auto px-6">
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ type: "spring", stiffness: 100, damping: 20 }}
+            className="relative"
+          >
+            {/* Ambient glow */}
+            <div className="absolute -inset-px rounded-3xl bg-gradient-to-br from-[#0EA5E9]/20 via-transparent to-[#38BDF8]/10 pointer-events-none" />
+            <div className="absolute inset-0 rounded-3xl bg-[#0EA5E9]/[0.03] blur-2xl pointer-events-none" />
+
+            <div className="relative p-12 rounded-3xl glass-card border-white/[0.06] text-center overflow-hidden">
+              {/* Gradient border overlay */}
+              <div className="absolute inset-0 rounded-3xl border border-gradient-to-br from-[#0EA5E9]/20 to-transparent pointer-events-none" />
+
+              <h2 className="font-[family-name:var(--font-sora)] text-4xl md:text-5xl font-bold text-white mb-4 tracking-tight">
+                Join our growing team
+              </h2>
+              <p className="text-lg text-white/50 mb-8 max-w-xl mx-auto leading-relaxed">
+                We're always looking for talented, passionate people to join us on our mission.
+              </p>
+              <div className="flex flex-col md:flex-row gap-4 justify-center">
+                <motion.a
+                  href="mailto:careers@cloagent.com"
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.98 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 20 }}
+                  className="inline-flex items-center justify-center px-8 py-3 rounded-xl bg-[#0EA5E9] hover:bg-[#0EA5E9]/90 hover:shadow-[0_0_32px_rgba(14,165,233,0.3)] text-white font-medium transition-all duration-300"
+                >
+                  View Open Positions
+                </motion.a>
+                <motion.a
+                  href="mailto:careers@cloagent.com"
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.98 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 20 }}
+                  className="inline-flex items-center justify-center px-8 py-3 rounded-xl bg-white/[0.04] backdrop-blur-sm border border-white/[0.06] text-white hover:bg-white/[0.08] hover:border-white/[0.12] font-medium transition-all duration-300"
+                >
+                  Send Your Resume
+                </motion.a>
+              </div>
             </div>
           </motion.div>
         </div>
       </section>
 
-      {/* Culture */}
-      <section className="py-24">
+      {/* Culture / Perks */}
+      <section className="py-24 bg-white/[0.02]">
         <div className="max-w-7xl mx-auto px-6">
-          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-12">
-            <h2 className="text-4xl font-bold text-white mb-4">Life at CloAgent</h2>
-            <p className="text-white/60 max-w-2xl mx-auto">We believe in creating an environment where people can do their best work.</p>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+            className="text-center mb-16"
+          >
+            <h2 className="font-[family-name:var(--font-sora)] text-4xl font-bold text-white mb-4 tracking-tight">
+              Life at CloAgent
+            </h2>
+            <p className="text-white/50 max-w-2xl mx-auto">
+              We believe in creating an environment where people can do their best work.
+            </p>
           </motion.div>
-          <div className="grid md:grid-cols-3 gap-6">
-            {perks.map((perk, index) => (
+          <motion.div
+            variants={stagger.container}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true }}
+            className="grid md:grid-cols-3 gap-5"
+          >
+            {perks.map((perk) => (
               <motion.div
                 key={perk.title}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.05 }}
-                className="p-6 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm"
+                variants={stagger.item}
+                whileHover={{ x: 4, transition: { type: "spring", stiffness: 300, damping: 20 } }}
+                className="p-6 rounded-xl bg-white/[0.02] backdrop-blur-sm border border-white/[0.06] border-l-2 border-l-[#0EA5E9]/30 transition-all duration-300 hover:bg-white/[0.04] hover:border-l-[#0EA5E9]/60"
               >
-                <h3 className="text-lg font-semibold text-white mb-2">{perk.title}</h3>
-                <p className="text-white/60 text-sm">{perk.description}</p>
+                <h3 className="font-[family-name:var(--font-sora)] text-lg font-semibold text-white mb-2">
+                  {perk.title}
+                </h3>
+                <p className="text-white/50 text-sm leading-relaxed">{perk.description}</p>
               </motion.div>
             ))}
-          </div>
+          </motion.div>
         </div>
       </section>
     </div>

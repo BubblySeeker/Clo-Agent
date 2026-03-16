@@ -46,6 +46,15 @@ const additionalFeatures = [
   { icon: Smartphone, title: "Mobile App", description: "Full-featured iOS and Android apps" },
 ];
 
+const springTransition = { type: "spring" as const, stiffness: 100, damping: 20 };
+
+const meshGradients = [
+  "radial-gradient(ellipse at 20% 50%, rgba(14,165,233,0.15) 0%, transparent 50%), radial-gradient(ellipse at 80% 20%, rgba(99,102,241,0.1) 0%, transparent 50%), radial-gradient(ellipse at 50% 80%, rgba(14,165,233,0.08) 0%, transparent 50%)",
+  "radial-gradient(ellipse at 80% 50%, rgba(14,165,233,0.15) 0%, transparent 50%), radial-gradient(ellipse at 20% 80%, rgba(56,189,248,0.1) 0%, transparent 50%), radial-gradient(ellipse at 50% 20%, rgba(99,102,241,0.08) 0%, transparent 50%)",
+  "radial-gradient(ellipse at 50% 30%, rgba(14,165,233,0.12) 0%, transparent 50%), radial-gradient(ellipse at 80% 80%, rgba(125,211,252,0.1) 0%, transparent 50%), radial-gradient(ellipse at 20% 60%, rgba(99,102,241,0.08) 0%, transparent 50%)",
+  "radial-gradient(ellipse at 30% 70%, rgba(14,165,233,0.15) 0%, transparent 50%), radial-gradient(ellipse at 70% 30%, rgba(56,189,248,0.08) 0%, transparent 50%), radial-gradient(ellipse at 50% 50%, rgba(99,102,241,0.1) 0%, transparent 50%)",
+];
+
 export default function FeaturesPage() {
   return (
     <div className="overflow-hidden">
@@ -53,22 +62,32 @@ export default function FeaturesPage() {
       <section className="pt-32 pb-20">
         <div className="max-w-7xl mx-auto px-6">
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
+            transition={springTransition}
             className="text-center max-w-3xl mx-auto"
           >
-            <div className="inline-block px-4 py-2 rounded-full bg-[#0EA5E9]/10 border border-[#0EA5E9]/20 mb-6">
-              <span className="text-[#0EA5E9] text-sm font-medium">Features</span>
-            </div>
-            <h1 className="text-5xl md:text-6xl font-bold text-white mb-6">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ ...springTransition, delay: 0.1 }}
+              className="inline-block px-4 py-2 rounded-full bg-[#0EA5E9]/[0.08] border border-[#0EA5E9]/20 mb-8"
+            >
+              <span className="text-[#0EA5E9] text-sm font-medium tracking-wide">Features</span>
+            </motion.div>
+            <h1 className="font-[family-name:var(--font-sora)] text-5xl md:text-6xl font-bold text-white mb-6 leading-tight">
               Everything you need to
               <br />
-              <span className="text-[#0EA5E9]">dominate your market</span>
+              <span className="text-gradient">dominate your market</span>
             </h1>
-            <p className="text-xl text-white/70">
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.3, duration: 0.6 }}
+              className="text-xl text-white/50 leading-relaxed"
+            >
               CloAgent combines powerful features with an intuitive interface to help you close more deals and grow your real estate business.
-            </p>
+            </motion.p>
           </motion.div>
         </div>
       </section>
@@ -76,46 +95,82 @@ export default function FeaturesPage() {
       {/* Main Features */}
       <section className="py-20">
         <div className="max-w-7xl mx-auto px-6">
-          <div className="space-y-24">
+          <div className="space-y-32">
             {mainFeatures.map((feature, index) => (
               <motion.div
                 key={feature.title}
-                initial={{ opacity: 0, y: 30 }}
+                initial={{ opacity: 0, y: 40 }}
                 whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: 0.2 }}
-                className="grid md:grid-cols-2 gap-12 items-center"
+                viewport={{ once: true, margin: "-100px" }}
+                transition={{ ...springTransition, delay: 0.1 }}
+                className="grid md:grid-cols-2 gap-16 items-center"
               >
                 <div className={index % 2 === 1 ? "md:order-2" : ""}>
-                  <div className="w-16 h-16 rounded-2xl bg-[#0EA5E9]/10 flex items-center justify-center mb-6">
-                    <feature.icon size={32} className="text-[#0EA5E9]" />
-                  </div>
-                  <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">{feature.title}</h2>
-                  <p className="text-lg text-white/70 mb-6">{feature.description}</p>
-                  <ul className="space-y-3">
-                    {feature.benefits.map((benefit) => (
-                      <li key={benefit} className="flex items-center gap-3">
-                        <div className="w-5 h-5 rounded-full bg-[#0EA5E9]/20 flex items-center justify-center flex-shrink-0">
-                          <div className="w-2 h-2 rounded-full bg-[#0EA5E9]" />
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    whileInView={{ opacity: 1, scale: 1 }}
+                    viewport={{ once: true }}
+                    transition={{ ...springTransition, delay: 0.2 }}
+                    className="w-14 h-14 rounded-2xl bg-[#0EA5E9]/[0.08] flex items-center justify-center mb-6 group/icon relative"
+                  >
+                    <div className="absolute inset-0 rounded-2xl bg-[#0EA5E9]/[0.12] opacity-0 blur-xl transition-opacity duration-500 group-hover/icon:opacity-100" />
+                    <feature.icon size={28} className="text-[#0EA5E9] relative z-10" />
+                  </motion.div>
+                  <h2 className="font-[family-name:var(--font-sora)] text-3xl md:text-4xl font-bold text-white mb-4">
+                    {feature.title}
+                  </h2>
+                  <p className="text-lg text-white/50 mb-8 leading-relaxed">{feature.description}</p>
+                  <ul className="space-y-4">
+                    {feature.benefits.map((benefit, bIdx) => (
+                      <motion.li
+                        key={benefit}
+                        initial={{ opacity: 0, x: -10 }}
+                        whileInView={{ opacity: 1, x: 0 }}
+                        viewport={{ once: true }}
+                        transition={{ ...springTransition, delay: 0.3 + bIdx * 0.08 }}
+                        className="flex items-center gap-3"
+                      >
+                        <div className="relative flex items-center justify-center flex-shrink-0">
+                          <span className="absolute w-4 h-4 rounded-full bg-[#0EA5E9]/20 animate-ping" style={{ animationDuration: "3s" }} />
+                          <span className="relative w-2 h-2 rounded-full bg-[#0EA5E9]" />
                         </div>
-                        <span className="text-white/80">{benefit}</span>
-                      </li>
+                        <span className="text-white/50">{benefit}</span>
+                      </motion.li>
                     ))}
                   </ul>
                 </div>
                 <div className={index % 2 === 1 ? "md:order-1" : ""}>
                   <motion.div
                     whileHover={{ scale: 1.02 }}
-                    className="relative rounded-2xl overflow-hidden border border-white/10 shadow-2xl"
+                    transition={springTransition}
+                    className="relative rounded-2xl overflow-hidden border border-white/[0.06] shadow-2xl group"
                   >
-                    <div className="absolute inset-0 bg-gradient-to-br from-[#0EA5E9]/20 to-transparent backdrop-blur-sm z-10" />
-                    <div className="bg-[#0F1E36] p-12 aspect-[4/3] flex items-center justify-center">
-                      <div className="text-center">
-                        <div className="w-24 h-24 rounded-2xl bg-[#0EA5E9] mx-auto mb-4 flex items-center justify-center">
-                          <feature.icon size={48} className="text-white" />
-                        </div>
-                        <div className="text-white/40 text-sm">{feature.title}</div>
-                      </div>
+                    {/* Gradient mesh overlay */}
+                    <div
+                      className="absolute inset-0 z-20 opacity-60 group-hover:opacity-80 transition-opacity duration-700"
+                      style={{ background: meshGradients[index] }}
+                    />
+                    {/* Subtle grid pattern */}
+                    <div
+                      className="absolute inset-0 z-10 opacity-[0.03]"
+                      style={{
+                        backgroundImage: "linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)",
+                        backgroundSize: "40px 40px",
+                      }}
+                    />
+                    <div className="relative bg-white/[0.02] aspect-[4/3] flex items-center justify-center">
+                      {/* Abstract glow orbs */}
+                      <div className="absolute w-32 h-32 rounded-full bg-[#0EA5E9]/20 blur-3xl top-1/4 left-1/4 group-hover:bg-[#0EA5E9]/30 transition-colors duration-700" />
+                      <div className="absolute w-24 h-24 rounded-full bg-[#6366F1]/15 blur-3xl bottom-1/4 right-1/4 group-hover:bg-[#6366F1]/25 transition-colors duration-700" />
+                      <div className="absolute w-16 h-16 rounded-full bg-[#38BDF8]/20 blur-2xl top-1/2 right-1/3 group-hover:bg-[#38BDF8]/30 transition-colors duration-700" />
+                      {/* Floating icon */}
+                      <motion.div
+                        animate={{ y: [0, -8, 0] }}
+                        transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                        className="relative z-30"
+                      >
+                        <feature.icon size={48} className="text-white/20" strokeWidth={1} />
+                      </motion.div>
                     </div>
                   </motion.div>
                 </div>
@@ -126,33 +181,37 @@ export default function FeaturesPage() {
       </section>
 
       {/* Additional Features Grid */}
-      <section className="py-24 bg-black/20">
+      <section className="py-24 bg-white/[0.02]">
         <div className="max-w-7xl mx-auto px-6">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
+            transition={springTransition}
             className="text-center mb-16"
           >
-            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">And so much more</h2>
-            <p className="text-xl text-white/60 max-w-2xl mx-auto">Every feature you need to run a modern real estate business</p>
+            <h2 className="font-[family-name:var(--font-sora)] text-4xl md:text-5xl font-bold text-white mb-4">
+              And <span className="text-gradient">so much more</span>
+            </h2>
+            <p className="text-xl text-white/50 max-w-2xl mx-auto">Every feature you need to run a modern real estate business</p>
           </motion.div>
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             {additionalFeatures.map((feature, index) => (
               <motion.div
                 key={feature.title}
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 24 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                transition={{ delay: index * 0.05 }}
-                whileHover={{ y: -5 }}
-                className="p-6 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm hover:bg-white/10 transition-all group"
+                transition={{ ...springTransition, delay: index * 0.06 }}
+                whileHover={{ y: -6 }}
+                className="glass-card-hover p-6 rounded-2xl group"
               >
-                <div className="w-12 h-12 rounded-xl bg-[#0EA5E9]/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                  <feature.icon size={24} className="text-[#0EA5E9]" />
+                <div className="w-12 h-12 rounded-xl bg-[#0EA5E9]/[0.08] flex items-center justify-center mb-4 relative">
+                  <div className="absolute inset-0 rounded-xl bg-[#0EA5E9]/[0.15] opacity-0 blur-lg group-hover:opacity-100 transition-opacity duration-500" />
+                  <feature.icon size={24} className="text-[#0EA5E9] relative z-10 group-hover:scale-110 transition-transform duration-300" />
                 </div>
-                <h3 className="text-lg font-semibold text-white mb-2">{feature.title}</h3>
-                <p className="text-white/60 text-sm">{feature.description}</p>
+                <h3 className="font-[family-name:var(--font-sora)] text-lg font-semibold text-white mb-2">{feature.title}</h3>
+                <p className="text-white/30 text-sm leading-relaxed">{feature.description}</p>
               </motion.div>
             ))}
           </div>
@@ -166,10 +225,13 @@ export default function FeaturesPage() {
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
+            transition={springTransition}
             className="text-center max-w-3xl mx-auto"
           >
-            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">Integrates with your favorite tools</h2>
-            <p className="text-xl text-white/60 mb-12">Connect CloAgent with the tools you already use. Seamless integration with email, calendar, MLS, and more.</p>
+            <h2 className="font-[family-name:var(--font-sora)] text-4xl md:text-5xl font-bold text-white mb-4">
+              Integrates with your <span className="text-gradient">favorite tools</span>
+            </h2>
+            <p className="text-xl text-white/50 mb-12 leading-relaxed">Connect CloAgent with the tools you already use. Seamless integration with email, calendar, MLS, and more.</p>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-12">
               {["Gmail", "Outlook", "Zillow", "MLS", "Slack", "Zapier", "Calendly", "Stripe"].map((tool, index) => (
                 <motion.div
@@ -177,14 +239,19 @@ export default function FeaturesPage() {
                   initial={{ opacity: 0, scale: 0.9 }}
                   whileInView={{ opacity: 1, scale: 1 }}
                   viewport={{ once: true }}
-                  transition={{ delay: index * 0.05 }}
-                  className="p-6 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white font-semibold hover:bg-white/10 transition-colors"
+                  transition={{ ...springTransition, delay: index * 0.06 }}
+                  whileHover={{
+                    scale: 1.05,
+                    borderColor: "rgba(14, 165, 233, 0.3)",
+                    boxShadow: "0 0 20px rgba(14, 165, 233, 0.1)",
+                  }}
+                  className="p-6 rounded-xl bg-white/[0.02] border border-white/[0.06] flex items-center justify-center font-[family-name:var(--font-sora)] text-white font-semibold transition-colors duration-300 cursor-default"
                 >
                   {tool}
                 </motion.div>
               ))}
             </div>
-            <p className="text-white/60 text-sm mb-6">And 100+ more integrations via Zapier</p>
+            <p className="text-white/30 text-sm mb-6">And 100+ more integrations via Zapier</p>
           </motion.div>
         </div>
       </section>
@@ -193,19 +260,33 @@ export default function FeaturesPage() {
       <section className="py-24">
         <div className="max-w-4xl mx-auto px-6">
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="relative p-12 rounded-3xl bg-gradient-to-br from-[#0EA5E9]/20 to-transparent border border-[#0EA5E9]/30 backdrop-blur-sm text-center"
+            transition={springTransition}
+            className="relative p-12 rounded-3xl text-center overflow-hidden"
           >
-            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">Experience all features free for 14 days</h2>
-            <p className="text-xl text-white/70 mb-8">No credit card required. Get started in minutes.</p>
-            <div className="flex flex-wrap gap-4 justify-center">
-              <LinkButton href="/sign-up" variant="primary">
-                Start Free Trial
-                <ArrowRight size={18} className="ml-2" />
-              </LinkButton>
-              <LinkButton href="/pricing" variant="outline">View Pricing</LinkButton>
+            {/* Animated border glow */}
+            <div className="absolute inset-0 rounded-3xl animate-border-glow p-px">
+              <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-[#0EA5E9]/20 via-transparent to-[#6366F1]/20" />
+            </div>
+            {/* Inner background */}
+            <div className="absolute inset-px rounded-[23px] bg-white/[0.02] backdrop-blur-sm" />
+            {/* Border */}
+            <div className="absolute inset-0 rounded-3xl border border-white/[0.06]" />
+            {/* Content */}
+            <div className="relative z-10">
+              <h2 className="font-[family-name:var(--font-sora)] text-4xl md:text-5xl font-bold text-white mb-4">
+                Experience all features <span className="text-gradient">free for 14 days</span>
+              </h2>
+              <p className="text-xl text-white/50 mb-8">No credit card required. Get started in minutes.</p>
+              <div className="flex flex-wrap gap-4 justify-center">
+                <LinkButton href="/sign-up" variant="primary">
+                  Start Free Trial
+                  <ArrowRight size={18} className="ml-2" />
+                </LinkButton>
+                <LinkButton href="/pricing" variant="outline">View Pricing</LinkButton>
+              </div>
             </div>
           </motion.div>
         </div>

@@ -13,19 +13,8 @@ import {
   type SSEEvent,
 } from "@/lib/api/conversations";
 import { Plus, Search, Send, Trash2, Sparkles, User, Loader2, Check, XCircle } from "lucide-react";
-
-interface LocalMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  isStreaming?: boolean;
-  toolCalls?: string[];
-  confirmationData?: {
-    tool: string;
-    preview: Record<string, unknown>;
-    pending_id: string;
-  };
-}
+import { type ChatMessage } from "@/store/ui-store";
+import { toolLabel, confirmLabel, formatPreview } from "@/lib/ai-chat-helpers";
 
 const suggestedPrompts = [
   "Who hasn't heard from me in 2 weeks?",
@@ -34,28 +23,6 @@ const suggestedPrompts = [
   "Summarize my pipeline",
 ];
 
-const toolLabel: Record<string, string> = {
-  search_contacts: "Searching contacts",
-  get_dashboard_summary: "Fetching dashboard",
-  get_contact_details: "Loading contact",
-  get_contact_activities: "Loading activities",
-  get_deal: "Loading deal details",
-  get_buyer_profile: "Loading buyer profile",
-  get_all_activities: "Loading recent activities",
-  list_deals: "Fetching deals",
-  get_deal_stages: "Loading pipeline",
-  get_analytics: "Crunching analytics",
-  create_contact: "Creating contact",
-  update_contact: "Updating contact",
-  delete_contact: "Deleting contact",
-  log_activity: "Logging activity",
-  create_deal: "Creating deal",
-  update_deal: "Updating deal",
-  delete_deal: "Deleting deal",
-  create_buyer_profile: "Creating buyer profile",
-  update_buyer_profile: "Updating buyer profile",
-};
-
 export default function ChatPage() {
   const { getToken } = useAuth();
   const queryClient = useQueryClient();
@@ -63,7 +30,7 @@ export default function ChatPage() {
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [hoveredConv, setHoveredConv] = useState<string | null>(null);
-  const [localMessages, setLocalMessages] = useState<LocalMessage[]>([]);
+  const [localMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [activeToolName, setActiveToolName] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -78,7 +45,7 @@ export default function ChatPage() {
     },
   });
 
-  if (convsError) console.error("Failed to load conversations:", convsError);
+  const convsLoadFailed = !!convsError;
 
   const { data: serverMessages = [], isLoading: messagesLoading } = useQuery({
     queryKey: ["messages", activeConvId],
@@ -90,7 +57,7 @@ export default function ChatPage() {
     enabled: !!activeConvId && !isStreaming,
   });
 
-  const displayedMessages: LocalMessage[] = localMessages.length > 0
+  const displayedMessages: ChatMessage[] = localMessages.length > 0
     ? localMessages
     : serverMessages.map((m) => ({
         id: m.id,
@@ -107,7 +74,7 @@ export default function ChatPage() {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
       if (!handleSendActiveRef.current) {
         setActiveConvId(conv.id);
-        setLocalMessages([]);
+        setChatMessages([]);
       }
     },
     onError: () => {}, // handled in handleSend try/catch
@@ -122,7 +89,7 @@ export default function ChatPage() {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
       if (activeConvId === deletedId) {
         setActiveConvId(null);
-        setLocalMessages([]);
+        setChatMessages([]);
       }
     },
   });
@@ -147,7 +114,7 @@ export default function ChatPage() {
           const conv = await createConvMutation.mutateAsync();
           convId = conv.id;
           setActiveConvId(conv.id);
-          setLocalMessages([]);
+          setChatMessages([]);
         } catch {
           return; // leave input intact so user can retry
         }
@@ -158,12 +125,12 @@ export default function ChatPage() {
       // Seed from server messages + optimistic user msg + assistant placeholder
       const userMsgId = crypto.randomUUID();
       const assistantMsgId = crypto.randomUUID();
-      const baseMessages: LocalMessage[] = serverMessages.map((m) => ({
+      const baseMessages: ChatMessage[] = serverMessages.map((m) => ({
         id: m.id,
         role: m.role as "user" | "assistant",
         content: m.content,
       }));
-      setLocalMessages([
+      setChatMessages([
         ...baseMessages,
         { id: userMsgId, role: "user", content: msg },
         { id: assistantMsgId, role: "assistant", content: "", isStreaming: true, toolCalls: [] },
@@ -179,7 +146,7 @@ export default function ChatPage() {
         (event: SSEEvent) => {
           if (event.type === "text") {
             accumulated += event.content;
-            setLocalMessages((prev) => {
+            setChatMessages((prev) => {
               const msgs = [...prev];
               const last = msgs[msgs.length - 1];
               if (last && last.id === assistantMsgId) {
@@ -189,7 +156,7 @@ export default function ChatPage() {
             });
           } else if (event.type === "tool_call") {
             setActiveToolName(event.name);
-            setLocalMessages((prev) => {
+            setChatMessages((prev) => {
               const msgs = [...prev];
               const last = msgs[msgs.length - 1];
               if (last && last.id === assistantMsgId) {
@@ -203,7 +170,7 @@ export default function ChatPage() {
           } else if (event.type === "tool_result") {
             setActiveToolName(null);
           } else if (event.type === "confirmation") {
-            setLocalMessages((prev) => {
+            setChatMessages((prev) => {
               const msgs = [...prev];
               const last = msgs[msgs.length - 1];
               if (last && last.id === assistantMsgId) {
@@ -226,7 +193,7 @@ export default function ChatPage() {
           handleSendActiveRef.current = false;
           queryClient.invalidateQueries({ queryKey: ["conversations"] });
           queryClient.invalidateQueries({ queryKey: ["messages", convId] });
-          setLocalMessages((prev) => {
+          setChatMessages((prev) => {
             const msgs = [...prev];
             const last = msgs[msgs.length - 1];
             if (last && last.id === assistantMsgId) {
@@ -244,7 +211,7 @@ export default function ChatPage() {
           setIsStreaming(false);
           setActiveToolName(null);
           handleSendActiveRef.current = false;
-          setLocalMessages((prev) => {
+          setChatMessages((prev) => {
             const msgs = [...prev];
             const last = msgs[msgs.length - 1];
             if (last && last.id === assistantMsgId) {
@@ -267,7 +234,7 @@ export default function ChatPage() {
     if (!token || !activeConvId) return;
     try {
       await confirmToolAction(token, activeConvId, pendingId);
-      setLocalMessages((prev) =>
+      setChatMessages((prev) =>
         prev.map((m) =>
           m.id === assistantMsgId
             ? { ...m, confirmationData: undefined, content: m.content || "✓ Action completed." }
@@ -275,7 +242,7 @@ export default function ChatPage() {
         )
       );
     } catch {
-      setLocalMessages((prev) =>
+      setChatMessages((prev) =>
         prev.map((m) =>
           m.id === assistantMsgId ? { ...m, confirmationData: undefined, content: "Failed to execute action." } : m
         )
@@ -284,7 +251,7 @@ export default function ChatPage() {
   };
 
   const handleCancel = (assistantMsgId: string) => {
-    setLocalMessages((prev) =>
+    setChatMessages((prev) =>
       prev.map((m) =>
         m.id === assistantMsgId ? { ...m, confirmationData: undefined, content: "Action cancelled." } : m
       )
@@ -323,7 +290,9 @@ export default function ChatPage() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-3">
-          {conversations.length === 0 ? (
+          {convsLoadFailed ? (
+            <p className="text-xs text-red-400 text-center py-8">Failed to load conversations. Check your connection.</p>
+          ) : conversations.length === 0 ? (
             <p className="text-xs text-gray-400 text-center py-8">No conversations yet. Start one!</p>
           ) : (
             conversations.map((conv) => (
@@ -332,8 +301,14 @@ export default function ChatPage() {
                 onMouseEnter={() => setHoveredConv(conv.id)}
                 onMouseLeave={() => setHoveredConv(null)}
                 onClick={() => {
+                  if (isStreaming && cleanupRef.current) {
+                    cleanupRef.current();
+                    cleanupRef.current = null;
+                    setIsStreaming(false);
+                    setActiveToolName(null);
+                  }
                   setActiveConvId(conv.id);
-                  setLocalMessages([]);
+                  setChatMessages([]);
                 }}
                 className={`relative flex flex-col p-2.5 rounded-xl cursor-pointer mb-1 transition-all ${
                   activeConvId === conv.id ? "bg-blue-50" : "hover:bg-gray-50"
@@ -486,17 +461,17 @@ export default function ChatPage() {
 
                     {/* Confirmation card */}
                     {msg.confirmationData && (
-                      <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 w-full text-xs">
-                        <p className="font-semibold text-amber-800 mb-2">
-                          Confirm: {toolLabel[msg.confirmationData.tool] ?? msg.confirmationData.tool}
+                      <div className="bg-blue-50 border border-[#0EA5E9]/20 rounded-xl p-3 w-full text-xs">
+                        <p className="font-semibold text-[#1E3A5F] mb-2">
+                          {confirmLabel[msg.confirmationData.tool] ?? msg.confirmationData.tool}
                         </p>
-                        <pre className="text-gray-700 whitespace-pre-wrap text-[10px] mb-2 bg-white rounded p-2 border border-amber-100 overflow-auto max-h-32">
-                          {JSON.stringify(msg.confirmationData.preview, null, 2)}
-                        </pre>
+                        <p className="text-[#1E3A5F]/80 mb-2">
+                          {formatPreview(msg.confirmationData.tool, msg.confirmationData.preview)}
+                        </p>
                         <div className="flex gap-2">
                           <button
                             onClick={() => handleConfirm(msg.confirmationData!.pending_id, msg.id)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500 text-white rounded-lg hover:bg-green-600 text-xs font-medium"
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0EA5E9] text-white rounded-lg hover:bg-[#0EA5E9]/90 text-xs font-medium"
                           >
                             <Check size={11} /> Confirm
                           </button>

@@ -370,6 +370,8 @@ func ListTasks(pool *pgxpool.Pool) http.HandlerFunc {
 		}
 
 		// Fetch tasks
+		limitIdx := argIdx
+		offsetIdx := argIdx + 1
 		args = append(args, limit, offset)
 		rows, err := tx.Query(r.Context(),
 			fmt.Sprintf(`SELECT a.id, a.contact_id, a.deal_id, a.agent_id, a.type, a.body, a.created_at,
@@ -379,7 +381,7 @@ func ListTasks(pool *pgxpool.Pool) http.HandlerFunc {
 			 LEFT JOIN contacts c ON c.id = a.contact_id
 			 WHERE %s
 			 ORDER BY a.due_date ASC NULLS LAST, a.created_at DESC
-			 LIMIT $%d OFFSET $%d`, whereExpr, argIdx, argIdx+1),
+			 LIMIT $%d OFFSET $%d`, whereExpr, limitIdx, offsetIdx),
 			args...,
 		)
 		if err != nil {

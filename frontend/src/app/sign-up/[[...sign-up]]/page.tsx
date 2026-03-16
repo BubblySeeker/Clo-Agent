@@ -5,6 +5,7 @@ import { useSignUp } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Building2, Eye, EyeOff, Loader2, ArrowLeft } from "lucide-react";
+import { motion } from "framer-motion";
 
 function GoogleIcon() {
   return (
@@ -87,14 +88,21 @@ export default function SignUpPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#0F1E36] via-[#162843] to-[#0F1E36] px-4">
-      <style>{`html, body { background-color: #0F1E36; }`}</style>
+    <div className="relative min-h-screen flex items-center justify-center bg-[#070B14] px-4 overflow-hidden">
+      <style>{`html, body { background-color: #070B14; }`}</style>
 
-      <div className="w-full max-w-md">
+      {/* Ambient glow orbs */}
+      <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] rounded-full bg-[#0EA5E9]/[0.07] blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] rounded-full bg-[#0284C7]/[0.05] blur-[120px] pointer-events-none" />
+
+      {/* Noise texture overlay */}
+      <div className="absolute inset-0 bg-noise opacity-[0.4] pointer-events-none" />
+
+      <div className="relative z-10 w-full max-w-md">
         {/* Back button */}
         <Link
           href="/"
-          className="inline-flex items-center gap-2 text-white/50 hover:text-white/80 transition-colors text-sm mb-6"
+          className="inline-flex items-center gap-2 text-white/30 hover:text-white/60 transition-colors text-sm mb-6"
         >
           <ArrowLeft size={16} />
           Back to home
@@ -102,24 +110,33 @@ export default function SignUpPage() {
 
         {/* Logo */}
         <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="w-10 h-10 rounded-xl bg-[#0EA5E9] flex items-center justify-center">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0EA5E9] to-[#0284C7] flex items-center justify-center shadow-lg shadow-[#0EA5E9]/20">
             <Building2 size={20} className="text-white" />
           </div>
-          <span className="text-xl font-semibold text-white">CloAgent</span>
+          <span className="text-xl font-semibold text-white font-[family-name:var(--font-sora)]">CloAgent</span>
         </div>
 
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-8">
+        {/* Gradient glow behind card */}
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] h-[60%] bg-[#0EA5E9]/[0.06] blur-[80px] rounded-full pointer-events-none" />
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          key={step}
+          className="relative bg-white/[0.04] backdrop-blur-xl border border-white/[0.08] rounded-2xl p-8"
+        >
           {step === "register" ? (
             <>
-              <h1 className="text-2xl font-bold text-white mb-2">Create your account</h1>
-              <p className="text-white/60 mb-8">Start your free 14-day trial, no credit card required</p>
+              <h1 className="text-2xl font-bold text-white mb-2 font-[family-name:var(--font-sora)]">Create your account</h1>
+              <p className="text-white/50 mb-8">Start your free 14-day trial, no credit card required</p>
 
               {/* OAuth */}
               <div className="space-y-3 mb-6">
                 <button
                   onClick={() => handleOAuth("oauth_google")}
                   disabled={!!oauthLoading}
-                  className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl bg-white/10 border border-white/10 text-white hover:bg-white/15 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white hover:bg-white/[0.08] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {oauthLoading === "oauth_google" ? <Loader2 size={18} className="animate-spin" /> : <GoogleIcon />}
                   Continue with Google
@@ -127,51 +144,51 @@ export default function SignUpPage() {
               </div>
 
               <div className="flex items-center gap-4 mb-6">
-                <div className="flex-1 h-px bg-white/10" />
-                <span className="text-white/30 text-sm">or</span>
-                <div className="flex-1 h-px bg-white/10" />
+                <div className="flex-1 h-px bg-white/[0.06]" />
+                <span className="text-white/25 text-sm">or</span>
+                <div className="flex-1 h-px bg-white/[0.06]" />
               </div>
 
               <form onSubmit={handleRegister} className="space-y-5">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-white/80 mb-2">First name</label>
+                    <label className="block text-sm font-medium text-white/50 mb-2">First name</label>
                     <input
                       type="text"
                       value={firstName}
                       onChange={(e) => setFirstName(e.target.value)}
                       required
                       placeholder="Jane"
-                      className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-[#0EA5E9] transition-colors"
+                      className="w-full px-4 py-3 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white placeholder-white/30 focus:outline-none focus:border-[#0EA5E9]/50 focus:ring-1 focus:ring-[#0EA5E9]/20 transition-all"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-white/80 mb-2">Last name</label>
+                    <label className="block text-sm font-medium text-white/50 mb-2">Last name</label>
                     <input
                       type="text"
                       value={lastName}
                       onChange={(e) => setLastName(e.target.value)}
                       required
                       placeholder="Smith"
-                      className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-[#0EA5E9] transition-colors"
+                      className="w-full px-4 py-3 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white placeholder-white/30 focus:outline-none focus:border-[#0EA5E9]/50 focus:ring-1 focus:ring-[#0EA5E9]/20 transition-all"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-white/80 mb-2">Email</label>
+                  <label className="block text-sm font-medium text-white/50 mb-2">Email</label>
                   <input
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
                     placeholder="you@example.com"
-                    className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-[#0EA5E9] transition-colors"
+                    className="w-full px-4 py-3 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white placeholder-white/30 focus:outline-none focus:border-[#0EA5E9]/50 focus:ring-1 focus:ring-[#0EA5E9]/20 transition-all"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-white/80 mb-2">Password</label>
+                  <label className="block text-sm font-medium text-white/50 mb-2">Password</label>
                   <div className="relative">
                     <input
                       type={showPassword ? "text" : "password"}
@@ -179,12 +196,12 @@ export default function SignUpPage() {
                       onChange={(e) => setPassword(e.target.value)}
                       required
                       placeholder="••••••••"
-                      className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-[#0EA5E9] transition-colors pr-12"
+                      className="w-full px-4 py-3 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white placeholder-white/30 focus:outline-none focus:border-[#0EA5E9]/50 focus:ring-1 focus:ring-[#0EA5E9]/20 transition-all pr-12"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70 transition-colors"
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors"
                     >
                       {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
@@ -192,7 +209,7 @@ export default function SignUpPage() {
                 </div>
 
                 {error && (
-                  <p className="text-red-400 text-sm bg-red-400/10 border border-red-400/20 rounded-lg px-4 py-3">
+                  <p className="text-red-400 text-sm bg-red-500/[0.08] border border-red-500/20 rounded-lg px-4 py-3">
                     {error}
                   </p>
                 )}
@@ -200,7 +217,7 @@ export default function SignUpPage() {
                 <button
                   type="submit"
                   disabled={loading || !!oauthLoading}
-                  className="w-full py-3 rounded-xl bg-[#0EA5E9] hover:bg-[#0EA5E9]/90 text-white font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="w-full py-3 rounded-xl bg-gradient-to-r from-[#0EA5E9] to-[#0284C7] hover:brightness-110 text-white font-semibold transition-all shadow-lg shadow-[#0EA5E9]/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {loading ? <><Loader2 size={18} className="animate-spin" /> Creating account...</> : "Create Account"}
                 </button>
@@ -208,14 +225,14 @@ export default function SignUpPage() {
             </>
           ) : (
             <>
-              <h1 className="text-2xl font-bold text-white mb-2">Check your email</h1>
-              <p className="text-white/60 mb-8">
+              <h1 className="text-2xl font-bold text-white mb-2 font-[family-name:var(--font-sora)]">Check your email</h1>
+              <p className="text-white/50 mb-8">
                 We sent a verification code to <span className="text-white">{email}</span>
               </p>
 
               <form onSubmit={handleVerify} className="space-y-5">
                 <div>
-                  <label className="block text-sm font-medium text-white/80 mb-2">Verification code</label>
+                  <label className="block text-sm font-medium text-white/50 mb-2">Verification code</label>
                   <input
                     type="text"
                     value={code}
@@ -223,12 +240,12 @@ export default function SignUpPage() {
                     required
                     placeholder="000000"
                     maxLength={6}
-                    className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-[#0EA5E9] transition-colors text-center text-xl tracking-widest"
+                    className="w-full px-4 py-3 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white placeholder-white/30 focus:outline-none focus:border-[#0EA5E9]/50 focus:ring-1 focus:ring-[#0EA5E9]/20 transition-all text-center text-xl tracking-widest"
                   />
                 </div>
 
                 {error && (
-                  <p className="text-red-400 text-sm bg-red-400/10 border border-red-400/20 rounded-lg px-4 py-3">
+                  <p className="text-red-400 text-sm bg-red-500/[0.08] border border-red-500/20 rounded-lg px-4 py-3">
                     {error}
                   </p>
                 )}
@@ -236,7 +253,7 @@ export default function SignUpPage() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full py-3 rounded-xl bg-[#0EA5E9] hover:bg-[#0EA5E9]/90 text-white font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="w-full py-3 rounded-xl bg-gradient-to-r from-[#0EA5E9] to-[#0284C7] hover:brightness-110 text-white font-semibold transition-all shadow-lg shadow-[#0EA5E9]/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {loading ? <><Loader2 size={18} className="animate-spin" /> Verifying...</> : "Verify Email"}
                 </button>
@@ -244,14 +261,14 @@ export default function SignUpPage() {
                 <button
                   type="button"
                   onClick={() => { setStep("register"); setError(""); }}
-                  className="w-full text-white/50 hover:text-white/80 text-sm transition-colors"
+                  className="w-full text-white/30 hover:text-white/60 text-sm transition-colors"
                 >
                   Back to sign up
                 </button>
               </form>
             </>
           )}
-        </div>
+        </motion.div>
 
         {step === "register" && (
           <p className="text-center text-white/50 text-sm mt-6">

@@ -264,7 +264,7 @@ export default function TasksPage() {
               </p>
             </div>
             <Link
-              href="/dashboard/ai"
+              href="/dashboard/chat"
               className="ml-auto px-3 py-1.5 rounded-lg bg-white border border-blue-200 text-xs font-semibold text-blue-600 hover:bg-blue-50 shrink-0"
             >
               Open AI Assistant

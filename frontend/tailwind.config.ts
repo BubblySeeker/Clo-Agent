@@ -52,11 +52,41 @@ const config: Config = {
       keyframes: {
         wiggle: {
           "0%, 100%": { transform: "rotate(-0.8deg)" },
-          "50%":      { transform: "rotate(0.8deg)" },
+          "50%": { transform: "rotate(0.8deg)" },
+        },
+        shimmer: {
+          "0%": { backgroundPosition: "-200% 0" },
+          "100%": { backgroundPosition: "200% 0" },
+        },
+        "glow-pulse": {
+          "0%, 100%": { opacity: "0.4" },
+          "50%": { opacity: "0.8" },
+        },
+        float: {
+          "0%, 100%": { transform: "translateY(0px)" },
+          "50%": { transform: "translateY(-20px)" },
+        },
+        "float-slow": {
+          "0%, 100%": { transform: "translateY(0px) rotate(0deg)" },
+          "50%": { transform: "translateY(-30px) rotate(3deg)" },
+        },
+        "border-glow": {
+          "0%, 100%": { borderColor: "rgba(14, 165, 233, 0.2)" },
+          "50%": { borderColor: "rgba(14, 165, 233, 0.5)" },
+        },
+        "slide-up": {
+          "0%": { transform: "translateY(100%)", opacity: "0" },
+          "100%": { transform: "translateY(0)", opacity: "1" },
         },
       },
       animation: {
         wiggle: "wiggle 0.35s ease-in-out infinite",
+        shimmer: "shimmer 3s ease-in-out infinite",
+        "glow-pulse": "glow-pulse 4s ease-in-out infinite",
+        float: "float 6s ease-in-out infinite",
+        "float-slow": "float-slow 8s ease-in-out infinite",
+        "border-glow": "border-glow 3s ease-in-out infinite",
+        "slide-up": "slide-up 0.6s ease-out",
       },
     },
   },

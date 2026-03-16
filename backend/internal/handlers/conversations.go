@@ -138,6 +138,16 @@ func DeleteConversation(pool *pgxpool.Pool) http.HandlerFunc {
 		}
 		defer tx.Rollback(r.Context())
 
+		// Verify conversation belongs to this agent before deleting anything
+		var exists bool
+		err = tx.QueryRow(r.Context(),
+			`SELECT EXISTS(SELECT 1 FROM conversations WHERE id = $1)`, id,
+		).Scan(&exists)
+		if err != nil || !exists {
+			respondError(w, http.StatusNotFound, "conversation not found")
+			return
+		}
+
 		// Delete messages first, then conversation
 		_, err = tx.Exec(r.Context(), `DELETE FROM messages WHERE conversation_id = $1`, id)
 		if err != nil {
@@ -145,13 +155,9 @@ func DeleteConversation(pool *pgxpool.Pool) http.HandlerFunc {
 			return
 		}
 
-		tag, err := tx.Exec(r.Context(), `DELETE FROM conversations WHERE id = $1`, id)
+		_, err = tx.Exec(r.Context(), `DELETE FROM conversations WHERE id = $1`, id)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "delete failed")
-			return
-		}
-		if tag.RowsAffected() == 0 {
-			respondError(w, http.StatusNotFound, "conversation not found")
 			return
 		}
 

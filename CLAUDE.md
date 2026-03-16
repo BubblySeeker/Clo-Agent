@@ -19,7 +19,7 @@ Frontend (Next.js 14, :3000) → Backend (Go/Chi, :8080) → PostgreSQL 15 + pgv
 
 The Go backend is the single entry point for the frontend. AI requests are proxied from Go → Python AI service. The frontend never talks to the AI service directly.
 
-**Note:** `axios` is installed but unused — all API calls use native `fetch` via `src/lib/api/client.ts`. `shadcn` CLI is installed but only one component exists (`button.tsx`). `langchain` is in requirements.txt but not actively used.
+**Note:** `shadcn` CLI is installed but only one component exists (`button.tsx`). All API calls use native `fetch` via `src/lib/api/client.ts`.
 
 ## Current Implementation Status
 
@@ -31,13 +31,13 @@ The Go backend is the single entry point for the frontend. AI requests are proxi
 | Deals CRUD | **DONE** | Full create/edit/delete with stage management |
 | Pipeline Kanban | **DONE** | Native HTML drag-drop (not @dnd-kit) |
 | Activities (log, list per contact, global feed) | **DONE** | All types: call/email/note/showing/task |
-| Dashboard (metrics, charts, activity feed) | **PARTIAL** | Widgets render with real data; customization mode (dnd-kit drag/reorder) exists but layout save not wired |
+| Dashboard (metrics, charts, activity feed) | **DONE** | Widgets render with real data; customization mode with layout save/load via API |
 | AI Chat Bubble (floating, global) | **DONE** | SSE streaming, tool call indicators, confirmation cards, contact-scoped |
 | AI Chat Full Page (`/dashboard/chat`) | **DONE** | Conversation list, delete, rename, streaming |
-| AI Tools (19 total: 10 read, 9 write) | **DONE** | All execute against real DB |
+| AI Tools (23 total: 11 read, 12 write) | **DONE** | All execute against real DB |
 | AI Profile Generation | **DONE** | Backend endpoint works, no frontend UI tab |
 | Analytics | **PARTIAL** | Bar charts for pipeline/activities/contacts; missing funnel, time-to-close |
-| Tasks Page | **STUB** | Hardcoded mock data, not connected to activities API |
+| Tasks Page | **DONE** | Full-stack with DB columns (due_date, priority, completed_at), API endpoints, and AI tools |
 | Workflows Page | **STUB** | Hardcoded mock data, no backend support |
 | Settings Page | **STUB** | UI renders but nothing persists (commission, notifications, integrations all hardcoded) |
 | Notifications | **STUB** | Hardcoded array in dashboard layout, no backend |
@@ -51,7 +51,7 @@ The Go backend is the single entry point for the frontend. AI requests are proxi
 
 ## Database Schema
 
-10 tables in `backend/migrations/001_init.sql`. 4 migrations total:
+10 tables in `backend/migrations/001_init.sql`. 5 migrations total:
 
 | Migration | What it does |
 |-----------|-------------|
@@ -59,6 +59,7 @@ The Go backend is the single entry point for the frontend. AI requests are proxi
 | `002_updates.sql` | `users.dashboard_layout JSONB`, `conversations.contact_id` nullable |
 | `003_tool_calls.sql` | `messages.tool_calls JSONB` |
 | `004_conversation_title.sql` | `conversations.title TEXT` |
+| `005_task_fields.sql` | `activities.due_date DATE`, `activities.priority TEXT`, `activities.completed_at TIMESTAMPTZ` |
 
 | Table | Purpose | Key columns |
 |-------|---------|-------------|
@@ -67,7 +68,7 @@ The Go backend is the single entry point for the frontend. AI requests are proxi
 | `buyer_profiles` | Buyer preferences (1:1 with contact) | contact_id (UNIQUE), budget_min/max, bedrooms, bathrooms, locations[], must_haves[], deal_breakers[], property_type, pre_approved, timeline |
 | `deal_stages` | Pipeline columns (7 seeded) | name, position, color — Lead, Contacted, Touring, Offer, Under Contract, Closed, Lost |
 | `deals` | Pipeline cards | contact_id, agent_id, stage_id, title, value, notes |
-| `activities` | Calls, emails, notes, showings, tasks | contact_id, deal_id (optional), agent_id, type, body |
+| `activities` | Calls, emails, notes, showings, tasks | contact_id, deal_id (optional), agent_id, type, body, due_date (tasks), priority (tasks), completed_at (tasks) |
 | `conversations` | AI chat threads | contact_id (nullable), agent_id, title |
 | `messages` | Messages in conversations | conversation_id, role (user/assistant/system), content, tool_calls (JSONB) |
 | `ai_profiles` | AI-generated contact summaries | contact_id (UNIQUE), summary |
@@ -151,9 +152,9 @@ GET /api/analytics/contacts         — source breakdown, new this month
 
 ## AI Agent Tools
 
-19 tools total. All execute directly against the database (not through Go backend).
+23 tools total. All execute directly against the database (not through Go backend).
 
-### Read Tools (10 — execute immediately)
+### Read Tools (11 — execute immediately)
 | Tool | Inputs | Returns |
 |------|--------|---------|
 | `get_dashboard_summary` | none | total_contacts, active_deals, pipeline_value, recent_activities_7d, closed_this_month |
@@ -166,8 +167,9 @@ GET /api/analytics/contacts         — source breakdown, new this month
 | `get_buyer_profile` | contact_id | buyer preferences or 404 |
 | `get_all_activities` | type?, limit? | activities across all contacts |
 | `get_analytics` | none | pipeline_by_stage, activity_counts, contact_sources |
+| `get_overdue_tasks` | limit? | tasks past due date and not completed |
 
-### Write Tools (9 — require user confirmation)
+### Write Tools (12 — require user confirmation)
 | Tool | Required Inputs | Notes |
 |------|----------------|-------|
 | `create_contact` | first_name, last_name | optional: email, phone, source |
@@ -179,6 +181,9 @@ GET /api/analytics/contacts         — source breakdown, new this month
 | `delete_deal` | deal_id | |
 | `create_buyer_profile` | contact_id | all profile fields optional |
 | `update_buyer_profile` | contact_id | partial update |
+| `create_task` | body, due_date | optional: contact_id, priority |
+| `complete_task` | task_id | sets completed_at to NOW() |
+| `reschedule_task` | task_id, new_due_date | updates due_date |
 
 ### Pending Actions
 Write tools use an **in-memory dict** (`pending_actions` in `tools.py`). When a write tool is called, it queues a confirmation and sends a `confirmation` SSE event to the frontend. User clicks Confirm → `POST /ai/confirm` → action executes.
@@ -209,7 +214,7 @@ Write tools use an **in-memory dict** (`pending_actions` in `tools.py`). When a 
 │   │   │       ├── chat/page.tsx                 # Full-page AI chat
 │   │   │       ├── activities/page.tsx           # Global activity feed
 │   │   │       ├── analytics/page.tsx            # Charts
-│   │   │       ├── tasks/page.tsx                # STUB — mock data
+│   │   │       ├── tasks/page.tsx                # Tasks (full-stack)
 │   │   │       ├── settings/page.tsx             # STUB — no persistence
 │   │   │       └── workflows/page.tsx            # STUB — mock data
 │   │   ├── components/
@@ -224,7 +229,7 @@ Write tools use an **in-memory dict** (`pending_actions` in `tools.py`). When a 
 │   │   │   ├── api/activities.ts                 # Activity API functions
 │   │   │   ├── api/conversations.ts              # AI chat + SSE streaming
 │   │   │   ├── api/dashboard.ts                  # Dashboard summary + layout
-│   │   │   ├── axios.ts                          # UNUSED — created but never imported
+│   │   │   ├── ai-chat-helpers.ts                # Shared tool labels, confirm labels, formatPreview
 │   │   │   └── utils.ts
 │   │   ├── store/ui-store.ts                     # Zustand (sidebar, chat state)
 │   │   └── middleware.ts                         # Clerk auth routing
@@ -266,11 +271,11 @@ No new backend code needed — these endpoints already exist.
 
 1. **Buyer Profile tab** on contact detail page — `GET/POST/PATCH /api/contacts/{id}/buyer-profile`
 2. **AI Profile tab** on contact detail page — `GET /api/contacts/{id}/ai-profile`, `POST .../regenerate`
-3. **Dashboard widget customization** — save/load via `PUT/GET /api/dashboard/layout`
+3. ~~**Dashboard widget customization**~~ — **DONE** (commit `0f9d9d5`)
 4. **Analytics page** — complete remaining charts (funnel, time-to-close) using existing endpoints
 
 ### Phase B: Replace Stubs with Real Implementations
-1. **Tasks page** — connect to `GET /api/activities` with `?type=task`, remove hardcoded mock data
+1. ~~**Tasks page**~~ — **DONE** (commit `f923cf8`)
 2. **Notifications** — build backend notification system, replace hardcoded data in layout
 3. **Settings page** — wire save handlers for commission, pipeline stages, notification preferences
 
@@ -289,6 +294,32 @@ No new backend code needed — these endpoints already exist.
 2. Responsive design improvements
 3. Loading states, empty states, error states
 4. Marketing pages substance
+
+## gstack Skills
+
+Use the `/browse` skill from gstack for all web browsing tasks. Never use `mcp__claude-in-chrome__*` tools directly.
+
+Available gstack skills:
+- `/plan-ceo-review` — CEO-level strategic plan review
+- `/plan-eng-review` — Engineering plan review
+- `/review` — Code review
+- `/ship` — Ship/deploy workflow
+- `/browse` — Web browsing (use this instead of mcp chrome tools)
+- `/qa` — Quality assurance testing
+- `/qa-only` — QA-only mode (no code changes)
+- `/setup-browser-cookies` — Configure browser cookies for browsing
+- `/retro` — Retrospective analysis
+- `/document-release` — Document a release
+- `/gstack-upgrade` — Upgrade gstack to latest version
+
+### gstack Setup (for new contributors)
+After cloning the repo, run:
+```bash
+# Install bun if not already installed
+curl -fsSL https://bun.sh/install | bash
+# Build the browse binary and install Playwright Chromium
+cd .claude/skills/gstack && ./setup
+```
 
 ## Backend Patterns
 

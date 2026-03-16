@@ -219,6 +219,23 @@ async def run_agent(
 
             tool_calls_log.append({"tool": tool_name, "input": tool_input})
 
+        # If any write tool was queued for confirmation, stop the loop.
+        # Don't feed "pending_confirmation" back to Claude — it would try to
+        # work around the pending state and create duplicates.
+        has_confirmation = any(
+            isinstance(r.get("content"), str) and "pending_confirmation" in r["content"]
+            for r in tool_results
+        )
+        if has_confirmation:
+            # Stream a brief note so the user sees something while confirming
+            note = "Please confirm or cancel the action above."
+            final_text = note
+            for token in re.split(r"(\s+)", note):
+                if token:
+                    yield sse({"type": "text", "content": token})
+                    await asyncio.sleep(0)
+            break
+
         # Add assistant turn + tool results to message history
         messages.append({"role": "assistant", "content": response.content})
         messages.append({"role": "user", "content": tool_results})

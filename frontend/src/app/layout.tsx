@@ -1,10 +1,18 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { DM_Sans, Sora } from "next/font/google";
 import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
 import { Providers } from "@/components/shared/providers";
 
-const inter = Inter({ subsets: ["latin"] });
+const dmSans = DM_Sans({
+  subsets: ["latin"],
+  variable: "--font-dm-sans",
+});
+
+const sora = Sora({
+  subsets: ["latin"],
+  variable: "--font-sora",
+});
 
 export const metadata: Metadata = {
   title: "CloAgent",
@@ -24,7 +32,7 @@ export default function RootLayout({
       afterSignUpUrl="/dashboard"
     >
       <html lang="en">
-        <body className={inter.className}>
+        <body className={`${dmSans.variable} ${sora.variable} ${dmSans.className}`}>
           <Providers>{children}</Providers>
         </body>
       </html>

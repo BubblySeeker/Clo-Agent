@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
@@ -105,25 +106,31 @@ func GetDashboardSummary(pool *pgxpool.Pool) http.HandlerFunc {
 		}
 
 		// Total contacts
-		tx.QueryRow(r.Context(), `SELECT COUNT(*) FROM contacts`).Scan(&summary.TotalContacts)
+		if err := tx.QueryRow(r.Context(), `SELECT COUNT(*) FROM contacts`).Scan(&summary.TotalContacts); err != nil {
+			log.Printf("dashboard: total contacts query failed: %v", err)
+		}
 
 		// Active deals (not Closed or Lost)
-		tx.QueryRow(r.Context(),
+		if err := tx.QueryRow(r.Context(),
 			`SELECT COUNT(*), COALESCE(SUM(COALESCE(d.value, 0)), 0)
 			 FROM deals d
 			 JOIN deal_stages ds ON ds.id = d.stage_id
 			 WHERE ds.name NOT IN ('Closed', 'Lost')`,
-		).Scan(&summary.ActiveDeals, &summary.PipelineValue)
+		).Scan(&summary.ActiveDeals, &summary.PipelineValue); err != nil {
+			log.Printf("dashboard: active deals query failed: %v", err)
+		}
 
 		// Closed this month
 		now := time.Now()
 		monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-		tx.QueryRow(r.Context(),
+		if err := tx.QueryRow(r.Context(),
 			`SELECT COUNT(*) FROM deals d
 			 JOIN deal_stages ds ON ds.id = d.stage_id
 			 WHERE ds.name = 'Closed' AND d.updated_at >= $1`,
 			monthStart,
-		).Scan(&summary.ClosedThisMonth)
+		).Scan(&summary.ClosedThisMonth); err != nil {
+			log.Printf("dashboard: closed this month query failed: %v", err)
+		}
 
 		// Recent activity (last 15)
 		rows, err := tx.Query(r.Context(),
@@ -186,42 +193,52 @@ func GetDashboardSummary(pool *pgxpool.Pool) http.HandlerFunc {
 
 		// ── KPI Trends ──────────────────────────────────────────────────
 		// Previous month's total contacts (created before this month)
-		tx.QueryRow(r.Context(),
+		if err := tx.QueryRow(r.Context(),
 			`SELECT COUNT(*) FROM contacts WHERE created_at < $1`, monthStart,
-		).Scan(&summary.Trends.PrevTotalContacts)
+		).Scan(&summary.Trends.PrevTotalContacts); err != nil {
+			log.Printf("dashboard: prev total contacts query failed: %v", err)
+		}
 
 		// Previous month's active deals & pipeline value
-		tx.QueryRow(r.Context(),
+		if err := tx.QueryRow(r.Context(),
 			`SELECT COUNT(*), COALESCE(SUM(COALESCE(d.value, 0)), 0)
 			 FROM deals d
 			 JOIN deal_stages ds ON ds.id = d.stage_id
 			 WHERE ds.name NOT IN ('Closed', 'Lost') AND d.created_at < $1`, monthStart,
-		).Scan(&summary.Trends.PrevActiveDeals, &summary.Trends.PrevPipelineValue)
+		).Scan(&summary.Trends.PrevActiveDeals, &summary.Trends.PrevPipelineValue); err != nil {
+			log.Printf("dashboard: prev active deals query failed: %v", err)
+		}
 
 		// Previous month closed deals count & value
 		prevMonthStart := monthStart.AddDate(0, -1, 0)
-		tx.QueryRow(r.Context(),
+		if err := tx.QueryRow(r.Context(),
 			`SELECT COUNT(*), COALESCE(SUM(COALESCE(d.value, 0)), 0)
 			 FROM deals d
 			 JOIN deal_stages ds ON ds.id = d.stage_id
 			 WHERE ds.name = 'Closed' AND d.updated_at >= $1 AND d.updated_at < $2`,
 			prevMonthStart, monthStart,
-		).Scan(&summary.Trends.PrevClosedThisMonth, &summary.Trends.PrevClosedMonthValue)
+		).Scan(&summary.Trends.PrevClosedThisMonth, &summary.Trends.PrevClosedMonthValue); err != nil {
+			log.Printf("dashboard: prev closed deals query failed: %v", err)
+		}
 
 		// This month's closed deal value
-		tx.QueryRow(r.Context(),
+		if err := tx.QueryRow(r.Context(),
 			`SELECT COALESCE(SUM(COALESCE(d.value, 0)), 0)
 			 FROM deals d
 			 JOIN deal_stages ds ON ds.id = d.stage_id
 			 WHERE ds.name = 'Closed' AND d.updated_at >= $1`, monthStart,
-		).Scan(&summary.Trends.ClosedThisMonthValue)
+		).Scan(&summary.Trends.ClosedThisMonthValue); err != nil {
+			log.Printf("dashboard: closed month value query failed: %v", err)
+		}
 
 		// ── Lead Sources ────────────────────────────────────────────────
 		summary.LeadSources = make([]LeadSourceItem, 0)
 		leadRows, err := tx.Query(r.Context(),
 			`SELECT COALESCE(source, 'Unknown'), COUNT(*) FROM contacts GROUP BY 1 ORDER BY 2 DESC`,
 		)
-		if err == nil {
+		if err != nil {
+			log.Printf("dashboard: lead sources query failed: %v", err)
+		} else {
 			defer leadRows.Close()
 			for leadRows.Next() {
 				var item LeadSourceItem
@@ -242,7 +259,9 @@ func GetDashboardSummary(pool *pgxpool.Pool) http.HandlerFunc {
 			 ORDER BY a.completed_at IS NOT NULL, a.due_date ASC NULLS LAST, a.created_at DESC
 			 LIMIT 10`,
 		)
-		if err == nil {
+		if err != nil {
+			log.Printf("dashboard: tasks query failed: %v", err)
+		} else {
 			defer taskRows.Close()
 			for taskRows.Next() {
 				var item TaskItem
@@ -274,7 +293,9 @@ func GetDashboardSummary(pool *pgxpool.Pool) http.HandlerFunc {
 			 GROUP BY m ORDER BY m`,
 			slots[0].key,
 		)
-		if err == nil {
+		if err != nil {
+			log.Printf("dashboard: monthly revenue query failed: %v", err)
+		} else {
 			defer revRows.Close()
 			for revRows.Next() {
 				var mTime time.Time
@@ -300,7 +321,9 @@ func GetDashboardSummary(pool *pgxpool.Pool) http.HandlerFunc {
 			 FROM contacts c
 			 ORDER BY c.created_at DESC LIMIT 10`,
 		)
-		if err == nil {
+		if err != nil {
+			log.Printf("dashboard: speed to lead query failed: %v", err)
+		} else {
 			defer stlRows.Close()
 			for stlRows.Next() {
 				var item SpeedToLeadItem

@@ -873,7 +873,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!layoutData?.layout) return;
-    const saved = layoutData.layout as { widgets?: LayoutItem[]; kpiOrder?: string[]; hiddenKpis?: string[] };
+    const saved = layoutData.layout;
     if (saved.widgets) {
       setLayout(saved.widgets); setSavedLayout(saved.widgets);
       localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(saved.widgets));

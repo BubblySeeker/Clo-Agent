@@ -29,36 +29,48 @@ export function MarketingNav() {
 
   return (
     <nav
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        isScrolled ? "bg-[#0F1E36]/95 backdrop-blur-lg shadow-lg" : "bg-transparent"
+      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
+        isScrolled
+          ? "bg-[#070B14]/80 backdrop-blur-2xl shadow-[0_1px_0_rgba(255,255,255,0.05)] border-b border-white/[0.04]"
+          : "bg-transparent"
       }`}
     >
       <div className="max-w-7xl mx-auto px-6 py-4">
         <div className="flex items-center justify-between">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-3 group">
-            <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110"
-              style={{ backgroundColor: "#0EA5E9" }}
+            <motion.div
+              whileHover={{ scale: 1.08, rotate: -3 }}
+              transition={{ type: "spring", stiffness: 400, damping: 15 }}
+              className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0EA5E9] to-[#0284C7] flex items-center justify-center shadow-lg shadow-[#0EA5E9]/20"
             >
               <Building2 size={20} className="text-white" />
-            </div>
-            <span className="text-xl font-semibold text-white">CloAgent</span>
+            </motion.div>
+            <span className="text-xl font-[family-name:var(--font-sora)] font-semibold text-white tracking-tight">
+              CloAgent
+            </span>
           </Link>
 
           {/* Desktop Nav */}
-          <div className="hidden md:flex items-center gap-8">
+          <div className="hidden md:flex items-center gap-1">
             {navLinks.map((link) => {
               const isActive = link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
               return (
                 <Link
                   key={link.href}
                   href={link.href}
-                  className={`text-sm transition-colors ${
-                    isActive ? "text-[#0EA5E9]" : "text-white/80 hover:text-white"
-                  }`}
+                  className="relative px-4 py-2 text-sm transition-colors rounded-lg group"
                 >
-                  {link.label}
+                  <span className={isActive ? "text-white" : "text-white/60 group-hover:text-white/90"}>
+                    {link.label}
+                  </span>
+                  {isActive && (
+                    <motion.div
+                      layoutId="nav-indicator"
+                      className="absolute bottom-0 left-2 right-2 h-[2px] bg-gradient-to-r from-transparent via-[#0EA5E9] to-transparent"
+                      transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                    />
+                  )}
                 </Link>
               );
             })}
@@ -72,7 +84,7 @@ export function MarketingNav() {
 
           {/* Mobile Menu Button */}
           <button
-            className="md:hidden text-white p-2"
+            className="md:hidden text-white/70 hover:text-white p-2 transition-colors"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           >
             {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
@@ -86,25 +98,34 @@ export function MarketingNav() {
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
               className="md:hidden overflow-hidden"
             >
-              <div className="flex flex-col gap-4 pt-6 pb-4">
-                {navLinks.map((link) => {
+              <div className="flex flex-col gap-1 pt-6 pb-4">
+                {navLinks.map((link, index) => {
                   const isActive = link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
                   return (
-                    <Link
+                    <motion.div
                       key={link.href}
-                      href={link.href}
-                      onClick={() => setMobileMenuOpen(false)}
-                      className={`text-sm transition-colors ${
-                        isActive ? "text-[#0EA5E9]" : "text-white/80 hover:text-white"
-                      }`}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.05 }}
                     >
-                      {link.label}
-                    </Link>
+                      <Link
+                        href={link.href}
+                        onClick={() => setMobileMenuOpen(false)}
+                        className={`block px-4 py-2.5 rounded-lg text-sm transition-colors ${
+                          isActive
+                            ? "text-white bg-white/[0.06]"
+                            : "text-white/60 hover:text-white hover:bg-white/[0.04]"
+                        }`}
+                      >
+                        {link.label}
+                      </Link>
+                    </motion.div>
                   );
                 })}
-                <div className="flex flex-col gap-2 pt-4 border-t border-white/10">
+                <div className="flex flex-col gap-2 pt-4 mt-2 border-t border-white/[0.06]">
                   <LinkButton href="/sign-in" variant="ghost" className="w-full">Login</LinkButton>
                   <LinkButton href="/sign-up" variant="primary" className="w-full">Get Started</LinkButton>
                 </div>
