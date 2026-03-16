@@ -1,0 +1,30 @@
+{
+  "date": "2026-03-16",
+  "window": "7d",
+  "metrics": {
+    "commits": 27,
+    "contributors": 2,
+    "prs_merged": 1,
+    "insertions": 25446,
+    "deletions": 3117,
+    "net_loc": 22329,
+    "test_loc": 109,
+    "test_ratio": 0.004,
+    "active_days": 4,
+    "sessions": 11,
+    "deep_sessions": 1,
+    "avg_session_minutes": 11,
+    "loc_per_session_hour": 12700,
+    "feat_pct": 0.18,
+    "fix_pct": 0.09,
+    "peak_hour": 16,
+    "ai_assisted_commits": 9
+  },
+  "authors": {
+    "StubblySeeker": { "commits": 10, "insertions": 5885, "deletions": 1352, "test_ratio": 0.0, "top_area": "frontend/" },
+    "MatthewFaust": { "commits": 12, "insertions": 19561, "deletions": 1765, "test_ratio": 0.0, "top_area": "frontend/" }
+  },
+  "version_range": ["0.0.0", "0.0.0"],
+  "streak_days": 3,
+  "tweetable": "Week of Mar 9: 27 commits (2 contributors), 25.4k LOC, <1% tests, 1 PR, peak: 4pm PT | Streak: 3d"
+}

@@ -101,13 +101,14 @@ In the [Clerk dashboard](https://dashboard.clerk.com), add `http://localhost:300
 | `/sign-up` | Account creation with email verification |
 | `/dashboard` | Home — KPI cards, pipeline snapshot, activity feed, AI insights |
 | `/dashboard/contacts` | Contact list with search and source filter |
-| `/dashboard/contacts/[id]` | Contact detail — info, buyer profile, activity timeline |
+| `/dashboard/contacts/[id]` | Contact detail — overview, activities, deals, buyer profile, AI profile tabs |
 | `/dashboard/pipeline` | Kanban board with drag-and-drop deal cards |
 | `/dashboard/chat` | Full-page AI assistant with conversation history |
 | `/dashboard/activities` | Global activity feed across all contacts |
 | `/dashboard/tasks` | Task list filtered from activities |
-| `/dashboard/analytics` | Pipeline funnel, activity charts, source breakdown |
-| `/dashboard/settings` | Profile, notifications, pipeline stages, integrations |
+| `/dashboard/analytics` | KPI cards, pipeline/activities/contacts charts, stage detail table |
+| `/dashboard/settings` | Profile, pipeline stages (from API), commission (localStorage), integrations/notifications ("Coming Soon") |
+| `/dashboard/workflows` | Coming Soon — workflow automation template previews |
 
 A floating AI chat bubble is available on every page (bottom-right corner).
 
@@ -177,9 +178,9 @@ GET /api/analytics/contacts    — source breakdown, growth
 
 The AI assistant uses Claude with tool-calling. It can read your CRM data and take write actions (with user confirmation).
 
-**Read tools** (execute immediately): `get_dashboard_summary`, `search_contacts`, `get_contact_details`, `get_contact_activities`, `list_deals`, `get_deal_stages`, `get_analytics`
+**Read tools** (11, execute immediately): `get_dashboard_summary`, `search_contacts`, `get_contact_details`, `get_contact_activities`, `list_deals`, `get_deal`, `get_deal_stages`, `get_buyer_profile`, `get_all_activities`, `get_analytics`, `get_overdue_tasks`
 
-**Write tools** (require confirmation card in UI): `create_contact`, `update_contact`, `log_activity`, `create_deal`, `update_deal`
+**Write tools** (12, require confirmation card in UI): `create_contact`, `update_contact`, `delete_contact`, `log_activity`, `create_deal`, `update_deal`, `delete_deal`, `create_buyer_profile`, `update_buyer_profile`, `create_task`, `complete_task`, `reschedule_task`
 
 Conversations are general by default. On a contact detail page, the chat bubble auto-scopes to that contact.
 
@@ -208,6 +209,8 @@ Migrations in `backend/migrations/` run automatically on startup:
 - `001_init.sql` — full schema, RLS policies, deal stage seeds
 - `002_updates.sql` — dashboard layout column, nullable contact in conversations
 - `003_tool_calls.sql` — tool call audit column on messages
+- `004_conversation_title.sql` — conversation title column
+- `005_task_fields.sql` — task due_date, priority, completed_at columns
 
 ---
 

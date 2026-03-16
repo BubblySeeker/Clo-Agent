@@ -27,7 +27,7 @@ The Go backend is the single entry point for the frontend. AI requests are proxi
 |---------|--------|-------|
 | Auth (Clerk sign-in/up, JWT, user sync) | **DONE** | Full flow working |
 | Contacts CRUD (list, create, edit, delete) | **DONE** | Search, source filter, pagination |
-| Contact Detail (overview, activities, deals tabs) | **DONE** | Missing: Buyer Profile tab, AI Profile tab |
+| Contact Detail (overview, activities, deals, buyer profile, AI profile tabs) | **DONE** | All 5 tabs working |
 | Deals CRUD | **DONE** | Full create/edit/delete with stage management |
 | Pipeline Kanban | **DONE** | Native HTML drag-drop (not @dnd-kit) |
 | Activities (log, list per contact, global feed) | **DONE** | All types: call/email/note/showing/task |
@@ -35,16 +35,16 @@ The Go backend is the single entry point for the frontend. AI requests are proxi
 | AI Chat Bubble (floating, global) | **DONE** | SSE streaming, tool call indicators, confirmation cards, contact-scoped |
 | AI Chat Full Page (`/dashboard/chat`) | **DONE** | Conversation list, delete, rename, streaming |
 | AI Tools (23 total: 11 read, 12 write) | **DONE** | All execute against real DB |
-| AI Profile Generation | **DONE** | Backend endpoint works, no frontend UI tab |
-| Analytics | **PARTIAL** | Bar charts for pipeline/activities/contacts; missing funnel, time-to-close |
+| AI Profile Generation | **DONE** | Backend endpoint + frontend tab on contact detail |
+| Analytics | **DONE** | KPI cards, pipeline/activities/contacts charts, stage detail table |
 | Tasks Page | **DONE** | Full-stack with DB columns (due_date, priority, completed_at), API endpoints, and AI tools |
-| Workflows Page | **STUB** | Hardcoded mock data, no backend support |
-| Settings Page | **STUB** | UI renders but nothing persists (commission, notifications, integrations all hardcoded) |
-| Notifications | **STUB** | Hardcoded array in dashboard layout, no backend |
+| Workflows Page | **STUB** | Honest "Coming Soon" page with template previews, no backend support |
+| Settings Page | **PARTIAL** | Pipeline stages from real API (read-only), commission saves to localStorage, integrations/notifications labeled "Coming Soon" |
+| Notifications | **DONE** | Real recent activities from API (replaces former hardcoded array) |
 | Marketing Pages | **DONE** | Home, about, features, pricing, team, mission |
 | Buyer Profile Backend | **DONE** | GET/POST/PATCH endpoints exist, AI tools exist |
-| Buyer Profile Frontend | **MISSING** | No tab on contact detail page |
-| AI Profile Frontend | **MISSING** | No tab on contact detail page |
+| Buyer Profile Frontend | **DONE** | Tab on contact detail page with create/edit forms |
+| AI Profile Frontend | **DONE** | Tab on contact detail page with summary + regenerate |
 | Semantic Search / Embeddings | **MISSING** | Table + index exist, no embedding generation or search endpoint |
 | Communication Page | **MISSING** | Route doesn't exist |
 | +New Quick Action | **MISSING** | Button not in top bar |
@@ -94,7 +94,7 @@ PATCH  /api/contacts/{id}            — partial update
 DELETE /api/contacts/{id}            — hard delete (cascades)
 ```
 
-### Buyer Profiles (backend exists, frontend doesn't call)
+### Buyer Profiles
 ```
 GET   /api/contacts/{id}/buyer-profile   — get (404 if none)
 POST  /api/contacts/{id}/buyer-profile   — create (409 if exists)
@@ -135,8 +135,8 @@ POST   /api/ai/conversations/{id}/confirm     — confirm pending write action
 
 ### AI Profiles (proxied Go → Python)
 ```
-GET  /api/contacts/{id}/ai-profile           — get summary (frontend doesn't call)
-POST /api/contacts/{id}/ai-profile/regenerate — regenerate (frontend doesn't call)
+GET  /api/contacts/{id}/ai-profile           — get summary
+POST /api/contacts/{id}/ai-profile/regenerate — regenerate
 ```
 
 ### Analytics
@@ -215,8 +215,8 @@ Write tools use an **in-memory dict** (`pending_actions` in `tools.py`). When a 
 │   │   │       ├── activities/page.tsx           # Global activity feed
 │   │   │       ├── analytics/page.tsx            # Charts
 │   │   │       ├── tasks/page.tsx                # Tasks (full-stack)
-│   │   │       ├── settings/page.tsx             # STUB — no persistence
-│   │   │       └── workflows/page.tsx            # STUB — mock data
+│   │   │       ├── settings/page.tsx             # PARTIAL — stages from API, commission localStorage, rest "Coming Soon"
+│   │   │       └── workflows/page.tsx            # STUB — honest "Coming Soon" with template previews
 │   │   ├── components/
 │   │   │   ├── shared/AIChatBubble.tsx           # Floating chat bubble
 │   │   │   ├── shared/providers.tsx              # TanStack Query provider
@@ -243,7 +243,7 @@ Write tools use an **in-memory dict** (`pending_actions` in `tools.py`). When a 
 │   │   ├── database/rls.go                       # BeginWithRLS helper
 │   │   ├── handlers/                             # 12 handler files (contacts, deals, etc.)
 │   │   └── middleware/                            # auth.go, cors.go, user_sync.go
-│   ├── migrations/                               # 001-004 SQL files
+│   ├── migrations/                               # 001-005 SQL files
 │   └── go.mod
 │
 ├── ai-service/
@@ -251,7 +251,7 @@ Write tools use an **in-memory dict** (`pending_actions` in `tools.py`). When a 
 │   │   ├── main.py                               # FastAPI app
 │   │   ├── config.py                             # Env vars
 │   │   ├── database.py                           # psycopg2 pool + async wrapper
-│   │   ├── tools.py                              # 19 tools + pending_actions
+│   │   ├── tools.py                              # 23 tools + pending_actions
 │   │   ├── routes/chat.py                        # POST /ai/messages, /ai/confirm
 │   │   ├── routes/profiles.py                    # POST /ai/profiles/generate
 │   │   ├── routes/health.py                      # GET /health
@@ -269,15 +269,15 @@ Focus: **make implementations work** before any design polish.
 ### Phase A: Wire Up Existing Backend to Frontend
 No new backend code needed — these endpoints already exist.
 
-1. **Buyer Profile tab** on contact detail page — `GET/POST/PATCH /api/contacts/{id}/buyer-profile`
-2. **AI Profile tab** on contact detail page — `GET /api/contacts/{id}/ai-profile`, `POST .../regenerate`
+1. ~~**Buyer Profile tab**~~ — **DONE** (commit `48708b7`)
+2. ~~**AI Profile tab**~~ — **DONE** (commit `48708b7`)
 3. ~~**Dashboard widget customization**~~ — **DONE** (commit `0f9d9d5`)
-4. **Analytics page** — complete remaining charts (funnel, time-to-close) using existing endpoints
+4. ~~**Analytics page**~~ — **DONE** (commit `48708b7`, fixed double `/api` prefix bug)
 
 ### Phase B: Replace Stubs with Real Implementations
 1. ~~**Tasks page**~~ — **DONE** (commit `f923cf8`)
-2. **Notifications** — build backend notification system, replace hardcoded data in layout
-3. **Settings page** — wire save handlers for commission, pipeline stages, notification preferences
+2. ~~**Notifications**~~ — **DONE** (commit `48708b7`, real activities from API, no backend notification system yet)
+3. **Settings page** — partially done: pipeline stages read from API, commission saves to localStorage. Still needs: backend persistence for commission, notification preferences
 
 ### Phase C: Missing Features
 1. **Semantic search** — generate embeddings on contact/activity creation, wire up search endpoint
