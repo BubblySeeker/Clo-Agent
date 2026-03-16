@@ -110,6 +110,10 @@ func run() error {
 		r.Post("/api/contacts/{id}/activities", handlers.CreateActivity(pool))
 		r.Get("/api/activities", handlers.ListAllActivities(pool))
 		r.Post("/api/activities", handlers.CreateGeneralActivity(pool))
+		r.Patch("/api/activities/{id}", handlers.UpdateActivity(pool))
+
+		// Tasks
+		r.Get("/api/tasks", handlers.ListTasks(pool))
 
 		// AI Profile
 		r.Get("/api/contacts/{id}/ai-profile", handlers.GetAIProfile(pool))

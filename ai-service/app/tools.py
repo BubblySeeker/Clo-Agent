@@ -161,6 +161,54 @@ TOOL_DEFINITIONS = [
             "required": ["deal_id"],
         },
     },
+    {
+        "name": "get_overdue_tasks",
+        "description": "Get all tasks past their due date and not yet completed.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "description": "Max results (default 20)"},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "create_task",
+        "description": "Create a new task with due date and priority. Requires confirmation.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "contact_id": {"type": "string"},
+                "body": {"type": "string", "description": "Task description"},
+                "due_date": {"type": "string", "description": "YYYY-MM-DD"},
+                "priority": {"type": "string", "enum": ["high", "medium", "low"]},
+            },
+            "required": ["body", "due_date"],
+        },
+    },
+    {
+        "name": "complete_task",
+        "description": "Mark a task as completed. Requires confirmation.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "task_id": {"type": "string", "description": "Task UUID"},
+            },
+            "required": ["task_id"],
+        },
+    },
+    {
+        "name": "reschedule_task",
+        "description": "Change a task's due date. Requires confirmation.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "task_id": {"type": "string"},
+                "new_due_date": {"type": "string", "description": "YYYY-MM-DD"},
+            },
+            "required": ["task_id", "new_due_date"],
+        },
+    },
 ]
 
 READ_TOOLS = {
@@ -171,6 +219,7 @@ READ_TOOLS = {
     "list_deals",
     "get_deal_stages",
     "get_analytics",
+    "get_overdue_tasks",
 }
 
 WRITE_TOOLS = {
@@ -179,6 +228,9 @@ WRITE_TOOLS = {
     "log_activity",
     "create_deal",
     "update_deal",
+    "create_task",
+    "complete_task",
+    "reschedule_task",
 }
 
 # ---------------------------------------------------------------------------
@@ -200,6 +252,8 @@ async def execute_read_tool(tool_name: str, tool_input: dict, agent_id: str) -> 
         return await run_query(lambda: _get_deal_stages())
     elif tool_name == "get_analytics":
         return await run_query(lambda: _get_analytics(agent_id))
+    elif tool_name == "get_overdue_tasks":
+        return await run_query(lambda: _get_overdue_tasks(agent_id, tool_input.get("limit", 20)))
     else:
         return {"error": f"Unknown tool: {tool_name}"}
 
@@ -430,6 +484,12 @@ async def execute_write_tool(pending_id: str) -> dict:
         return await run_query(lambda: _create_deal(agent_id, inp))
     elif tool_name == "update_deal":
         return await run_query(lambda: _update_deal(agent_id, inp))
+    elif tool_name == "create_task":
+        return await run_query(lambda: _create_task(agent_id, inp))
+    elif tool_name == "complete_task":
+        return await run_query(lambda: _complete_task(agent_id, inp))
+    elif tool_name == "reschedule_task":
+        return await run_query(lambda: _reschedule_task(agent_id, inp))
     else:
         return {"error": f"Unknown write tool: {tool_name}"}
 
@@ -513,3 +573,63 @@ def _update_deal(agent_id: str, inp: dict) -> dict:
         )
         row = cur.fetchone()
         return {"updated": bool(row), "deal_id": deal_id}
+
+
+def _get_overdue_tasks(agent_id: str, limit: int) -> list:
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            """SELECT a.id, a.body, a.due_date, a.priority, a.created_at,
+                      c.first_name || ' ' || c.last_name AS contact_name
+               FROM activities a
+               LEFT JOIN contacts c ON c.id = a.contact_id
+               WHERE a.agent_id = %s AND a.type = 'task'
+                 AND a.due_date < CURRENT_DATE AND a.completed_at IS NULL
+               ORDER BY a.due_date ASC
+               LIMIT %s""",
+            (agent_id, limit),
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+
+def _create_task(agent_id: str, inp: dict) -> dict:
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            """INSERT INTO activities (agent_id, contact_id, type, body, due_date, priority)
+               VALUES (%s, %s, 'task', %s, %s, %s)
+               RETURNING id, body, due_date, priority, created_at""",
+            (agent_id, inp.get("contact_id"), inp["body"],
+             inp["due_date"], inp.get("priority", "medium")),
+        )
+        return dict(cur.fetchone())
+
+
+def _complete_task(agent_id: str, inp: dict) -> dict:
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            """UPDATE activities SET completed_at = NOW()
+               WHERE id = %s AND agent_id = %s AND type = 'task'
+               RETURNING id, body, completed_at""",
+            (inp["task_id"], agent_id),
+        )
+        row = cur.fetchone()
+        if not row:
+            return {"error": "Task not found"}
+        return dict(row)
+
+
+def _reschedule_task(agent_id: str, inp: dict) -> dict:
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            """UPDATE activities SET due_date = %s
+               WHERE id = %s AND agent_id = %s AND type = 'task'
+               RETURNING id, body, due_date""",
+            (inp["new_due_date"], inp["task_id"], agent_id),
+        )
+        row = cur.fetchone()
+        if not row:
+            return {"error": "Task not found"}
+        return dict(row)

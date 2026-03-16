@@ -41,11 +41,14 @@ type LeadSourceItem struct {
 }
 
 type TaskItem struct {
-	ID          string    `json:"id"`
-	ContactID   string    `json:"contact_id"`
-	ContactName string    `json:"contact_name"`
-	Body        *string   `json:"body"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID          string     `json:"id"`
+	ContactID   *string    `json:"contact_id"`
+	ContactName *string    `json:"contact_name"`
+	Body        *string    `json:"body"`
+	DueDate     *string    `json:"due_date"`
+	Priority    *string    `json:"priority"`
+	CompletedAt *time.Time `json:"completed_at"`
+	CreatedAt   time.Time  `json:"created_at"`
 }
 
 type MonthlyRevenue struct {
@@ -228,20 +231,23 @@ func GetDashboardSummary(pool *pgxpool.Pool) http.HandlerFunc {
 			}
 		}
 
-		// ── Task Activities (recent 10) ─────────────────────────────────
+		// ── Task Activities (recent 10, incomplete first) ───────────────
 		summary.Tasks = make([]TaskItem, 0)
 		taskRows, err := tx.Query(r.Context(),
-			`SELECT a.id, a.contact_id, c.first_name || ' ' || c.last_name, a.body, a.created_at
+			`SELECT a.id, a.contact_id, COALESCE(c.first_name || ' ' || c.last_name, ''),
+			        a.body, a.due_date::text, a.priority, a.completed_at, a.created_at
 			 FROM activities a
-			 JOIN contacts c ON c.id = a.contact_id
+			 LEFT JOIN contacts c ON c.id = a.contact_id
 			 WHERE a.type = 'task'
-			 ORDER BY a.created_at DESC LIMIT 10`,
+			 ORDER BY a.completed_at IS NOT NULL, a.due_date ASC NULLS LAST, a.created_at DESC
+			 LIMIT 10`,
 		)
 		if err == nil {
 			defer taskRows.Close()
 			for taskRows.Next() {
 				var item TaskItem
-				if err := taskRows.Scan(&item.ID, &item.ContactID, &item.ContactName, &item.Body, &item.CreatedAt); err == nil {
+				if err := taskRows.Scan(&item.ID, &item.ContactID, &item.ContactName, &item.Body,
+					&item.DueDate, &item.Priority, &item.CompletedAt, &item.CreatedAt); err == nil {
 					summary.Tasks = append(summary.Tasks, item)
 				}
 			}
