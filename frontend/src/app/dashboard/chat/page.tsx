@@ -2,12 +2,12 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useAuth } from "@clerk/nextjs";
-import { useSearchParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   listConversations,
   createConversation,
   getMessages,
+  deleteConversation,
   streamMessage,
   confirmToolAction,
   type SSEEvent,
@@ -52,11 +52,8 @@ const toolLabel: Record<string, string> = {
 export default function ChatPage() {
   const { getToken } = useAuth();
   const queryClient = useQueryClient();
-  const searchParams = useSearchParams();
-  const router = useRouter();
 
-  const urlConvId = searchParams.get("conv");
-  const [activeConvId, setActiveConvIdRaw] = useState<string | null>(urlConvId);
+  const [activeConvId, setActiveConvId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [hoveredConv, setHoveredConv] = useState<string | null>(null);
   const [localMessages, setLocalMessages] = useState<LocalMessage[]>([]);
@@ -64,19 +61,9 @@ export default function ChatPage() {
   const [activeToolName, setActiveToolName] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
-  const justCreatedRef = useRef(false);
+  const handleSendActiveRef = useRef(false);
 
-  // Persist activeConvId in URL
-  const setActiveConvId = useCallback((id: string | null) => {
-    setActiveConvIdRaw(id);
-    if (id) {
-      router.replace(`/dashboard/chat?conv=${id}`, { scroll: false });
-    } else {
-      router.replace("/dashboard/chat", { scroll: false });
-    }
-  }, [router]);
-
-  const { data: conversations = [] } = useQuery({
+  const { data: conversations = [], error: convsError } = useQuery({
     queryKey: ["conversations"],
     queryFn: async () => {
       const token = await getToken();
@@ -84,43 +71,58 @@ export default function ChatPage() {
     },
   });
 
-  const { isLoading: messagesLoading } = useQuery({
+  if (convsError) console.error("Failed to load conversations:", convsError);
+
+  const { data: serverMessages = [], isLoading: messagesLoading } = useQuery({
     queryKey: ["messages", activeConvId],
     queryFn: async () => {
       if (!activeConvId) return [];
       const token = await getToken();
-      const msgs = await getMessages(token!, activeConvId);
-      // Don't overwrite optimistic messages from a just-created conversation
-      if (justCreatedRef.current) {
-        justCreatedRef.current = false;
-        return msgs;
-      }
-      setLocalMessages(
-        msgs.map((m) => ({
-          id: m.id,
-          role: m.role as "user" | "assistant",
-          content: m.content,
-        }))
-      );
-      return msgs;
+      return getMessages(token!, activeConvId);
     },
-    enabled: !!activeConvId,
+    enabled: !!activeConvId && !isStreaming,
   });
+
+  const displayedMessages: LocalMessage[] = localMessages.length > 0
+    ? localMessages
+    : serverMessages.map((m) => ({
+        id: m.id,
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      }));
 
   const createConvMutation = useMutation({
     mutationFn: async () => {
       const token = await getToken();
       return createConversation(token!);
     },
-    onSuccess: () => {
+    onSuccess: (conv) => {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      if (!handleSendActiveRef.current) {
+        setActiveConvId(conv.id);
+        setLocalMessages([]);
+      }
     },
-    onError: () => {},
+    onError: () => {}, // handled in handleSend try/catch
+  });
+
+  const deleteConvMutation = useMutation({
+    mutationFn: async (convId: string) => {
+      const token = await getToken();
+      return deleteConversation(token!, convId);
+    },
+    onSuccess: (_, deletedId) => {
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      if (activeConvId === deletedId) {
+        setActiveConvId(null);
+        setLocalMessages([]);
+      }
+    },
   });
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [localMessages, isStreaming]);
+  }, [displayedMessages, isStreaming]);
 
   const handleSend = useCallback(
     async (text?: string) => {
@@ -132,28 +134,31 @@ export default function ChatPage() {
 
       // Auto-create conversation if none active
       let convId = activeConvId;
+      handleSendActiveRef.current = true;
       if (!convId) {
         try {
-          justCreatedRef.current = true;
           const conv = await createConvMutation.mutateAsync();
           convId = conv.id;
-          setActiveConvId(convId);
+          setActiveConvId(conv.id);
+          setLocalMessages([]);
         } catch {
-          justCreatedRef.current = false;
           return; // leave input intact so user can retry
         }
       }
 
       setInput("");
 
-      // Optimistic user message
+      // Seed from server messages + optimistic user msg + assistant placeholder
       const userMsgId = crypto.randomUUID();
-      setLocalMessages((prev) => [...prev, { id: userMsgId, role: "user", content: msg }]);
-
-      // Placeholder assistant message
       const assistantMsgId = crypto.randomUUID();
-      setLocalMessages((prev) => [
-        ...prev,
+      const baseMessages: LocalMessage[] = serverMessages.map((m) => ({
+        id: m.id,
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      }));
+      setLocalMessages([
+        ...baseMessages,
+        { id: userMsgId, role: "user", content: msg },
         { id: assistantMsgId, role: "assistant", content: "", isStreaming: true, toolCalls: [] },
       ]);
 
@@ -211,21 +216,27 @@ export default function ChatPage() {
         () => {
           setIsStreaming(false);
           setActiveToolName(null);
+          handleSendActiveRef.current = false;
+          queryClient.invalidateQueries({ queryKey: ["conversations"] });
+          queryClient.invalidateQueries({ queryKey: ["messages", convId] });
           setLocalMessages((prev) => {
             const msgs = [...prev];
             const last = msgs[msgs.length - 1];
             if (last && last.id === assistantMsgId) {
-              msgs[msgs.length - 1] = { ...last, isStreaming: false };
+              msgs[msgs.length - 1] = {
+                ...last,
+                isStreaming: false,
+                content: last.content || "Sorry, I couldn\u2019t generate a response. Please try again.",
+              };
             }
             return msgs;
           });
-          // Refresh conversation list so title updates from first message
-          queryClient.invalidateQueries({ queryKey: ["conversations"] });
         },
         (err) => {
           console.error("Stream error:", err);
           setIsStreaming(false);
           setActiveToolName(null);
+          handleSendActiveRef.current = false;
           setLocalMessages((prev) => {
             const msgs = [...prev];
             const last = msgs[msgs.length - 1];
@@ -241,7 +252,7 @@ export default function ChatPage() {
         }
       );
     },
-    [input, activeConvId, isStreaming, getToken, createConvMutation, queryClient, setActiveConvId]
+    [input, activeConvId, isStreaming, getToken, createConvMutation]
   );
 
   const handleConfirm = async (pendingId: string, assistantMsgId: string) => {
@@ -327,11 +338,7 @@ export default function ChatPage() {
                 }
               >
                 <p className="text-xs font-semibold text-gray-800 truncate pr-5">
-                  {conv.title
-                    ? conv.title
-                    : conv.contact_name
-                    ? `Chat — ${conv.contact_name}`
-                    : "New Chat"}
+                  {conv.title || (conv.contact_name ? `Chat — ${conv.contact_name}` : "General Chat")}
                 </p>
                 <span className="text-[10px] text-gray-400 mt-1">
                   {new Date(conv.created_at).toLocaleDateString()}
@@ -339,7 +346,10 @@ export default function ChatPage() {
                 {hoveredConv === conv.id && (
                   <button
                     className="absolute right-2 top-2.5 w-5 h-5 rounded-md bg-red-50 flex items-center justify-center"
-                    onClick={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteConvMutation.mutate(conv.id);
+                    }}
                   >
                     <Trash2 size={10} className="text-red-400" />
                   </button>
@@ -362,11 +372,7 @@ export default function ChatPage() {
               <Sparkles size={14} style={{ color: "#0EA5E9" }} />
             </div>
             <span className="text-sm font-bold" style={{ color: "#1E3A5F" }}>
-              {activeConv?.title
-                ? activeConv.title
-                : activeConv?.contact_name
-                ? `Chat — ${activeConv.contact_name}`
-                : "New Chat"}
+              {activeConv?.title || (activeConv?.contact_name ? `Chat — ${activeConv.contact_name}` : "General Chat")}
             </span>
           </div>
         )}
@@ -402,7 +408,7 @@ export default function ChatPage() {
             <div className="flex justify-center py-8">
               <div className="w-6 h-6 border-2 border-[#0EA5E9] border-t-transparent rounded-full animate-spin" />
             </div>
-          ) : localMessages.length === 0 ? (
+          ) : displayedMessages.length === 0 ? (
             <div className="flex flex-col items-center justify-center flex-1 gap-3">
               <p className="text-sm text-gray-500">Send a message to start the conversation.</p>
               <div className="flex gap-2 flex-wrap justify-center">
@@ -418,7 +424,7 @@ export default function ChatPage() {
               </div>
             </div>
           ) : (
-            localMessages.map((msg) => (
+            displayedMessages.map((msg) => (
               <div key={msg.id} className={`flex flex-col gap-1.5 ${msg.role === "user" ? "items-end" : "items-start"}`}>
                 <div className={`flex gap-3 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
                   {/* Avatar */}

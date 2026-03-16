@@ -36,6 +36,10 @@ export function createConversation(token: string, contactId?: string): Promise<C
   });
 }
 
+export function deleteConversation(token: string, conversationId: string): Promise<{ status: string }> {
+  return apiRequest(`/ai/conversations/${conversationId}`, token, { method: "DELETE" });
+}
+
 export function getMessages(token: string, conversationId: string): Promise<Message[]> {
   return apiRequest(`/ai/conversations/${conversationId}/messages`, token);
 }
