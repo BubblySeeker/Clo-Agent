@@ -39,14 +39,21 @@ const toolLabel: Record<string, string> = {
   get_dashboard_summary: "Fetching dashboard",
   get_contact_details: "Loading contact",
   get_contact_activities: "Loading activities",
+  get_deal: "Loading deal details",
+  get_buyer_profile: "Loading buyer profile",
+  get_all_activities: "Loading recent activities",
   list_deals: "Fetching deals",
   get_deal_stages: "Loading pipeline",
   get_analytics: "Crunching analytics",
   create_contact: "Creating contact",
   update_contact: "Updating contact",
+  delete_contact: "Deleting contact",
   log_activity: "Logging activity",
   create_deal: "Creating deal",
   update_deal: "Updating deal",
+  delete_deal: "Deleting deal",
+  create_buyer_profile: "Creating buyer profile",
+  update_buyer_profile: "Updating buyer profile",
 };
 
 export default function ChatPage() {

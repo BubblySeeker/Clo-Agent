@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r '.tool_input.file_path'); if echo \"$FILE\" | grep -qE 'frontend/.*\\.tsx?$'; then cd /Users/matthewfaust/CloAgent/Clo-Agent/frontend && npx prettier --write \"$FILE\" 2>/dev/null; elif echo \"$FILE\" | grep -qE 'backend/.*\\.go$'; then gofmt -w \"$FILE\" 2>/dev/null; fi",
+            "description": "Auto-format TypeScript (Prettier) and Go (gofmt) files after edit"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r '.tool_input.file_path'); if echo \"$FILE\" | grep -qE '\\.env'; then echo 'BLOCKED: Do not modify .env files directly. Secrets and environment variables should be managed manually.' >&2; exit 2; fi",
+            "description": "Block writing to .env files to protect secrets"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -30,7 +30,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "search_contacts",
-        "description": "Search for contacts by name, email, or filter by source. Returns matching contacts.",
+        "description": "Search for contacts by name, email, or filter by source. Returns matching contacts. The query matches against first name, last name, email, and full name (first + last). You can search with a full name like 'John Doe' or just a first/last name.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -83,9 +83,54 @@ TOOL_DEFINITIONS = [
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
+        "name": "get_deal",
+        "description": "Get full details for a single deal including contact name and stage info.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "deal_id": {"type": "string", "description": "UUID of the deal"},
+            },
+            "required": ["deal_id"],
+        },
+    },
+    {
+        "name": "get_buyer_profile",
+        "description": "Get buyer preferences/profile for a contact (budget, bedrooms, bathrooms, locations, must-haves, deal-breakers, timeline, pre-approval status).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "contact_id": {"type": "string", "description": "UUID of the contact"},
+            },
+            "required": ["contact_id"],
+        },
+    },
+    {
+        "name": "get_all_activities",
+        "description": "Get recent activities across ALL contacts. Useful for 'what happened today/this week' type questions.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "type": {"type": "string", "enum": ["call", "email", "note", "showing", "task"], "description": "Filter by activity type"},
+                "limit": {"type": "integer", "description": "Max results (default 25)"},
+            },
+            "required": [],
+        },
+    },
+    {
         "name": "get_analytics",
         "description": "Get pipeline analytics: deal counts and values by stage, activity volume, contact source breakdown.",
         "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "get_overdue_tasks",
+        "description": "Get all tasks past their due date and not yet completed.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "description": "Max results (default 20)"},
+            },
+            "required": [],
+        },
     },
     {
         "name": "create_contact",
@@ -162,14 +207,69 @@ TOOL_DEFINITIONS = [
         },
     },
     {
-        "name": "get_overdue_tasks",
-        "description": "Get all tasks past their due date and not yet completed.",
+        "name": "delete_contact",
+        "description": "Delete a contact and all associated data (deals, activities, buyer profile). Requires user confirmation before executing.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "limit": {"type": "integer", "description": "Max results (default 20)"},
+                "contact_id": {"type": "string", "description": "UUID of the contact to delete"},
             },
-            "required": [],
+            "required": ["contact_id"],
+        },
+    },
+    {
+        "name": "delete_deal",
+        "description": "Delete a deal from the pipeline. Requires user confirmation before executing.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "deal_id": {"type": "string", "description": "UUID of the deal to delete"},
+            },
+            "required": ["deal_id"],
+        },
+    },
+    {
+        "name": "create_buyer_profile",
+        "description": "Create a buyer profile for a contact with their property preferences. Requires user confirmation before executing.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "contact_id": {"type": "string"},
+                "budget_min": {"type": "number", "description": "Minimum budget in dollars"},
+                "budget_max": {"type": "number", "description": "Maximum budget in dollars"},
+                "bedrooms": {"type": "integer"},
+                "bathrooms": {"type": "integer"},
+                "locations": {"type": "array", "items": {"type": "string"}, "description": "Preferred areas/neighborhoods"},
+                "must_haves": {"type": "array", "items": {"type": "string"}, "description": "Required features (e.g. pool, garage)"},
+                "deal_breakers": {"type": "array", "items": {"type": "string"}, "description": "Unwanted features (e.g. HOA, busy street)"},
+                "property_type": {"type": "string", "description": "e.g. Single Family, Condo, Townhouse"},
+                "pre_approved": {"type": "boolean", "description": "Whether the buyer is pre-approved for a mortgage"},
+                "timeline": {"type": "string", "description": "e.g. ASAP, 3 months, 6 months"},
+                "notes": {"type": "string"},
+            },
+            "required": ["contact_id"],
+        },
+    },
+    {
+        "name": "update_buyer_profile",
+        "description": "Update an existing buyer profile for a contact. Requires user confirmation before executing.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "contact_id": {"type": "string"},
+                "budget_min": {"type": "number"},
+                "budget_max": {"type": "number"},
+                "bedrooms": {"type": "integer"},
+                "bathrooms": {"type": "integer"},
+                "locations": {"type": "array", "items": {"type": "string"}},
+                "must_haves": {"type": "array", "items": {"type": "string"}},
+                "deal_breakers": {"type": "array", "items": {"type": "string"}},
+                "property_type": {"type": "string"},
+                "pre_approved": {"type": "boolean"},
+                "timeline": {"type": "string"},
+                "notes": {"type": "string"},
+            },
+            "required": ["contact_id"],
         },
     },
     {
@@ -216,6 +316,9 @@ READ_TOOLS = {
     "search_contacts",
     "get_contact_details",
     "get_contact_activities",
+    "get_deal",
+    "get_buyer_profile",
+    "get_all_activities",
     "list_deals",
     "get_deal_stages",
     "get_analytics",
@@ -225,9 +328,13 @@ READ_TOOLS = {
 WRITE_TOOLS = {
     "create_contact",
     "update_contact",
+    "delete_contact",
     "log_activity",
     "create_deal",
     "update_deal",
+    "delete_deal",
+    "create_buyer_profile",
+    "update_buyer_profile",
     "create_task",
     "complete_task",
     "reschedule_task",
@@ -246,6 +353,12 @@ async def execute_read_tool(tool_name: str, tool_input: dict, agent_id: str) -> 
         return await run_query(lambda: _get_contact_details(agent_id, tool_input["contact_id"]))
     elif tool_name == "get_contact_activities":
         return await run_query(lambda: _get_contact_activities(agent_id, tool_input["contact_id"], tool_input.get("limit", 20)))
+    elif tool_name == "get_deal":
+        return await run_query(lambda: _get_deal(agent_id, tool_input["deal_id"]))
+    elif tool_name == "get_buyer_profile":
+        return await run_query(lambda: _get_buyer_profile(agent_id, tool_input["contact_id"]))
+    elif tool_name == "get_all_activities":
+        return await run_query(lambda: _get_all_activities(agent_id, tool_input))
     elif tool_name == "list_deals":
         return await run_query(lambda: _list_deals(agent_id, tool_input))
     elif tool_name == "get_deal_stages":
@@ -312,8 +425,9 @@ def _search_contacts(agent_id: str, inp: dict) -> list:
             params.append(f"%{query}%")
             params.append(f"%{query}%")
             params.append(f"%{query}%")
+            params.append(f"%{query}%")
             where_clauses.append(
-                "(c.first_name ILIKE %s OR c.last_name ILIKE %s OR c.email ILIKE %s)"
+                "(c.first_name ILIKE %s OR c.last_name ILIKE %s OR c.email ILIKE %s OR (c.first_name || ' ' || c.last_name) ILIKE %s)"
             )
         if source:
             params.append(source)
@@ -363,6 +477,67 @@ def _get_contact_activities(agent_id: str, contact_id: str, limit: int) -> list:
                ORDER BY created_at DESC LIMIT %s""",
             (contact_id, agent_id, limit),
         )
+        return [dict(r) for r in cur.fetchall()]
+
+
+def _get_deal(agent_id: str, deal_id: str) -> dict:
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            """SELECT d.id, d.title, d.value, d.notes, d.created_at, d.updated_at,
+                      s.name AS stage_name, s.color AS stage_color,
+                      c.first_name || ' ' || c.last_name AS contact_name,
+                      c.id AS contact_id
+               FROM deals d
+               JOIN deal_stages s ON s.id = d.stage_id
+               JOIN contacts c ON c.id = d.contact_id
+               WHERE d.id = %s AND d.agent_id = %s""",
+            (deal_id, agent_id),
+        )
+        row = cur.fetchone()
+        if not row:
+            return {"error": "Deal not found"}
+        return dict(row)
+
+
+def _get_buyer_profile(agent_id: str, contact_id: str) -> dict:
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        # Verify contact belongs to agent
+        cur.execute(
+            "SELECT id FROM contacts WHERE id = %s AND agent_id = %s",
+            (contact_id, agent_id),
+        )
+        if not cur.fetchone():
+            return {"error": "Contact not found"}
+        cur.execute("SELECT * FROM buyer_profiles WHERE contact_id = %s", (contact_id,))
+        bp = cur.fetchone()
+        if not bp:
+            return {"error": "No buyer profile exists for this contact"}
+        return dict(bp)
+
+
+def _get_all_activities(agent_id: str, inp: dict) -> list:
+    activity_type = inp.get("type")
+    limit = inp.get("limit", 25)
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        params: list = [agent_id]
+        where_clauses = ["a.agent_id = %s"]
+        if activity_type:
+            params.append(activity_type)
+            where_clauses.append("a.type = %s")
+        params.append(limit)
+        sql = f"""
+            SELECT a.id, a.type, a.body, a.created_at,
+                   c.first_name || ' ' || c.last_name AS contact_name,
+                   c.id AS contact_id
+            FROM activities a
+            JOIN contacts c ON c.id = a.contact_id
+            WHERE {' AND '.join(where_clauses)}
+            ORDER BY a.created_at DESC LIMIT %s
+        """
+        cur.execute(sql, params)
         return [dict(r) for r in cur.fetchall()]
 
 
@@ -478,12 +653,20 @@ async def execute_write_tool(pending_id: str) -> dict:
         return await run_query(lambda: _create_contact(agent_id, inp))
     elif tool_name == "update_contact":
         return await run_query(lambda: _update_contact(agent_id, inp))
+    elif tool_name == "delete_contact":
+        return await run_query(lambda: _delete_contact(agent_id, inp))
     elif tool_name == "log_activity":
         return await run_query(lambda: _log_activity(agent_id, inp))
     elif tool_name == "create_deal":
         return await run_query(lambda: _create_deal(agent_id, inp))
     elif tool_name == "update_deal":
         return await run_query(lambda: _update_deal(agent_id, inp))
+    elif tool_name == "delete_deal":
+        return await run_query(lambda: _delete_deal(agent_id, inp))
+    elif tool_name == "create_buyer_profile":
+        return await run_query(lambda: _create_buyer_profile(agent_id, inp))
+    elif tool_name == "update_buyer_profile":
+        return await run_query(lambda: _update_buyer_profile(agent_id, inp))
     elif tool_name == "create_task":
         return await run_query(lambda: _create_task(agent_id, inp))
     elif tool_name == "complete_task":
@@ -573,6 +756,92 @@ def _update_deal(agent_id: str, inp: dict) -> dict:
         )
         row = cur.fetchone()
         return {"updated": bool(row), "deal_id": deal_id}
+
+
+def _delete_contact(agent_id: str, inp: dict) -> dict:
+    contact_id = inp["contact_id"]
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        # Get contact name before deleting for confirmation message
+        cur.execute(
+            "SELECT first_name, last_name FROM contacts WHERE id = %s AND agent_id = %s",
+            (contact_id, agent_id),
+        )
+        contact = cur.fetchone()
+        if not contact:
+            return {"error": "Contact not found"}
+        # Cascade: delete activities, deals, buyer_profile, ai_profile, then contact
+        cur.execute("DELETE FROM activities WHERE contact_id = %s AND agent_id = %s", (contact_id, agent_id))
+        cur.execute("DELETE FROM deals WHERE contact_id = %s AND agent_id = %s", (contact_id, agent_id))
+        cur.execute("DELETE FROM buyer_profiles WHERE contact_id = %s", (contact_id,))
+        cur.execute("DELETE FROM ai_profiles WHERE contact_id = %s", (contact_id,))
+        cur.execute("DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE contact_id = %s AND agent_id = %s)", (contact_id, agent_id))
+        cur.execute("DELETE FROM conversations WHERE contact_id = %s AND agent_id = %s", (contact_id, agent_id))
+        cur.execute("DELETE FROM contacts WHERE id = %s AND agent_id = %s", (contact_id, agent_id))
+        return {"deleted": True, "contact": f"{contact['first_name']} {contact['last_name']}"}
+
+
+def _delete_deal(agent_id: str, inp: dict) -> dict:
+    deal_id = inp["deal_id"]
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            "SELECT d.title FROM deals d WHERE d.id = %s AND d.agent_id = %s",
+            (deal_id, agent_id),
+        )
+        deal = cur.fetchone()
+        if not deal:
+            return {"error": "Deal not found"}
+        cur.execute("DELETE FROM deals WHERE id = %s AND agent_id = %s", (deal_id, agent_id))
+        return {"deleted": True, "deal": deal["title"]}
+
+
+def _create_buyer_profile(agent_id: str, inp: dict) -> dict:
+    contact_id = inp.pop("contact_id")
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        # Verify contact belongs to agent
+        cur.execute("SELECT id FROM contacts WHERE id = %s AND agent_id = %s", (contact_id, agent_id))
+        if not cur.fetchone():
+            return {"error": "Contact not found"}
+        # Check if profile already exists
+        cur.execute("SELECT id FROM buyer_profiles WHERE contact_id = %s", (contact_id,))
+        if cur.fetchone():
+            return {"error": "Buyer profile already exists for this contact. Use update_buyer_profile instead."}
+        cur.execute(
+            """INSERT INTO buyer_profiles (contact_id, budget_min, budget_max, bedrooms, bathrooms,
+                   locations, must_haves, deal_breakers, property_type, pre_approved, timeline, notes)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+               RETURNING id, contact_id, budget_min, budget_max, bedrooms, bathrooms, property_type, pre_approved, timeline""",
+            (contact_id, inp.get("budget_min"), inp.get("budget_max"),
+             inp.get("bedrooms"), inp.get("bathrooms"),
+             inp.get("locations"), inp.get("must_haves"), inp.get("deal_breakers"),
+             inp.get("property_type"), inp.get("pre_approved", False),
+             inp.get("timeline"), inp.get("notes")),
+        )
+        return dict(cur.fetchone())
+
+
+def _update_buyer_profile(agent_id: str, inp: dict) -> dict:
+    contact_id = inp.pop("contact_id")
+    if not inp:
+        return {"error": "No fields to update"}
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        # Verify contact belongs to agent
+        cur.execute("SELECT id FROM contacts WHERE id = %s AND agent_id = %s", (contact_id, agent_id))
+        if not cur.fetchone():
+            return {"error": "Contact not found"}
+        fields = ", ".join(f"{k} = %s" for k in inp)
+        vals = list(inp.values()) + [contact_id]
+        cur.execute(
+            f"UPDATE buyer_profiles SET {fields} WHERE contact_id = %s RETURNING id",
+            vals,
+        )
+        row = cur.fetchone()
+        if not row:
+            return {"error": "No buyer profile exists for this contact. Use create_buyer_profile first."}
+        return {"updated": True, "contact_id": contact_id}
 
 
 def _get_overdue_tasks(agent_id: str, limit: int) -> list:

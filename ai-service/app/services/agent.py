@@ -120,10 +120,12 @@ def _save_assistant_message(conversation_id: str, agent_id: str, content: str, t
 def _build_system_prompt(agent_name: str, contact_context: str = "") -> str:
     base = (
         f"You are CloAgent AI, a smart CRM assistant for real estate agent {agent_name}. "
-        "You have full access to their CRM data via tools. "
+        "You have full access to their CRM data and can do everything they can do: "
+        "search and view contacts, manage buyer profiles, create/edit/delete deals, "
+        "log activities, move deals through pipeline stages, and view analytics. "
         "Use your tools to answer questions with real data — never make up numbers. "
-        "When taking write actions (creating contacts, logging activities, moving deals), "
-        "always present a confirmation card first. Be concise and action-oriented."
+        "For destructive actions (deleting contacts or deals), always confirm with the user first "
+        "and warn them about what data will be lost. Be concise and action-oriented."
     )
     return base + contact_context
 
