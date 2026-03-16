@@ -494,19 +494,7 @@ export default function ChatPage() {
 
         {/* Input area — always visible */}
         <div className="bg-white border-t border-gray-100 px-6 py-4 shrink-0">
-          {!activeConvId && input === "" && (
-            <div className="flex gap-2 flex-wrap mb-3">
-              {suggestedPrompts.map((p) => (
-                <button
-                  key={p}
-                  onClick={() => handleSend(p)}
-                  className="text-xs px-3 py-1.5 rounded-full border border-gray-200 text-gray-600 hover:border-[#0EA5E9] hover:text-[#0EA5E9] transition-colors"
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
-          )}
+          {/* Suggested prompts only shown in input area when no conversation is active and message area has the empty state */}
           <div className="flex items-center gap-3 bg-gray-50 rounded-2xl px-4 py-3 border border-gray-200 focus-within:border-[#0EA5E9] transition-colors">
             <input
               value={input}

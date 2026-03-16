@@ -49,7 +49,7 @@ export default function AnalyticsPage() {
     queryKey: ["analytics-pipeline"],
     queryFn: async () => {
       const token = await getToken();
-      return apiRequest<{ stages: StageAnalytics[] }>("/api/analytics/pipeline", token!);
+      return apiRequest<{ stages: StageAnalytics[] }>("/analytics/pipeline", token!);
     },
   });
 
@@ -57,7 +57,7 @@ export default function AnalyticsPage() {
     queryKey: ["analytics-activities"],
     queryFn: async () => {
       const token = await getToken();
-      return apiRequest<{ by_type: ActivityTypeCount[]; total: number }>("/api/analytics/activities", token!);
+      return apiRequest<{ by_type: ActivityTypeCount[]; total: number }>("/analytics/activities", token!);
     },
   });
 
@@ -65,7 +65,7 @@ export default function AnalyticsPage() {
     queryKey: ["analytics-contacts"],
     queryFn: async () => {
       const token = await getToken();
-      return apiRequest<{ by_source: ContactSourceCount[]; total: number; new_this_month: number }>("/api/analytics/contacts", token!);
+      return apiRequest<{ by_source: ContactSourceCount[]; total: number; new_this_month: number }>("/analytics/contacts", token!);
     },
   });
 

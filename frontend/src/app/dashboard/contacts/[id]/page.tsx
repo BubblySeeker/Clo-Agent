@@ -27,6 +27,15 @@ import {
   Sparkles,
   Save,
   X,
+  DollarSign,
+  MapPin,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  RefreshCw,
+  Plus,
+  User,
+  BedDouble,
 } from "lucide-react";
 
 const typeIconColors: Record<string, { bg: string; color: string }> = {
@@ -71,7 +80,7 @@ function timeStr(dateStr: string) {
   });
 }
 
-const tabOptions = ["All Activity", "Calls", "Emails", "Notes", "Showings"];
+const tabOptions = ["All Activity", "Calls", "Emails", "Notes", "Showings", "Buyer Profile", "AI Profile"];
 const tabTypeMap: Record<string, string> = {
   Calls: "call",
   Emails: "email",
@@ -901,106 +910,476 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
             ))}
           </div>
 
-          {/* Log activity */}
-          <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-            <div className="flex gap-2 mb-2">
-              {(["note", "call", "email", "showing", "task"] as const).map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setNoteType(t)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold capitalize transition-all ${
-                    noteType === t ? "text-white" : "bg-gray-100 text-gray-500"
-                  }`}
-                  style={noteType === t ? { backgroundColor: "#0EA5E9" } : {}}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-            <textarea
-              id="activity-input"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder={`Log a ${noteType} for ${contact.first_name}...`}
-              className="w-full text-sm text-gray-700 placeholder-gray-400 outline-none resize-none bg-transparent"
-              rows={2}
-            />
-            <div className="flex justify-end mt-2">
-              <button
-                disabled={!note.trim() || logMutation.isPending}
-                onClick={() => logMutation.mutate()}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-xs font-semibold disabled:opacity-50"
-                style={{ backgroundColor: "#0EA5E9" }}
-              >
-                <Send size={12} />
-                {logMutation.isPending ? "Logging..." : "Log Activity"}
-              </button>
-            </div>
-          </div>
+          {/* Tab Content */}
+          {activeTab === "Buyer Profile" ? (
+            /* ── BUYER PROFILE TAB ── */
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
+              <div className="flex items-center justify-between p-6 pb-0">
+                <h4 className="text-lg font-bold flex items-center gap-2" style={{ color: "#1E3A5F" }}>
+                  <User size={18} className="text-sky-500" />
+                  Buyer Profile
+                </h4>
+                {buyerProfile && !buyerProfileNotFound && !editingBuyer && (
+                  <button
+                    onClick={() => openBuyerEdit(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-gray-500 hover:bg-gray-100 transition-colors"
+                  >
+                    <Edit2 size={13} />
+                    Edit
+                  </button>
+                )}
+              </div>
 
-          {/* Timeline */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-            <h4 className="font-bold mb-5" style={{ color: "#1E3A5F" }}>Activity Timeline</h4>
-            {activities.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-8">No activities yet -- log one above!</p>
-            ) : (
-              <div className="flex flex-col gap-4">
-                {activities.map((item, i) => {
-                  const colors = typeIconColors[item.type] || typeIconColors.note;
-                  const IconComp = typeIcons[item.type] || FileText;
-                  const isExpanded = expandedItems.has(item.id);
-                  return (
-                    <div key={item.id} className="flex gap-4">
-                      <div className="flex flex-col items-center">
-                        <div
-                          className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
-                          style={{ backgroundColor: colors.bg }}
-                        >
-                          <IconComp size={15} style={{ color: colors.color }} />
-                        </div>
-                        {i < activities.length - 1 && (
-                          <div className="w-px flex-1 mt-2 bg-gray-200" style={{ minHeight: 16 }} />
-                        )}
+              {editingBuyer ? (
+                <div className="p-6">
+                  <div className="grid grid-cols-2 gap-5">
+                    <div>
+                      <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Budget Min ($)</label>
+                      <div className="relative">
+                        <DollarSign size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input
+                          type="number"
+                          value={buyerForm.budget_min}
+                          onChange={(e) => setBuyerForm({ ...buyerForm, budget_min: e.target.value })}
+                          placeholder="0"
+                          className="w-full pl-8 pr-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
+                        />
                       </div>
-                      <div className="flex-1 pb-4">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="text-xs text-gray-400">{timeStr(item.created_at)}</span>
-                              <span
-                                className="text-xs font-semibold px-2 py-0.5 rounded-full capitalize"
-                                style={{ backgroundColor: colors.bg, color: colors.color }}
-                              >
-                                {item.type}
-                              </span>
-                            </div>
-                            <p className="text-sm text-gray-800">{item.body ?? `${item.type} logged`}</p>
-                            {isExpanded && item.body && (
-                              <p className="mt-2 text-xs text-gray-500 bg-gray-50 rounded-xl p-3 leading-relaxed">
-                                {item.body}
-                              </p>
-                            )}
-                          </div>
-                          {item.body && (
-                            <button
-                              onClick={() => toggleExpand(item.id)}
-                              className="w-6 h-6 rounded-lg bg-gray-100 flex items-center justify-center shrink-0 hover:bg-gray-200 transition-colors"
-                            >
-                              {isExpanded ? (
-                                <ChevronDown size={12} className="text-gray-400" />
-                              ) : (
-                                <ChevronRight size={12} className="text-gray-400" />
-                              )}
-                            </button>
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Budget Max ($)</label>
+                      <div className="relative">
+                        <DollarSign size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input
+                          type="number"
+                          value={buyerForm.budget_max}
+                          onChange={(e) => setBuyerForm({ ...buyerForm, budget_max: e.target.value })}
+                          placeholder="0"
+                          className="w-full pl-8 pr-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Bedrooms</label>
+                      <input
+                        type="number"
+                        value={buyerForm.bedrooms}
+                        onChange={(e) => setBuyerForm({ ...buyerForm, bedrooms: e.target.value })}
+                        placeholder="0"
+                        className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Bathrooms</label>
+                      <input
+                        type="number"
+                        value={buyerForm.bathrooms}
+                        onChange={(e) => setBuyerForm({ ...buyerForm, bathrooms: e.target.value })}
+                        placeholder="0"
+                        className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Property Type</label>
+                      <select
+                        value={buyerForm.property_type}
+                        onChange={(e) => setBuyerForm({ ...buyerForm, property_type: e.target.value })}
+                        className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200 bg-white"
+                      >
+                        <option value="">Select type...</option>
+                        {propertyTypes.map((t) => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Timeline</label>
+                      <select
+                        value={buyerForm.timeline}
+                        onChange={(e) => setBuyerForm({ ...buyerForm, timeline: e.target.value })}
+                        className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200 bg-white"
+                      >
+                        <option value="">Select timeline...</option>
+                        {timelineOptions.map((t) => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 mt-5">
+                    <label className="text-xs font-semibold text-gray-500">Pre-approved</label>
+                    <button
+                      onClick={() => setBuyerForm({ ...buyerForm, pre_approved: !buyerForm.pre_approved })}
+                      className={`w-10 h-5 rounded-full transition-colors relative ${buyerForm.pre_approved ? "bg-sky-500" : "bg-gray-300"}`}
+                    >
+                      <span
+                        className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${buyerForm.pre_approved ? "translate-x-5" : "translate-x-0.5"}`}
+                      />
+                    </button>
+                    <span className="text-xs text-gray-500">{buyerForm.pre_approved ? "Yes" : "No"}</span>
+                  </div>
+                  <div className="mt-5">
+                    <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Preferred Locations (comma-separated)</label>
+                    <input
+                      value={buyerForm.locations}
+                      onChange={(e) => setBuyerForm({ ...buyerForm, locations: e.target.value })}
+                      placeholder="e.g. Downtown, Midtown, Suburbs"
+                      className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
+                    />
+                  </div>
+                  <div className="mt-4">
+                    <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Must-haves (comma-separated)</label>
+                    <input
+                      value={buyerForm.must_haves}
+                      onChange={(e) => setBuyerForm({ ...buyerForm, must_haves: e.target.value })}
+                      placeholder="e.g. Garage, Pool, Backyard"
+                      className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
+                    />
+                  </div>
+                  <div className="mt-4">
+                    <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Deal-breakers (comma-separated)</label>
+                    <input
+                      value={buyerForm.deal_breakers}
+                      onChange={(e) => setBuyerForm({ ...buyerForm, deal_breakers: e.target.value })}
+                      placeholder="e.g. HOA, No parking"
+                      className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
+                    />
+                  </div>
+                  <div className="mt-4">
+                    <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Notes</label>
+                    <textarea
+                      value={buyerForm.notes}
+                      onChange={(e) => setBuyerForm({ ...buyerForm, notes: e.target.value })}
+                      rows={3}
+                      className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200 resize-none"
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2 mt-6">
+                    <button
+                      onClick={() => setEditingBuyer(false)}
+                      className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-500 hover:bg-gray-100 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleBuyerSave}
+                      disabled={createBuyerMutation.isPending || updateBuyerMutation.isPending}
+                      className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-50"
+                      style={{ backgroundColor: "#0EA5E9" }}
+                    >
+                      <Save size={14} />
+                      {createBuyerMutation.isPending || updateBuyerMutation.isPending ? "Saving..." : "Save Profile"}
+                    </button>
+                  </div>
+                </div>
+              ) : buyerProfile && !buyerProfileNotFound ? (
+                <div className="p-6">
+                  {/* Summary cards row */}
+                  <div className="grid grid-cols-3 gap-4 mb-6">
+                    <div className="bg-sky-50 rounded-xl p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <DollarSign size={14} className="text-sky-500" />
+                        <span className="text-xs font-semibold text-sky-600">Budget Range</span>
+                      </div>
+                      <p className="text-sm font-bold text-gray-800">
+                        {buyerProfile.budget_min != null ? `$${buyerProfile.budget_min.toLocaleString()}` : "$0"}
+                        {" - "}
+                        {buyerProfile.budget_max != null ? `$${buyerProfile.budget_max.toLocaleString()}` : "No max"}
+                      </p>
+                    </div>
+                    <div className="bg-purple-50 rounded-xl p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <BedDouble size={14} className="text-purple-500" />
+                        <span className="text-xs font-semibold text-purple-600">Beds / Baths</span>
+                      </div>
+                      <p className="text-sm font-bold text-gray-800">
+                        {buyerProfile.bedrooms ?? "-"} bd / {buyerProfile.bathrooms ?? "-"} ba
+                      </p>
+                    </div>
+                    <div className="bg-amber-50 rounded-xl p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Clock size={14} className="text-amber-500" />
+                        <span className="text-xs font-semibold text-amber-600">Timeline</span>
+                      </div>
+                      <p className="text-sm font-bold text-gray-800">
+                        {buyerProfile.timeline ?? "Not set"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Details grid */}
+                  <div className="grid grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                      {buyerProfile.property_type && (
+                        <div>
+                          <span className="text-xs font-semibold text-gray-400 block mb-1">Property Type</span>
+                          <span
+                            className="inline-block text-sm font-semibold px-3 py-1 rounded-full"
+                            style={{ backgroundColor: "#EFF6FF", color: "#0EA5E9" }}
+                          >
+                            {buyerProfile.property_type}
+                          </span>
+                        </div>
+                      )}
+                      <div>
+                        <span className="text-xs font-semibold text-gray-400 block mb-1">Pre-approved</span>
+                        <div className="flex items-center gap-2">
+                          {buyerProfile.pre_approved ? (
+                            <>
+                              <CheckCircle2 size={16} className="text-green-500" />
+                              <span className="text-sm font-semibold text-green-600">Yes</span>
+                            </>
+                          ) : (
+                            <>
+                              <XCircle size={16} className="text-gray-400" />
+                              <span className="text-sm font-semibold text-gray-500">No</span>
+                            </>
                           )}
                         </div>
                       </div>
                     </div>
-                  );
-                })}
+
+                    <div className="space-y-4">
+                      {buyerProfile.locations?.length > 0 && (
+                        <div>
+                          <span className="text-xs font-semibold text-gray-400 flex items-center gap-1 mb-2">
+                            <MapPin size={12} /> Preferred Locations
+                          </span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {buyerProfile.locations.map((loc) => (
+                              <span key={loc} className="text-xs font-medium px-2.5 py-1 rounded-full bg-blue-50 text-blue-600">{loc}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Must-haves and Deal-breakers */}
+                  {(buyerProfile.must_haves?.length > 0 || buyerProfile.deal_breakers?.length > 0) && (
+                    <div className="grid grid-cols-2 gap-6 mt-6 pt-6 border-t border-gray-100">
+                      {buyerProfile.must_haves?.length > 0 && (
+                        <div>
+                          <span className="text-xs font-semibold text-gray-400 flex items-center gap-1 mb-2">
+                            <CheckCircle2 size={12} className="text-green-500" /> Must-haves
+                          </span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {buyerProfile.must_haves.map((item) => (
+                              <span key={item} className="text-xs font-medium px-2.5 py-1 rounded-full bg-green-50 text-green-600">{item}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {buyerProfile.deal_breakers?.length > 0 && (
+                        <div>
+                          <span className="text-xs font-semibold text-gray-400 flex items-center gap-1 mb-2">
+                            <XCircle size={12} className="text-red-500" /> Deal-breakers
+                          </span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {buyerProfile.deal_breakers.map((item) => (
+                              <span key={item} className="text-xs font-medium px-2.5 py-1 rounded-full bg-red-50 text-red-600">{item}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Notes */}
+                  {buyerProfile.notes && (
+                    <div className="mt-6 pt-6 border-t border-gray-100">
+                      <span className="text-xs font-semibold text-gray-400 block mb-2">Notes</span>
+                      <p className="text-sm text-gray-600 leading-relaxed bg-gray-50 rounded-xl p-4">{buyerProfile.notes}</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-16 px-6">
+                  <div
+                    className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
+                    style={{ backgroundColor: "#EFF6FF" }}
+                  >
+                    <User size={28} className="text-sky-500" />
+                  </div>
+                  <h4 className="text-base font-bold mb-1" style={{ color: "#1E3A5F" }}>No Buyer Profile</h4>
+                  <p className="text-sm text-gray-400 mb-5 text-center max-w-xs">
+                    Create a buyer profile to track this contact&apos;s property preferences, budget, and timeline.
+                  </p>
+                  <button
+                    onClick={() => openBuyerEdit(false)}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-semibold"
+                    style={{ backgroundColor: "#0EA5E9" }}
+                  >
+                    <Plus size={14} />
+                    Create Buyer Profile
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : activeTab === "AI Profile" ? (
+            /* ── AI PROFILE TAB ── */
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
+              <div className="flex items-center justify-between p-6 pb-0">
+                <h4 className="text-lg font-bold flex items-center gap-2" style={{ color: "#1E3A5F" }}>
+                  <Sparkles size={18} className="text-amber-400" />
+                  AI Profile
+                </h4>
+                {aiProfile && !aiProfileNotFound && (
+                  <button
+                    onClick={() => regenerateAIMutation.mutate()}
+                    disabled={regenerateAIMutation.isPending}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-gray-500 hover:bg-gray-100 transition-colors disabled:opacity-50"
+                  >
+                    <RefreshCw size={13} className={regenerateAIMutation.isPending ? "animate-spin" : ""} />
+                    {regenerateAIMutation.isPending ? "Generating..." : "Regenerate"}
+                  </button>
+                )}
               </div>
-            )}
-          </div>
+
+              {aiProfile && !aiProfileNotFound ? (
+                <div className="p-6">
+                  <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-5 border border-amber-100">
+                    <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{aiProfile.summary}</p>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-4">
+                    Last updated: {new Date(aiProfile.updated_at).toLocaleString("en-US", {
+                      month: "long",
+                      day: "numeric",
+                      year: "numeric",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-16 px-6">
+                  <div
+                    className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
+                    style={{ backgroundColor: "#FFFBEB" }}
+                  >
+                    <Sparkles size={28} className="text-amber-400" />
+                  </div>
+                  <h4 className="text-base font-bold mb-1" style={{ color: "#1E3A5F" }}>No AI Profile Yet</h4>
+                  <p className="text-sm text-gray-400 mb-5 text-center max-w-xs">
+                    Generate an AI-powered summary of this contact based on their activities, deals, and profile data.
+                  </p>
+                  <button
+                    onClick={() => regenerateAIMutation.mutate()}
+                    disabled={regenerateAIMutation.isPending}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50"
+                    style={{ backgroundColor: "#0EA5E9" }}
+                  >
+                    <Sparkles size={14} />
+                    {regenerateAIMutation.isPending ? "Generating..." : "Generate AI Profile"}
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            /* ── ACTIVITY TABS ── */
+            <>
+              {/* Log activity */}
+              <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+                <div className="flex gap-2 mb-2">
+                  {(["note", "call", "email", "showing", "task"] as const).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setNoteType(t)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold capitalize transition-all ${
+                        noteType === t ? "text-white" : "bg-gray-100 text-gray-500"
+                      }`}
+                      style={noteType === t ? { backgroundColor: "#0EA5E9" } : {}}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+                <textarea
+                  id="activity-input"
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder={`Log a ${noteType} for ${contact.first_name}...`}
+                  className="w-full text-sm text-gray-700 placeholder-gray-400 outline-none resize-none bg-transparent"
+                  rows={2}
+                />
+                <div className="flex justify-end mt-2">
+                  <button
+                    disabled={!note.trim() || logMutation.isPending}
+                    onClick={() => logMutation.mutate()}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-xs font-semibold disabled:opacity-50"
+                    style={{ backgroundColor: "#0EA5E9" }}
+                  >
+                    <Send size={12} />
+                    {logMutation.isPending ? "Logging..." : "Log Activity"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Timeline */}
+              <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+                <h4 className="font-bold mb-5" style={{ color: "#1E3A5F" }}>Activity Timeline</h4>
+                {activities.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-8">No activities yet -- log one above!</p>
+                ) : (
+                  <div className="flex flex-col gap-4">
+                    {activities.map((item, i) => {
+                      const colors = typeIconColors[item.type] || typeIconColors.note;
+                      const IconComp = typeIcons[item.type] || FileText;
+                      const isExpanded = expandedItems.has(item.id);
+                      return (
+                        <div key={item.id} className="flex gap-4">
+                          <div className="flex flex-col items-center">
+                            <div
+                              className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+                              style={{ backgroundColor: colors.bg }}
+                            >
+                              <IconComp size={15} style={{ color: colors.color }} />
+                            </div>
+                            {i < activities.length - 1 && (
+                              <div className="w-px flex-1 mt-2 bg-gray-200" style={{ minHeight: 16 }} />
+                            )}
+                          </div>
+                          <div className="flex-1 pb-4">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="text-xs text-gray-400">{timeStr(item.created_at)}</span>
+                                  <span
+                                    className="text-xs font-semibold px-2 py-0.5 rounded-full capitalize"
+                                    style={{ backgroundColor: colors.bg, color: colors.color }}
+                                  >
+                                    {item.type}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-gray-800">{item.body ?? `${item.type} logged`}</p>
+                                {isExpanded && item.body && (
+                                  <p className="mt-2 text-xs text-gray-500 bg-gray-50 rounded-xl p-3 leading-relaxed">
+                                    {item.body}
+                                  </p>
+                                )}
+                              </div>
+                              {item.body && (
+                                <button
+                                  onClick={() => toggleExpand(item.id)}
+                                  className="w-6 h-6 rounded-lg bg-gray-100 flex items-center justify-center shrink-0 hover:bg-gray-200 transition-colors"
+                                >
+                                  {isExpanded ? (
+                                    <ChevronDown size={12} className="text-gray-400" />
+                                  ) : (
+                                    <ChevronRight size={12} className="text-gray-400" />
+                                  )}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

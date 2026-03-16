@@ -32,9 +32,10 @@ export function listActivities(token: string, contactId: string, typeFilter?: st
   return apiRequest(`/contacts/${contactId}/activities${qs ? "?" + qs : ""}`, token);
 }
 
-export function listAllActivities(token: string, typeFilter?: string): Promise<ActivitiesResponse> {
+export function listAllActivities(token: string, typeFilter?: string, limit?: number): Promise<ActivitiesResponse> {
   const params = new URLSearchParams();
   if (typeFilter) params.set("type", typeFilter);
+  if (limit) params.set("limit", String(limit));
   const qs = params.toString();
   return apiRequest(`/activities${qs ? "?" + qs : ""}`, token);
 }

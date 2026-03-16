@@ -1,9 +1,11 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
-import { useUser } from "@clerk/nextjs";
-import { Camera, GripVertical, Plus, Trash2, AlertTriangle, Check } from "lucide-react";
+import { useUser, useAuth } from "@clerk/nextjs";
+import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/api/client";
+import { Camera, AlertTriangle, Info } from "lucide-react";
 
 const settingsSections = [
   { id: "profile", label: "Profile" },
@@ -15,11 +17,11 @@ const settingsSections = [
 ];
 
 const integrations = [
-  { id: "gmail", name: "Gmail", logo: "G", color: "#EA4335", connected: true, lastSync: "5 min ago" },
-  { id: "outlook", name: "Outlook", logo: "O", color: "#0078D4", connected: false, lastSync: null },
-  { id: "whatsapp", name: "WhatsApp", logo: "W", color: "#25D366", connected: true, lastSync: "1 hr ago" },
-  { id: "twilio", name: "Twilio", logo: "T", color: "#F22F46", connected: false, lastSync: null, comingSoon: true },
-  { id: "mls", name: "MLS Feed", logo: "M", color: "#6B7280", connected: false, lastSync: null, comingSoon: true },
+  { id: "gmail", name: "Gmail", logo: "G", color: "#EA4335", comingSoon: true },
+  { id: "outlook", name: "Outlook", logo: "O", color: "#0078D4", comingSoon: true },
+  { id: "whatsapp", name: "WhatsApp", logo: "W", color: "#25D366", comingSoon: true },
+  { id: "twilio", name: "Twilio", logo: "T", color: "#F22F46", comingSoon: true },
+  { id: "mls", name: "MLS Feed", logo: "M", color: "#6B7280", comingSoon: true },
 ];
 
 const initialStages = [
@@ -303,24 +305,37 @@ function ConnectedAccountsTab({ user }: { user: UserType }) {
 function SettingsContent() {
   const searchParams = useSearchParams();
   const { user } = useUser();
+  const { getToken } = useAuth();
 
   const [activeSection, setActiveSection] = useState(
     () => searchParams.get("section") ?? "profile"
   );
   const [activeProfileTab, setActiveProfileTab] = useState<"info" | "security" | "accounts">("info");
   const [stages, setStages] = useState(initialStages);
-  const [notifs, setNotifs] = useState(notificationsData);
+
+  // Load real pipeline stages from API
+  const { data: realStages } = useQuery({
+    queryKey: ["deal-stages"],
+    queryFn: async () => {
+      const token = await getToken();
+      return apiRequest<{ id: string; name: string; color: string; position: number }[]>("/deal-stages", token!);
+    },
+  });
+
+  useEffect(() => {
+    if (realStages && realStages.length > 0) {
+      setStages(realStages.map((s) => ({ id: s.id, name: s.name, color: s.color || "#0EA5E9" })));
+    }
+  }, [realStages]);
+  const notifs = notificationsData;
   const [notifFreqs, setNotifFreqs] = useState<Record<string, string>>({
     stale: "Daily Digest", newlead: "Instant", tasks: "Instant", ai: "Weekly", deals: "Instant",
   });
   const [commRate, setCommRate] = useState("2.5");
   const [commSplit, setCommSplit] = useState("70/30");
   const [commStatus, setCommStatus] = useState<"idle" | "success">("idle");
-  const [stageStatus, setStageStatus] = useState<"idle" | "success">("idle");
-  const [notifStatus, setNotifStatus] = useState<"idle" | "success">("idle");
 
-  const toggleNotif = (id: string) =>
-    setNotifs((prev) => prev.map((n) => (n.id === id ? { ...n, enabled: !n.enabled } : n)));
+
 
   const profileTabs = [
     { id: "info" as const, label: "Info" },
@@ -421,7 +436,12 @@ function SettingsContent() {
                   </button>
                 </div>
               </div>
-              {commStatus === "success" && <p className="text-sm text-green-600 font-medium mt-4">Settings saved.</p>}
+              {commStatus === "success" && (
+                <div className="flex items-center gap-2 mt-4">
+                  <Info size={13} className="text-amber-500" />
+                  <p className="text-sm text-amber-600 font-medium">Saved locally to this browser only.</p>
+                </div>
+              )}
               <button
                 className="mt-5 px-5 py-2.5 rounded-xl text-white text-sm font-semibold"
                 style={{ backgroundColor: "#0EA5E9" }}
@@ -449,28 +469,9 @@ function SettingsContent() {
                       </div>
                       <div>
                         <p className="text-sm font-bold text-gray-800">{intg.name}</p>
-                        {intg.lastSync && <p className="text-xs text-gray-400">Last synced: {intg.lastSync}</p>}
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      {intg.comingSoon ? (
-                        <span className="text-xs font-bold px-2 py-1 rounded-full bg-gray-200 text-gray-500">Coming Soon</span>
-                      ) : (
-                        <>
-                          <span className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full ${intg.connected ? "bg-green-50 text-green-600" : "bg-gray-100 text-gray-500"}`}>
-                            {intg.connected && <Check size={10} />}
-                            {intg.connected ? "Connected" : "Not Connected"}
-                          </span>
-                          <button
-                            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${intg.connected ? "bg-red-50 text-red-500 hover:bg-red-100" : "text-white hover:opacity-90"}`}
-                            style={!intg.connected ? { backgroundColor: "#0EA5E9" } : {}}
-                            onClick={() => alert("Integration connections coming soon!")}
-                          >
-                            {intg.connected ? "Disconnect" : "Connect"}
-                          </button>
-                        </>
-                      )}
-                    </div>
+                    <span className="text-xs font-bold px-2 py-1 rounded-full bg-gray-200 text-gray-500">Coming Soon</span>
                   </div>
                 ))}
               </div>
@@ -481,99 +482,61 @@ function SettingsContent() {
           {activeSection === "pipeline" && (
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
               <h3 className="font-bold mb-2" style={{ color: "#1E3A5F" }}>Pipeline Stages</h3>
-              <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 mb-5">
-                <AlertTriangle size={14} className="text-amber-600 shrink-0" />
-                <p className="text-xs text-amber-700">Changing stages may affect existing deals</p>
+              <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5 mb-5">
+                <Info size={14} className="text-blue-600 shrink-0" />
+                <p className="text-xs text-blue-700">Pipeline stages are read-only. Custom stage editing is coming soon.</p>
               </div>
-              <div className="flex flex-col gap-2 mb-4">
-                {stages.map((stage) => (
+              <div className="flex flex-col gap-2">
+                {stages.map((stage, i) => (
                   <div key={stage.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-                    <GripVertical size={16} className="text-gray-300 cursor-grab" />
-                    <input
-                      type="color"
-                      value={stage.color}
-                      onChange={(e) => setStages((prev) => prev.map((s) => s.id === stage.id ? { ...s, color: e.target.value } : s))}
-                      className="w-7 h-7 rounded-lg border-none cursor-pointer p-0.5"
+                    <span className="text-xs text-gray-400 w-5 text-center font-medium">{i + 1}</span>
+                    <span
+                      className="w-4 h-4 rounded-full shrink-0"
+                      style={{ backgroundColor: stage.color }}
                     />
-                    <input
-                      type="text"
-                      value={stage.name}
-                      onChange={(e) => setStages((prev) => prev.map((s) => s.id === stage.id ? { ...s, name: e.target.value } : s))}
-                      className="flex-1 px-3 py-1.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0EA5E9] bg-white"
-                    />
-                    <button
-                      onClick={() => setStages((prev) => prev.filter((s) => s.id !== stage.id))}
-                      className="w-7 h-7 rounded-lg bg-red-50 flex items-center justify-center hover:bg-red-100 transition-colors"
-                    >
-                      <Trash2 size={13} className="text-red-400" />
-                    </button>
+                    <span className="text-sm font-medium text-gray-700">{stage.name}</span>
                   </div>
                 ))}
               </div>
-              <button
-                onClick={() => setStages((prev) => [...prev, { id: `s${Date.now()}`, name: "New Stage", color: "#0EA5E9" }])}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl border-2 border-dashed border-gray-300 text-sm text-gray-500 hover:border-[#0EA5E9] hover:text-[#0EA5E9] transition-colors w-full justify-center"
-              >
-                <Plus size={15} /> Add Stage
-              </button>
-              {stageStatus === "success" && <p className="text-sm text-green-600 font-medium mt-3">Pipeline stages saved.</p>}
-              <button
-                className="mt-4 px-5 py-2.5 rounded-xl text-white text-sm font-semibold"
-                style={{ backgroundColor: "#0EA5E9" }}
-                onClick={() => {
-                  localStorage.setItem("clo_pipeline_stages", JSON.stringify(stages));
-                  setStageStatus("success");
-                  setTimeout(() => setStageStatus("idle"), 2500);
-                }}
-              >
-                Save Stages
-              </button>
             </div>
           )}
 
           {/* Notifications */}
           {activeSection === "notifications" && (
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-              <h3 className="font-bold mb-5" style={{ color: "#1E3A5F" }}>Notifications</h3>
-              <div className="flex flex-col gap-1">
+              <h3 className="font-bold mb-4" style={{ color: "#1E3A5F" }}>Notifications</h3>
+              <div className="flex items-center gap-3 px-5 py-3.5 rounded-2xl border border-amber-200 bg-amber-50 mb-5">
+                <AlertTriangle size={16} className="text-amber-500 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-amber-800">Coming Soon</p>
+                  <p className="text-xs text-amber-600 mt-0.5">Notification preferences will be available once the notification system is built. Below is a preview of what&apos;s planned.</p>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1 opacity-60 pointer-events-none">
                 {notifs.map((n) => (
                   <div key={n.id} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
                     <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => toggleNotif(n.id)}
+                      <div
                         className={`relative w-10 h-5 rounded-full transition-colors ${n.enabled ? "bg-[#0EA5E9]" : "bg-gray-200"}`}
                       >
                         <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${n.enabled ? "translate-x-5" : "translate-x-0.5"}`} />
-                      </button>
+                      </div>
                       <span className="text-sm text-gray-700">{n.label}</span>
                     </div>
                     <div className="flex rounded-xl overflow-hidden border border-gray-200">
                       {frequencies.map((f) => (
-                        <button
+                        <span
                           key={f}
-                          onClick={() => setNotifFreqs((prev) => ({ ...prev, [n.id]: f }))}
-                          className={`px-2.5 py-1 text-xs font-semibold transition-colors ${notifFreqs[n.id] === f ? "text-white" : "bg-white text-gray-400 hover:bg-gray-50"}`}
+                          className={`px-2.5 py-1 text-xs font-semibold ${notifFreqs[n.id] === f ? "text-white" : "bg-white text-gray-400"}`}
                           style={notifFreqs[n.id] === f ? { backgroundColor: "#1E3A5F" } : {}}
                         >
                           {f}
-                        </button>
+                        </span>
                       ))}
                     </div>
                   </div>
                 ))}
               </div>
-              {notifStatus === "success" && <p className="text-sm text-green-600 font-medium mt-4">Preferences saved.</p>}
-              <button
-                className="mt-5 px-5 py-2.5 rounded-xl text-white text-sm font-semibold"
-                style={{ backgroundColor: "#0EA5E9" }}
-                onClick={() => {
-                  localStorage.setItem("clo_notifications", JSON.stringify({ notifs, freqs: notifFreqs }));
-                  setNotifStatus("success");
-                  setTimeout(() => setNotifStatus("idle"), 2500);
-                }}
-              >
-                Save Preferences
-              </button>
             </div>
           )}
         </div>

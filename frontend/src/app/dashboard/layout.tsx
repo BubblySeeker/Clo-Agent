@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { useClerk, useUser } from "@clerk/nextjs";
+import { useClerk, useUser, useAuth } from "@clerk/nextjs";
+import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard,
   Users,
   GitBranch,
   Bot,
-  Activity,
+  Activity as ActivityIcon,
   CheckSquare,
   BarChart2,
   Settings,
@@ -18,26 +19,58 @@ import {
   UserCircle,
   Phone,
   Home,
-  Calendar,
-  GitMerge,
-  AlertCircle,
+  Mail,
+  StickyNote,
+  type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import AIChatBubble from "@/components/shared/AIChatBubble";
 import { useUIStore } from "@/store/ui-store";
+import { listAllActivities, type Activity } from "@/lib/api/activities";
 
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard", exact: true },
   { icon: Users,           label: "Contacts",  href: "/dashboard/contacts" },
   { icon: GitBranch,       label: "Pipeline",  href: "/dashboard/pipeline" },
   { icon: Bot,             label: "AI Chat",   href: "/dashboard/chat" },
-  { icon: Activity,        label: "Activities",href: "/dashboard/activities" },
+  { icon: ActivityIcon,     label: "Activities",href: "/dashboard/activities" },
   { icon: CheckSquare,     label: "Tasks",     href: "/dashboard/tasks" },
   { icon: BarChart2,       label: "Reports",   href: "/dashboard/analytics" },
   { icon: Workflow,        label: "Workflows", href: "/dashboard/workflows" },
 ];
 
+function activityMeta(type: Activity["type"]): { icon: LucideIcon; bg: string; color: string; label: string } {
+  switch (type) {
+    case "call":
+      return { icon: Phone, bg: "#E0F2FE", color: "#0EA5E9", label: "Call logged" };
+    case "email":
+      return { icon: Mail, bg: "#EDE9FE", color: "#8B5CF6", label: "Email sent" };
+    case "note":
+      return { icon: StickyNote, bg: "#FEF3C7", color: "#F59E0B", label: "Note added" };
+    case "showing":
+      return { icon: Home, bg: "#DCFCE7", color: "#22C55E", label: "Showing" };
+    case "task":
+      return { icon: CheckSquare, bg: "#FEE2E2", color: "#EF4444", label: "Task" };
+    default:
+      return { icon: ActivityIcon, bg: "#F3F4F6", color: "#6B7280", label: "Activity" };
+  }
+}
+
+function relativeTime(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diffSec = Math.floor((now - then) / 1000);
+  if (diffSec < 60) return "Just now";
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay === 1) return "Yesterday";
+  if (diffDay < 7) return `${diffDay}d ago`;
+  return new Date(dateStr).toLocaleDateString();
+}
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -50,7 +83,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const userMenuRef = useRef<HTMLDivElement>(null);
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
-  const [readIds, setReadIds] = useState<Set<number>>(new Set());
+  const [readIds, setReadIds] = useState<Set<string>>(new Set());
+  const { getToken } = useAuth();
+
+  // Fetch recent activities for notifications
+  const { data: recentActivities } = useQuery({
+    queryKey: ["recent-activities-notif"],
+    queryFn: async () => {
+      const token = await getToken();
+      if (!token) return { activities: [], total: 0 };
+      return listAllActivities(token, undefined, 5);
+    },
+    refetchInterval: 60000, // refresh every minute
+  });
+
+  const notifications = recentActivities?.activities ?? [];
+  const unreadCount = notifications.filter((a) => !readIds.has(a.id)).length;
+
+  function markAllRead() {
+    setReadIds(new Set(notifications.map((a) => a.id)));
+  }
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -65,65 +117,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
-
-  const NOTIFICATIONS = [
-    {
-      id: 1,
-      icon: AlertCircle,
-      iconBg: "#FEF3C7",
-      iconColor: "#F59E0B",
-      title: "Follow-up needed",
-      body: "Sarah Johnson hasn't been contacted in 9 days.",
-      time: "2h ago",
-      href: "/dashboard/contacts",
-    },
-    {
-      id: 2,
-      icon: GitMerge,
-      iconBg: "#EDE9FE",
-      iconColor: "#8B5CF6",
-      title: "Deal moved to Offer",
-      body: "123 Maple St deal advanced to the Offer stage.",
-      time: "4h ago",
-      href: "/dashboard/pipeline",
-    },
-    {
-      id: 3,
-      icon: Phone,
-      iconBg: "#E0F2FE",
-      iconColor: "#0EA5E9",
-      title: "Call logged",
-      body: "Activity logged for Marcus Rivera — call, 12 min.",
-      time: "Yesterday",
-      href: "/dashboard/activities",
-    },
-    {
-      id: 4,
-      icon: Home,
-      iconBg: "#DCFCE7",
-      iconColor: "#22C55E",
-      title: "Showing scheduled",
-      body: "Showing booked with Emily & Tom Chen at 2:30 PM.",
-      time: "Yesterday",
-      href: "/dashboard/contacts",
-    },
-    {
-      id: 5,
-      icon: Calendar,
-      iconBg: "#FEE2E2",
-      iconColor: "#EF4444",
-      title: "Task due today",
-      body: "Send pre-approval docs to David Kim by end of day.",
-      time: "Today",
-      href: "/dashboard/tasks",
-    },
-  ];
-
-  const unreadCount = NOTIFICATIONS.filter((n) => !readIds.has(n.id)).length;
-
-  function markAllRead() {
-    setReadIds(new Set(NOTIFICATIONS.map((n) => n.id)));
-  }
 
   const isActive = (href: string, exact?: boolean) =>
     exact ? pathname === href : pathname.startsWith(href);
@@ -283,34 +276,45 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   </div>
 
                   <div className="max-h-[360px] overflow-y-auto divide-y divide-gray-50">
-                    {NOTIFICATIONS.map((n) => {
-                      const isUnread = !readIds.has(n.id);
-                      return (
-                        <Link
-                          key={n.id}
-                          href={n.href}
-                          onClick={() => {
-                            setReadIds((prev) => { const s = new Set(prev); s.add(n.id); return s; });
-                            setNotifOpen(false);
-                          }}
-                          className={`flex items-start gap-3 px-4 py-3.5 hover:bg-gray-50 transition-colors ${isUnread ? "bg-blue-50/30" : ""}`}
-                        >
-                          <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5" style={{ backgroundColor: n.iconBg }}>
-                            <n.icon size={14} style={{ color: n.iconColor }} />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className={`text-xs font-semibold truncate ${isUnread ? "text-gray-900" : "text-gray-600"}`}>{n.title}</p>
-                              <span className="text-[10px] text-gray-400 shrink-0">{n.time}</span>
+                    {notifications.length === 0 ? (
+                      <div className="px-4 py-8 text-center">
+                        <Bell size={24} className="mx-auto text-gray-300 mb-2" />
+                        <p className="text-sm text-gray-400">No recent activity</p>
+                      </div>
+                    ) : (
+                      notifications.map((a) => {
+                        const isUnread = !readIds.has(a.id);
+                        const { icon: Icon, bg, color, label } = activityMeta(a.type);
+                        const href = a.type === "task" ? "/dashboard/tasks" : "/dashboard/activities";
+                        return (
+                          <Link
+                            key={a.id}
+                            href={href}
+                            onClick={() => {
+                              setReadIds((prev) => { const s = new Set(prev); s.add(a.id); return s; });
+                              setNotifOpen(false);
+                            }}
+                            className={`flex items-start gap-3 px-4 py-3.5 hover:bg-gray-50 transition-colors ${isUnread ? "bg-blue-50/30" : ""}`}
+                          >
+                            <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5" style={{ backgroundColor: bg }}>
+                              <Icon size={14} style={{ color }} />
                             </div>
-                            <p className="text-xs text-gray-500 mt-0.5 leading-snug">{n.body}</p>
-                          </div>
-                          {isUnread && (
-                            <div className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0" style={{ backgroundColor: "#0EA5E9" }} />
-                          )}
-                        </Link>
-                      );
-                    })}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className={`text-xs font-semibold truncate ${isUnread ? "text-gray-900" : "text-gray-600"}`}>
+                                  {label}{a.contact_name ? ` — ${a.contact_name}` : ""}
+                                </p>
+                                <span className="text-[10px] text-gray-400 shrink-0">{relativeTime(a.created_at)}</span>
+                              </div>
+                              <p className="text-xs text-gray-500 mt-0.5 leading-snug line-clamp-2">{a.body || "No details"}</p>
+                            </div>
+                            {isUnread && (
+                              <div className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0" style={{ backgroundColor: "#0EA5E9" }} />
+                            )}
+                          </Link>
+                        );
+                      })
+                    )}
                   </div>
 
                   <div className="px-4 py-2.5 border-t border-gray-100 text-center">
