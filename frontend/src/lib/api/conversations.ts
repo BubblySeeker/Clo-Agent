@@ -8,6 +8,7 @@ export interface Conversation {
   agent_id: string;
   created_at: string;
   contact_name?: string | null;
+  title?: string | null;
 }
 
 export interface Message {
@@ -33,6 +34,10 @@ export function createConversation(token: string, contactId?: string): Promise<C
     method: "POST",
     body: JSON.stringify({ contact_id: contactId ?? null }),
   });
+}
+
+export function deleteConversation(token: string, conversationId: string): Promise<{ status: string }> {
+  return apiRequest(`/ai/conversations/${conversationId}`, token, { method: "DELETE" });
 }
 
 export function getMessages(token: string, conversationId: string): Promise<Message[]> {

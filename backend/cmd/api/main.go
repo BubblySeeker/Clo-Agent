@@ -128,6 +128,7 @@ func run() error {
 		r.Get("/api/ai/conversations", handlers.ListConversations(pool))
 		r.Post("/api/ai/conversations", handlers.CreateConversation(pool))
 		r.Get("/api/ai/conversations/{id}", handlers.GetConversation(pool))
+		r.Delete("/api/ai/conversations/{id}", handlers.DeleteConversation(pool))
 		r.Get("/api/ai/conversations/{id}/messages", handlers.GetMessages(pool))
 		r.Post("/api/ai/conversations/{id}/messages", handlers.SendMessage(pool, cfg))
 		r.Post("/api/ai/conversations/{id}/confirm", handlers.ConfirmToolAction(cfg))

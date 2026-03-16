@@ -90,6 +90,24 @@ func SendMessage(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 			respondError(w, http.StatusInternalServerError, "failed to save message")
 			return
 		}
+
+		// Auto-set conversation title from first user message
+		var msgCount int
+		_ = tx.QueryRow(r.Context(),
+			`SELECT COUNT(*) FROM messages WHERE conversation_id = $1`,
+			convID,
+		).Scan(&msgCount)
+		if msgCount == 1 {
+			title := body.Content
+			if len(title) > 50 {
+				title = title[:50] + "…"
+			}
+			_, _ = tx.Exec(r.Context(),
+				`UPDATE conversations SET title = $1 WHERE id = $2`,
+				title, convID,
+			)
+		}
+
 		tx.Commit(r.Context())
 
 		// If AI service is not configured, fall back to placeholder.

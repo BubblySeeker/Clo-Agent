@@ -18,6 +18,7 @@ type Conversation struct {
 	AgentID     string    `json:"agent_id"`
 	CreatedAt   time.Time `json:"created_at"`
 	ContactName *string   `json:"contact_name,omitempty"`
+	Title       *string   `json:"title,omitempty"`
 }
 
 func ListConversations(pool *pgxpool.Pool) http.HandlerFunc {
@@ -33,7 +34,8 @@ func ListConversations(pool *pgxpool.Pool) http.HandlerFunc {
 
 		rows, err := tx.Query(r.Context(),
 			`SELECT cv.id, cv.contact_id, cv.agent_id, cv.created_at,
-			        c.first_name || ' ' || c.last_name AS contact_name
+			        c.first_name || ' ' || c.last_name AS contact_name,
+			        cv.title
 			 FROM conversations cv
 			 LEFT JOIN contacts c ON c.id = cv.contact_id
 			 ORDER BY cv.created_at DESC`,
@@ -47,7 +49,7 @@ func ListConversations(pool *pgxpool.Pool) http.HandlerFunc {
 		convs := make([]Conversation, 0)
 		for rows.Next() {
 			var cv Conversation
-			if err := rows.Scan(&cv.ID, &cv.ContactID, &cv.AgentID, &cv.CreatedAt, &cv.ContactName); err != nil {
+			if err := rows.Scan(&cv.ID, &cv.ContactID, &cv.AgentID, &cv.CreatedAt, &cv.ContactName, &cv.Title); err != nil {
 				respondError(w, http.StatusInternalServerError, "scan error")
 				return
 			}
@@ -107,12 +109,13 @@ func GetConversation(pool *pgxpool.Pool) http.HandlerFunc {
 		var cv Conversation
 		err = tx.QueryRow(r.Context(),
 			`SELECT cv.id, cv.contact_id, cv.agent_id, cv.created_at,
-			        c.first_name || ' ' || c.last_name AS contact_name
+			        c.first_name || ' ' || c.last_name AS contact_name,
+			        cv.title
 			 FROM conversations cv
 			 LEFT JOIN contacts c ON c.id = cv.contact_id
 			 WHERE cv.id = $1`,
 			id,
-		).Scan(&cv.ID, &cv.ContactID, &cv.AgentID, &cv.CreatedAt, &cv.ContactName)
+		).Scan(&cv.ID, &cv.ContactID, &cv.AgentID, &cv.CreatedAt, &cv.ContactName, &cv.Title)
 		if err != nil {
 			respondError(w, http.StatusNotFound, "conversation not found")
 			return
@@ -120,5 +123,39 @@ func GetConversation(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx.Commit(r.Context())
 		respondJSON(w, http.StatusOK, cv)
+	}
+}
+
+func DeleteConversation(pool *pgxpool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		agentID := middleware.AgentUUIDFromContext(r.Context())
+		id := chi.URLParam(r, "id")
+
+		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "database error")
+			return
+		}
+		defer tx.Rollback(r.Context())
+
+		// Delete messages first, then conversation
+		_, err = tx.Exec(r.Context(), `DELETE FROM messages WHERE conversation_id = $1`, id)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "delete messages failed")
+			return
+		}
+
+		tag, err := tx.Exec(r.Context(), `DELETE FROM conversations WHERE id = $1`, id)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "delete failed")
+			return
+		}
+		if tag.RowsAffected() == 0 {
+			respondError(w, http.StatusNotFound, "conversation not found")
+			return
+		}
+
+		tx.Commit(r.Context())
+		respondJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 	}
 }
