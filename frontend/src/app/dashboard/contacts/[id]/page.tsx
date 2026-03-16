@@ -4,9 +4,14 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getContact } from "@/lib/api/contacts";
+import { getContact, updateContact, deleteContact } from "@/lib/api/contacts";
+import type { UpdateContactBody } from "@/lib/api/contacts";
 import { listActivities, createActivity } from "@/lib/api/activities";
 import { listDeals } from "@/lib/api/deals";
+import { getBuyerProfile, createBuyerProfile, updateBuyerProfile } from "@/lib/api/buyer-profiles";
+import type { CreateBuyerProfileBody } from "@/lib/api/buyer-profiles";
+import { getAIProfile, regenerateAIProfile } from "@/lib/api/ai-profiles";
+import { useUIStore } from "@/store/ui-store";
 import {
   Phone,
   Mail,
@@ -17,6 +22,11 @@ import {
   ChevronDown,
   ChevronRight,
   Send,
+  Edit2,
+  Trash2,
+  Sparkles,
+  Save,
+  X,
 } from "lucide-react";
 
 const typeIconColors: Record<string, { bg: string; color: string }> = {
@@ -69,17 +79,58 @@ const tabTypeMap: Record<string, string> = {
   Showings: "showing",
 };
 
+const sourceOptions = ["Zillow", "Referral", "Cold Call", "Open House", "WhatsApp"];
+const propertyTypes = ["House", "Condo", "Townhouse", "Multi-family"];
+const timelineOptions = ["ASAP", "1-3 months", "3-6 months", "6-12 months", "Just browsing"];
+
 export default function ContactDetailPage({ params }: { params: { id: string } }) {
   const { id } = params;
   const router = useRouter();
   const { getToken } = useAuth();
   const queryClient = useQueryClient();
+  const setChatOpen = useUIStore((s) => s.setChatOpen);
 
   const [activeTab, setActiveTab] = useState("All Activity");
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const [note, setNote] = useState("");
   const [noteType, setNoteType] = useState<"call" | "email" | "note" | "showing" | "task">("note");
 
+  // Edit contact modal
+  const [showEdit, setShowEdit] = useState(false);
+  const [editForm, setEditForm] = useState({ first_name: "", last_name: "", email: "", phone: "", source: "" });
+
+  // Delete confirmation modal
+  const [showDelete, setShowDelete] = useState(false);
+
+  // Buyer profile editing
+  const [editingBuyer, setEditingBuyer] = useState(false);
+  const [buyerForm, setBuyerForm] = useState<{
+    budget_min: string;
+    budget_max: string;
+    bedrooms: string;
+    bathrooms: string;
+    property_type: string;
+    pre_approved: boolean;
+    timeline: string;
+    locations: string;
+    must_haves: string;
+    deal_breakers: string;
+    notes: string;
+  }>({
+    budget_min: "",
+    budget_max: "",
+    bedrooms: "",
+    bathrooms: "",
+    property_type: "",
+    pre_approved: false,
+    timeline: "",
+    locations: "",
+    must_haves: "",
+    deal_breakers: "",
+    notes: "",
+  });
+
+  // --- Queries ---
   const { data: contact, isLoading: contactLoading } = useQuery({
     queryKey: ["contact", id],
     queryFn: async () => {
@@ -105,6 +156,29 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
     },
   });
 
+  const { data: buyerProfile, error: buyerProfileError } = useQuery({
+    queryKey: ["buyer-profile", id],
+    queryFn: async () => {
+      const token = await getToken();
+      return getBuyerProfile(token!, id);
+    },
+    retry: false,
+  });
+
+  const buyerProfileNotFound = buyerProfileError && (buyerProfileError as Error).message?.includes("404");
+
+  const { data: aiProfile, error: aiProfileError } = useQuery({
+    queryKey: ["ai-profile", id],
+    queryFn: async () => {
+      const token = await getToken();
+      return getAIProfile(token!, id);
+    },
+    retry: false,
+  });
+
+  const aiProfileNotFound = aiProfileError && (aiProfileError as Error).message?.includes("404");
+
+  // --- Mutations ---
   const logMutation = useMutation({
     mutationFn: async () => {
       const token = await getToken();
@@ -116,6 +190,60 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
     },
   });
 
+  const updateContactMutation = useMutation({
+    mutationFn: async (body: UpdateContactBody) => {
+      const token = await getToken();
+      return updateContact(token!, id, body);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["contact", id] });
+      setShowEdit(false);
+    },
+  });
+
+  const deleteContactMutation = useMutation({
+    mutationFn: async () => {
+      const token = await getToken();
+      return deleteContact(token!, id);
+    },
+    onSuccess: () => {
+      router.push("/dashboard/contacts");
+    },
+  });
+
+  const createBuyerMutation = useMutation({
+    mutationFn: async (body: CreateBuyerProfileBody) => {
+      const token = await getToken();
+      return createBuyerProfile(token!, id, body);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["buyer-profile", id] });
+      setEditingBuyer(false);
+    },
+  });
+
+  const updateBuyerMutation = useMutation({
+    mutationFn: async (body: CreateBuyerProfileBody) => {
+      const token = await getToken();
+      return updateBuyerProfile(token!, id, body);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["buyer-profile", id] });
+      setEditingBuyer(false);
+    },
+  });
+
+  const regenerateAIMutation = useMutation({
+    mutationFn: async () => {
+      const token = await getToken();
+      return regenerateAIProfile(token!, id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ai-profile", id] });
+    },
+  });
+
+  // --- Helpers ---
   const toggleExpand = (itemId: string) => {
     setExpandedItems((prev) => {
       const next = new Set(prev);
@@ -125,8 +253,108 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
     });
   };
 
+  const openEditModal = () => {
+    if (!contact) return;
+    setEditForm({
+      first_name: contact.first_name,
+      last_name: contact.last_name,
+      email: contact.email ?? "",
+      phone: contact.phone ?? "",
+      source: contact.source ?? "",
+    });
+    setShowEdit(true);
+  };
+
+  const handleEditSave = () => {
+    const body: UpdateContactBody = {};
+    if (editForm.first_name) body.first_name = editForm.first_name;
+    if (editForm.last_name) body.last_name = editForm.last_name;
+    body.email = editForm.email || undefined;
+    body.phone = editForm.phone || undefined;
+    body.source = editForm.source || undefined;
+    updateContactMutation.mutate(body);
+  };
+
+  const openBuyerEdit = (existing?: boolean) => {
+    if (existing && buyerProfile) {
+      setBuyerForm({
+        budget_min: buyerProfile.budget_min?.toString() ?? "",
+        budget_max: buyerProfile.budget_max?.toString() ?? "",
+        bedrooms: buyerProfile.bedrooms?.toString() ?? "",
+        bathrooms: buyerProfile.bathrooms?.toString() ?? "",
+        property_type: buyerProfile.property_type ?? "",
+        pre_approved: buyerProfile.pre_approved,
+        timeline: buyerProfile.timeline ?? "",
+        locations: (buyerProfile.locations ?? []).join(", "),
+        must_haves: (buyerProfile.must_haves ?? []).join(", "),
+        deal_breakers: (buyerProfile.deal_breakers ?? []).join(", "),
+        notes: buyerProfile.notes ?? "",
+      });
+    } else {
+      setBuyerForm({
+        budget_min: "", budget_max: "", bedrooms: "", bathrooms: "",
+        property_type: "", pre_approved: false, timeline: "",
+        locations: "", must_haves: "", deal_breakers: "", notes: "",
+      });
+    }
+    setEditingBuyer(true);
+  };
+
+  const handleBuyerSave = () => {
+    const body: CreateBuyerProfileBody = {};
+    if (buyerForm.budget_min) body.budget_min = Number(buyerForm.budget_min);
+    if (buyerForm.budget_max) body.budget_max = Number(buyerForm.budget_max);
+    if (buyerForm.bedrooms) body.bedrooms = Number(buyerForm.bedrooms);
+    if (buyerForm.bathrooms) body.bathrooms = Number(buyerForm.bathrooms);
+    if (buyerForm.property_type) body.property_type = buyerForm.property_type;
+    body.pre_approved = buyerForm.pre_approved;
+    if (buyerForm.timeline) body.timeline = buyerForm.timeline;
+    if (buyerForm.locations.trim()) body.locations = buyerForm.locations.split(",").map((s) => s.trim()).filter(Boolean);
+    if (buyerForm.must_haves.trim()) body.must_haves = buyerForm.must_haves.split(",").map((s) => s.trim()).filter(Boolean);
+    if (buyerForm.deal_breakers.trim()) body.deal_breakers = buyerForm.deal_breakers.split(",").map((s) => s.trim()).filter(Boolean);
+    if (buyerForm.notes) body.notes = buyerForm.notes;
+
+    if (buyerProfile && !buyerProfileNotFound) {
+      updateBuyerMutation.mutate(body);
+    } else {
+      createBuyerMutation.mutate(body);
+    }
+  };
+
   const activities = activitiesData?.activities ?? [];
   const deals = dealsData?.deals ?? [];
+
+  // --- Action button handlers ---
+  const actionButtons = [
+    {
+      icon: Phone,
+      label: "Call",
+      color: "#0EA5E9",
+      onClick: () => contact?.phone && window.open("tel:" + contact.phone),
+    },
+    {
+      icon: Mail,
+      label: "Email",
+      color: "#22C55E",
+      onClick: () => contact?.email && window.open("mailto:" + contact.email),
+    },
+    {
+      icon: MessageSquare,
+      label: "Message",
+      color: "#8B5CF6",
+      onClick: () => setChatOpen(true),
+    },
+    {
+      icon: FileText,
+      label: "Log",
+      color: "#F59E0B",
+      onClick: () => {
+        const el = document.getElementById("activity-input");
+        el?.focus();
+        el?.scrollIntoView({ behavior: "smooth" });
+      },
+    },
+  ];
 
   if (contactLoading) {
     return (
@@ -156,6 +384,113 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
 
   return (
     <div className="p-6">
+      {/* Edit Contact Modal */}
+      {showEdit && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-lg font-bold" style={{ color: "#1E3A5F" }}>Edit Contact</h3>
+              <button onClick={() => setShowEdit(false)} className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center">
+                <X size={16} className="text-gray-400" />
+              </button>
+            </div>
+            <div className="flex flex-col gap-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 mb-1 block">First Name</label>
+                  <input
+                    value={editForm.first_name}
+                    onChange={(e) => setEditForm({ ...editForm, first_name: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 mb-1 block">Last Name</label>
+                  <input
+                    value={editForm.last_name}
+                    onChange={(e) => setEditForm({ ...editForm, last_name: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-500 mb-1 block">Email</label>
+                <input
+                  value={editForm.email}
+                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-500 mb-1 block">Phone</label>
+                <input
+                  value={editForm.phone}
+                  onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-500 mb-1 block">Source</label>
+                <select
+                  value={editForm.source}
+                  onChange={(e) => setEditForm({ ...editForm, source: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200 bg-white"
+                >
+                  <option value="">Select source...</option>
+                  {sourceOptions.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-5">
+              <button
+                onClick={() => setShowEdit(false)}
+                className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-500 hover:bg-gray-100 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleEditSave}
+                disabled={!editForm.first_name || !editForm.last_name || updateContactMutation.isPending}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-50"
+                style={{ backgroundColor: "#0EA5E9" }}
+              >
+                <Save size={14} />
+                {updateContactMutation.isPending ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDelete && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl">
+            <h3 className="text-lg font-bold mb-2" style={{ color: "#1E3A5F" }}>Delete Contact</h3>
+            <p className="text-sm text-gray-500 mb-5">Delete this contact? This action cannot be undone.</p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowDelete(false)}
+                className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-500 hover:bg-gray-100 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => deleteContactMutation.mutate()}
+                disabled={deleteContactMutation.isPending}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-50"
+                style={{ backgroundColor: "#EF4444" }}
+              >
+                <Trash2 size={14} />
+                {deleteContactMutation.isPending ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <button
         onClick={() => router.push("/dashboard/contacts")}
         className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-4 transition-colors"
@@ -175,10 +510,26 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
               >
                 {initials}
               </div>
-              <div>
-                <h2 className="text-xl font-bold" style={{ color: "#1E3A5F" }}>
-                  {contact.first_name} {contact.last_name}
-                </h2>
+              <div className="relative">
+                <div className="flex items-center gap-2 justify-center">
+                  <h2 className="text-xl font-bold" style={{ color: "#1E3A5F" }}>
+                    {contact.first_name} {contact.last_name}
+                  </h2>
+                  <button
+                    onClick={openEditModal}
+                    className="w-7 h-7 rounded-lg hover:bg-gray-100 flex items-center justify-center transition-colors"
+                    title="Edit contact"
+                  >
+                    <Edit2 size={14} className="text-gray-400" />
+                  </button>
+                  <button
+                    onClick={() => setShowDelete(true)}
+                    className="w-7 h-7 rounded-lg hover:bg-red-50 flex items-center justify-center transition-colors"
+                    title="Delete contact"
+                  >
+                    <Trash2 size={14} className="text-red-400" />
+                  </button>
+                </div>
                 {contact.source && (
                   <span
                     className="text-xs font-semibold px-2 py-0.5 rounded-full mt-1 inline-block"
@@ -190,14 +541,10 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
               </div>
             </div>
             <div className="grid grid-cols-4 gap-2 pt-4">
-              {[
-                { icon: Phone, label: "Call", color: "#0EA5E9" },
-                { icon: Mail, label: "Email", color: "#22C55E" },
-                { icon: MessageSquare, label: "Message", color: "#8B5CF6" },
-                { icon: FileText, label: "Log", color: "#F59E0B" },
-              ].map((action) => (
+              {actionButtons.map((action) => (
                 <button
                   key={action.label}
+                  onClick={action.onClick}
                   className="flex flex-col items-center gap-1 p-2 rounded-xl transition-colors hover:bg-gray-50"
                 >
                   <div
@@ -235,6 +582,275 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
             </div>
           </div>
 
+          {/* Buyer Profile */}
+          <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="font-bold" style={{ color: "#1E3A5F" }}>Buyer Profile</h4>
+              {buyerProfile && !buyerProfileNotFound && !editingBuyer && (
+                <button
+                  onClick={() => openBuyerEdit(true)}
+                  className="w-7 h-7 rounded-lg hover:bg-gray-100 flex items-center justify-center transition-colors"
+                >
+                  <Edit2 size={13} className="text-gray-400" />
+                </button>
+              )}
+            </div>
+
+            {editingBuyer ? (
+              <div className="flex flex-col gap-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 mb-1 block">Budget Min ($)</label>
+                    <input
+                      type="number"
+                      value={buyerForm.budget_min}
+                      onChange={(e) => setBuyerForm({ ...buyerForm, budget_min: e.target.value })}
+                      placeholder="0"
+                      className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 mb-1 block">Budget Max ($)</label>
+                    <input
+                      type="number"
+                      value={buyerForm.budget_max}
+                      onChange={(e) => setBuyerForm({ ...buyerForm, budget_max: e.target.value })}
+                      placeholder="0"
+                      className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 mb-1 block">Bedrooms</label>
+                    <input
+                      type="number"
+                      value={buyerForm.bedrooms}
+                      onChange={(e) => setBuyerForm({ ...buyerForm, bedrooms: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 mb-1 block">Bathrooms</label>
+                    <input
+                      type="number"
+                      value={buyerForm.bathrooms}
+                      onChange={(e) => setBuyerForm({ ...buyerForm, bathrooms: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 mb-1 block">Property Type</label>
+                  <select
+                    value={buyerForm.property_type}
+                    onChange={(e) => setBuyerForm({ ...buyerForm, property_type: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200 bg-white"
+                  >
+                    <option value="">Select type...</option>
+                    {propertyTypes.map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-semibold text-gray-500">Pre-approved</label>
+                  <button
+                    onClick={() => setBuyerForm({ ...buyerForm, pre_approved: !buyerForm.pre_approved })}
+                    className={`w-10 h-5 rounded-full transition-colors relative ${buyerForm.pre_approved ? "bg-sky-500" : "bg-gray-300"}`}
+                  >
+                    <span
+                      className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${buyerForm.pre_approved ? "translate-x-5" : "translate-x-0.5"}`}
+                    />
+                  </button>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 mb-1 block">Timeline</label>
+                  <select
+                    value={buyerForm.timeline}
+                    onChange={(e) => setBuyerForm({ ...buyerForm, timeline: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200 bg-white"
+                  >
+                    <option value="">Select timeline...</option>
+                    {timelineOptions.map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 mb-1 block">Locations (comma-separated)</label>
+                  <input
+                    value={buyerForm.locations}
+                    onChange={(e) => setBuyerForm({ ...buyerForm, locations: e.target.value })}
+                    placeholder="e.g. Downtown, Midtown, Suburbs"
+                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 mb-1 block">Must-haves (comma-separated)</label>
+                  <input
+                    value={buyerForm.must_haves}
+                    onChange={(e) => setBuyerForm({ ...buyerForm, must_haves: e.target.value })}
+                    placeholder="e.g. Garage, Pool, Backyard"
+                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 mb-1 block">Deal-breakers (comma-separated)</label>
+                  <input
+                    value={buyerForm.deal_breakers}
+                    onChange={(e) => setBuyerForm({ ...buyerForm, deal_breakers: e.target.value })}
+                    placeholder="e.g. HOA, No parking"
+                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 mb-1 block">Notes</label>
+                  <textarea
+                    value={buyerForm.notes}
+                    onChange={(e) => setBuyerForm({ ...buyerForm, notes: e.target.value })}
+                    rows={2}
+                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200 resize-none"
+                  />
+                </div>
+                <div className="flex justify-end gap-2 mt-1">
+                  <button
+                    onClick={() => setEditingBuyer(false)}
+                    className="px-3 py-1.5 rounded-xl text-xs font-semibold text-gray-500 hover:bg-gray-100 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleBuyerSave}
+                    disabled={createBuyerMutation.isPending || updateBuyerMutation.isPending}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-white text-xs font-semibold disabled:opacity-50"
+                    style={{ backgroundColor: "#0EA5E9" }}
+                  >
+                    <Save size={12} />
+                    {createBuyerMutation.isPending || updateBuyerMutation.isPending ? "Saving..." : "Save"}
+                  </button>
+                </div>
+              </div>
+            ) : buyerProfile && !buyerProfileNotFound ? (
+              <div className="flex flex-col gap-2 text-sm">
+                {(buyerProfile.budget_min != null || buyerProfile.budget_max != null) && (
+                  <div className="flex items-center gap-2 text-gray-600">
+                    <span className="text-gray-400 text-xs">Budget:</span>
+                    {buyerProfile.budget_min != null ? `$${buyerProfile.budget_min.toLocaleString()}` : "$0"}
+                    {" - "}
+                    {buyerProfile.budget_max != null ? `$${buyerProfile.budget_max.toLocaleString()}` : "No max"}
+                  </div>
+                )}
+                {(buyerProfile.bedrooms != null || buyerProfile.bathrooms != null) && (
+                  <div className="flex items-center gap-2 text-gray-600">
+                    <span className="text-gray-400 text-xs">Beds/Baths:</span>
+                    {buyerProfile.bedrooms ?? "-"} bd / {buyerProfile.bathrooms ?? "-"} ba
+                  </div>
+                )}
+                {buyerProfile.property_type && (
+                  <div className="flex items-center gap-2 text-gray-600">
+                    <span className="text-gray-400 text-xs">Type:</span>
+                    {buyerProfile.property_type}
+                  </div>
+                )}
+                <div className="flex items-center gap-2 text-gray-600">
+                  <span className="text-gray-400 text-xs">Pre-approved:</span>
+                  <span className={buyerProfile.pre_approved ? "text-green-600 font-semibold" : "text-gray-400"}>
+                    {buyerProfile.pre_approved ? "Yes" : "No"}
+                  </span>
+                </div>
+                {buyerProfile.timeline && (
+                  <div className="flex items-center gap-2 text-gray-600">
+                    <span className="text-gray-400 text-xs">Timeline:</span>
+                    {buyerProfile.timeline}
+                  </div>
+                )}
+                {buyerProfile.locations?.length > 0 && (
+                  <div className="flex items-start gap-2 text-gray-600">
+                    <span className="text-gray-400 text-xs shrink-0 mt-0.5">Locations:</span>
+                    <div className="flex flex-wrap gap-1">
+                      {buyerProfile.locations.map((loc) => (
+                        <span key={loc} className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">{loc}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {buyerProfile.must_haves?.length > 0 && (
+                  <div className="flex items-start gap-2 text-gray-600">
+                    <span className="text-gray-400 text-xs shrink-0 mt-0.5">Must-haves:</span>
+                    <div className="flex flex-wrap gap-1">
+                      {buyerProfile.must_haves.map((item) => (
+                        <span key={item} className="text-xs px-2 py-0.5 rounded-full bg-green-50 text-green-600">{item}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {buyerProfile.deal_breakers?.length > 0 && (
+                  <div className="flex items-start gap-2 text-gray-600">
+                    <span className="text-gray-400 text-xs shrink-0 mt-0.5">Deal-breakers:</span>
+                    <div className="flex flex-wrap gap-1">
+                      {buyerProfile.deal_breakers.map((item) => (
+                        <span key={item} className="text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-600">{item}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {buyerProfile.notes && (
+                  <div className="flex items-start gap-2 text-gray-600">
+                    <span className="text-gray-400 text-xs shrink-0 mt-0.5">Notes:</span>
+                    <p className="text-xs text-gray-500">{buyerProfile.notes}</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-4">
+                <p className="text-xs text-gray-400 mb-3">No buyer profile yet.</p>
+                <button
+                  onClick={() => openBuyerEdit(false)}
+                  className="px-4 py-2 rounded-xl text-white text-xs font-semibold"
+                  style={{ backgroundColor: "#0EA5E9" }}
+                >
+                  Create Buyer Profile
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* AI Summary */}
+          <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="font-bold flex items-center gap-2" style={{ color: "#1E3A5F" }}>
+                <Sparkles size={15} className="text-amber-400" />
+                AI Summary
+              </h4>
+              {aiProfile && !aiProfileNotFound && (
+                <button
+                  onClick={() => regenerateAIMutation.mutate()}
+                  disabled={regenerateAIMutation.isPending}
+                  className="text-xs font-semibold px-2.5 py-1 rounded-lg hover:bg-gray-100 transition-colors text-gray-500 disabled:opacity-50"
+                >
+                  {regenerateAIMutation.isPending ? "Generating..." : "Regenerate"}
+                </button>
+              )}
+            </div>
+            {aiProfile && !aiProfileNotFound ? (
+              <p className="text-sm text-gray-600 leading-relaxed">{aiProfile.summary}</p>
+            ) : (
+              <div className="text-center py-4">
+                <p className="text-xs text-gray-400 mb-3">No AI summary generated yet.</p>
+                <button
+                  onClick={() => regenerateAIMutation.mutate()}
+                  disabled={regenerateAIMutation.isPending}
+                  className="flex items-center gap-1.5 mx-auto px-4 py-2 rounded-xl text-white text-xs font-semibold disabled:opacity-50"
+                  style={{ backgroundColor: "#0EA5E9" }}
+                >
+                  <Sparkles size={12} />
+                  {regenerateAIMutation.isPending ? "Generating..." : "Generate"}
+                </button>
+              </div>
+            )}
+          </div>
+
           {/* Linked Deals */}
           <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
             <h4 className="font-bold mb-3" style={{ color: "#1E3A5F" }}>Linked Deals</h4>
@@ -267,7 +883,7 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
           </div>
         </div>
 
-        {/* RIGHT COLUMN — Activity Timeline */}
+        {/* RIGHT COLUMN -- Activity Timeline */}
         <div className="col-span-8 flex flex-col gap-4">
           {/* Tabs */}
           <div className="bg-white rounded-2xl p-1 shadow-sm border border-gray-100 flex gap-1">
@@ -302,6 +918,7 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
               ))}
             </div>
             <textarea
+              id="activity-input"
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder={`Log a ${noteType} for ${contact.first_name}...`}
@@ -325,7 +942,7 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
             <h4 className="font-bold mb-5" style={{ color: "#1E3A5F" }}>Activity Timeline</h4>
             {activities.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-8">No activities yet — log one above!</p>
+              <p className="text-sm text-gray-400 text-center py-8">No activities yet -- log one above!</p>
             ) : (
               <div className="flex flex-col gap-4">
                 {activities.map((item, i) => {

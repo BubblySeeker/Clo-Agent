@@ -315,6 +315,9 @@ function SettingsContent() {
   });
   const [commRate, setCommRate] = useState("2.5");
   const [commSplit, setCommSplit] = useState("70/30");
+  const [commStatus, setCommStatus] = useState<"idle" | "success">("idle");
+  const [stageStatus, setStageStatus] = useState<"idle" | "success">("idle");
+  const [notifStatus, setNotifStatus] = useState<"idle" | "success">("idle");
 
   const toggleNotif = (id: string) =>
     setNotifs((prev) => prev.map((n) => (n.id === id ? { ...n, enabled: !n.enabled } : n)));
@@ -418,7 +421,16 @@ function SettingsContent() {
                   </button>
                 </div>
               </div>
-              <button className="mt-5 px-5 py-2.5 rounded-xl text-white text-sm font-semibold" style={{ backgroundColor: "#0EA5E9" }}>
+              {commStatus === "success" && <p className="text-sm text-green-600 font-medium mt-4">Settings saved.</p>}
+              <button
+                className="mt-5 px-5 py-2.5 rounded-xl text-white text-sm font-semibold"
+                style={{ backgroundColor: "#0EA5E9" }}
+                onClick={() => {
+                  localStorage.setItem("clo_commission", JSON.stringify({ rate: commRate, split: commSplit }));
+                  setCommStatus("success");
+                  setTimeout(() => setCommStatus("idle"), 2500);
+                }}
+              >
                 Save Changes
               </button>
             </div>
@@ -452,6 +464,7 @@ function SettingsContent() {
                           <button
                             className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${intg.connected ? "bg-red-50 text-red-500 hover:bg-red-100" : "text-white hover:opacity-90"}`}
                             style={!intg.connected ? { backgroundColor: "#0EA5E9" } : {}}
+                            onClick={() => alert("Integration connections coming soon!")}
                           >
                             {intg.connected ? "Disconnect" : "Connect"}
                           </button>
@@ -503,7 +516,16 @@ function SettingsContent() {
               >
                 <Plus size={15} /> Add Stage
               </button>
-              <button className="mt-4 px-5 py-2.5 rounded-xl text-white text-sm font-semibold" style={{ backgroundColor: "#0EA5E9" }}>
+              {stageStatus === "success" && <p className="text-sm text-green-600 font-medium mt-3">Pipeline stages saved.</p>}
+              <button
+                className="mt-4 px-5 py-2.5 rounded-xl text-white text-sm font-semibold"
+                style={{ backgroundColor: "#0EA5E9" }}
+                onClick={() => {
+                  localStorage.setItem("clo_pipeline_stages", JSON.stringify(stages));
+                  setStageStatus("success");
+                  setTimeout(() => setStageStatus("idle"), 2500);
+                }}
+              >
                 Save Stages
               </button>
             </div>
@@ -540,7 +562,16 @@ function SettingsContent() {
                   </div>
                 ))}
               </div>
-              <button className="mt-5 px-5 py-2.5 rounded-xl text-white text-sm font-semibold" style={{ backgroundColor: "#0EA5E9" }}>
+              {notifStatus === "success" && <p className="text-sm text-green-600 font-medium mt-4">Preferences saved.</p>}
+              <button
+                className="mt-5 px-5 py-2.5 rounded-xl text-white text-sm font-semibold"
+                style={{ backgroundColor: "#0EA5E9" }}
+                onClick={() => {
+                  localStorage.setItem("clo_notifications", JSON.stringify({ notifs, freqs: notifFreqs }));
+                  setNotifStatus("success");
+                  setTimeout(() => setNotifStatus("idle"), 2500);
+                }}
+              >
                 Save Preferences
               </button>
             </div>

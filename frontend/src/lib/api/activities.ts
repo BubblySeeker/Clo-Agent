@@ -42,3 +42,17 @@ export function createActivity(token: string, contactId: string, body: CreateAct
     body: JSON.stringify(body),
   });
 }
+
+export interface CreateGeneralActivityBody {
+  type: "call" | "email" | "note" | "showing" | "task";
+  body?: string;
+  deal_id?: string;
+  contact_id?: string;
+}
+
+export function createGeneralActivity(token: string, body: CreateGeneralActivityBody): Promise<Activity> {
+  return apiRequest("/activities", token, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}

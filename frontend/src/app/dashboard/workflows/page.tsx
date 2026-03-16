@@ -200,6 +200,15 @@ export default function WorkflowsPage() {
           </button>
         </div>
 
+        {/* Coming Soon Banner */}
+        <div className="flex items-center gap-3 px-5 py-3.5 rounded-2xl border border-amber-200 bg-amber-50">
+          <Zap size={18} className="text-amber-500 shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-amber-800">Workflows are coming soon!</p>
+            <p className="text-xs text-amber-600 mt-0.5">This feature is currently in development. The workflows below are preview examples.</p>
+          </div>
+        </div>
+
         {/* Stats */}
         <div className="grid grid-cols-3 gap-4">
           {[
@@ -359,6 +368,7 @@ export default function WorkflowsPage() {
                 <button
                   className="text-xs font-semibold px-3 py-1.5 rounded-xl self-start transition-opacity hover:opacity-80"
                   style={{ backgroundColor: t.bg, color: t.color }}
+                  onClick={() => alert("Workflow templates coming soon!")}
                 >
                   Use Template
                 </button>

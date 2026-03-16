@@ -1,24 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { createActivity } from "@/lib/api/activities";
+import { createGeneralActivity, listAllActivities, Activity } from "@/lib/api/activities";
 import { listContacts } from "@/lib/api/contacts";
-import { Plus, Phone, Mail, Calendar, Users, AlertCircle, CheckCircle, Clock, Edit2, RefreshCw, Trash2, X, User, ChevronDown } from "lucide-react";
-
-const tasksRaw = [
-  { id: 1, title: "Call Marcus Rivera re: counter-offer", contact: "Marcus Rivera", deal: "327 Maple Ave", dueDate: "Mar 12", type: "call", priority: "high", done: false, group: "Overdue" },
-  { id: 2, title: "Follow up with David Nguyen — no response", contact: "David Nguyen", deal: null, dueDate: "Mar 13", type: "follow-up", priority: "high", done: false, group: "Overdue" },
-  { id: 3, title: "Send listing report to Sarah Chen", contact: "Sarah Chen", deal: null, dueDate: "Mar 14", type: "email", priority: "medium", done: false, group: "Today" },
-  { id: 4, title: "Confirm showing with Nina Patel", contact: "Nina Patel", deal: "95 Skyline Blvd", dueDate: "Mar 14", type: "meeting", priority: "high", done: false, group: "Today" },
-  { id: 5, title: "Review counter-offer documents for Aisha", contact: "Aisha Thompson", deal: "74 Birchwood Lane", dueDate: "Mar 14", type: "follow-up", priority: "medium", done: false, group: "Today" },
-  { id: 6, title: "Email Priya Kapoor: Jersey City comps", contact: "Priya Kapoor", deal: null, dueDate: "Mar 15", type: "email", priority: "medium", done: false, group: "Tomorrow" },
-  { id: 7, title: "Schedule open house for Tenafly listing", contact: "Aisha Thompson", deal: "74 Birchwood Lane", dueDate: "Mar 16", type: "meeting", priority: "low", done: false, group: "This Week" },
-  { id: 8, title: "Follow up with James Walsh: showing feedback", contact: "James Walsh", deal: null, dueDate: "Mar 17", type: "follow-up", priority: "medium", done: false, group: "This Week" },
-  { id: 9, title: "Submit pre-approval for Carlos Reyes", contact: "Carlos Reyes", deal: "780 Elm Court", dueDate: "Mar 8", type: "follow-up", priority: "high", done: true, group: "Overdue" },
-  { id: 10, title: "Send CMA to Tom Becker", contact: "Tom Becker", deal: null, dueDate: "Mar 10", type: "email", priority: "low", done: true, group: "Overdue" },
-];
+import { Plus, Phone, Mail, Calendar, Users, AlertCircle, CheckCircle, Clock, X, User, ChevronDown } from "lucide-react";
 
 type TaskType = "call" | "email" | "meeting" | "follow-up";
 const typeConfig: Record<TaskType, { icon: React.ElementType; color: string; bg: string }> = {
@@ -27,21 +14,73 @@ const typeConfig: Record<TaskType, { icon: React.ElementType; color: string; bg:
   meeting: { icon: Calendar, color: "#8B5CF6", bg: "#EDE9FE" },
   "follow-up": { icon: Users, color: "#F59E0B", bg: "#FFFBEB" },
 };
-const priorityColors = { high: "#EF4444", medium: "#F59E0B", low: "#22C55E" };
 const groups = ["Overdue", "Today", "Tomorrow", "This Week"];
 const filterTabs = ["All", "Today", "Overdue", "Upcoming", "Completed"];
+
+function mapActivityType(type: Activity["type"]): TaskType {
+  switch (type) {
+    case "call": return "call";
+    case "email": return "email";
+    case "showing": return "meeting";
+    case "task":
+    case "note":
+    default: return "follow-up";
+  }
+}
+
+function getGroup(createdAt: string): string {
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfTomorrow = new Date(startOfToday);
+  startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
+  const startOfDayAfterTomorrow = new Date(startOfToday);
+  startOfDayAfterTomorrow.setDate(startOfDayAfterTomorrow.getDate() + 2);
+  const endOfWeek = new Date(startOfToday);
+  endOfWeek.setDate(endOfWeek.getDate() + 7);
+
+  const date = new Date(createdAt);
+
+  if (date < startOfToday) return "Overdue";
+  if (date < startOfTomorrow) return "Today";
+  if (date < startOfDayAfterTomorrow) return "Tomorrow";
+  if (date < endOfWeek) return "This Week";
+  return "This Week";
+}
+
+function formatDate(dateStr: string): string {
+  const date = new Date(dateStr);
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+interface MappedTask {
+  id: string;
+  title: string;
+  contactName: string;
+  date: string;
+  dateFormatted: string;
+  type: TaskType;
+  group: string;
+}
 
 export default function TasksPage() {
   const { getToken } = useAuth();
   const queryClient = useQueryClient();
-  const [tasks, setTasks] = useState(tasksRaw);
+  const [doneIds, setDoneIds] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState("All");
-  const [hoveredTask, setHoveredTask] = useState<number | null>(null);
 
   const [showAdd, setShowAdd] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newContactId, setNewContactId] = useState("");
   const [newPriority, setNewPriority] = useState<"high" | "medium" | "low">("medium");
+  const [newDueDate, setNewDueDate] = useState("");
+
+  const { data: activitiesData } = useQuery({
+    queryKey: ["all-activities", "task"],
+    queryFn: async () => {
+      const token = await getToken();
+      return listAllActivities(token!, "task");
+    },
+  });
 
   const { data: contactsData } = useQuery({
     queryKey: ["contacts", { limit: 100 }],
@@ -53,10 +92,28 @@ export default function TasksPage() {
 
   const contacts = contactsData?.contacts ?? [];
 
+  const tasks: MappedTask[] = useMemo(() => {
+    const activities = activitiesData?.activities ?? [];
+    return activities.map((a) => ({
+      id: a.id,
+      title: a.body || `Task for ${a.contact_name || "Unknown"}`,
+      contactName: a.contact_name || "Unknown",
+      date: a.created_at,
+      dateFormatted: formatDate(a.created_at),
+      type: mapActivityType(a.type),
+      group: getGroup(a.created_at),
+    }));
+  }, [activitiesData]);
+
   const createTaskMutation = useMutation({
     mutationFn: async () => {
       const token = await getToken();
-      return createActivity(token!, newContactId, { type: "task", body: newTitle || undefined });
+      const taskBody = [newTitle, newDueDate ? `Due: ${newDueDate}` : ""].filter(Boolean).join(" — ");
+      return createGeneralActivity(token!, {
+        type: "task",
+        body: taskBody || undefined,
+        contact_id: newContactId || undefined,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["all-activities"] });
@@ -64,24 +121,34 @@ export default function TasksPage() {
       setNewTitle("");
       setNewContactId("");
       setNewPriority("medium");
+      setNewDueDate("");
     },
   });
 
-  const toggleDone = (id: number) => {
-    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
+  const toggleDone = (id: string) => {
+    setDoneIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
   };
 
-  const totalToday = tasks.filter((t) => t.group === "Today" && !t.done).length;
-  const totalOverdue = tasks.filter((t) => t.group === "Overdue" && !t.done).length;
-  const totalUpcoming = tasks.filter((t) => ["Tomorrow", "This Week"].includes(t.group) && !t.done).length;
-  const totalCompleted = tasks.filter((t) => t.done).length;
+  const totalToday = tasks.filter((t) => t.group === "Today" && !doneIds.has(t.id)).length;
+  const totalOverdue = tasks.filter((t) => t.group === "Overdue" && !doneIds.has(t.id)).length;
+  const totalUpcoming = tasks.filter((t) => ["Tomorrow", "This Week"].includes(t.group) && !doneIds.has(t.id)).length;
+  const totalCompleted = tasks.filter((t) => doneIds.has(t.id)).length;
 
   const getFiltered = (group: string) => {
     return tasks.filter((t) => {
-      if (filter === "Completed") return t.done && t.group === group;
-      if (filter === "Today") return !t.done && t.group === "Today";
-      if (filter === "Overdue") return !t.done && t.group === "Overdue";
-      if (filter === "Upcoming") return !t.done && ["Tomorrow", "This Week"].includes(t.group);
+      const done = doneIds.has(t.id);
+      if (filter === "Completed") return done && t.group === group;
+      if (filter === "Today") return !done && t.group === "Today";
+      if (filter === "Overdue") return !done && t.group === "Overdue";
+      if (filter === "Upcoming") return !done && ["Tomorrow", "This Week"].includes(t.group);
       return t.group === group;
     });
   };
@@ -150,52 +217,29 @@ export default function TasksPage() {
               </div>
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 {groupTasks.map((task, i) => {
-                  const cfg = typeConfig[task.type as TaskType] || typeConfig.call;
-                  const isHovered = hoveredTask === task.id;
+                  const cfg = typeConfig[task.type] || typeConfig.call;
+                  const done = doneIds.has(task.id);
                   return (
                     <div
                       key={task.id}
-                      onMouseEnter={() => setHoveredTask(task.id)}
-                      onMouseLeave={() => setHoveredTask(null)}
-                      className={`flex items-center gap-4 px-4 py-3 transition-colors ${i !== groupTasks.length - 1 ? "border-b border-gray-50" : ""} ${task.done ? "bg-gray-50/50" : "hover:bg-blue-50/20"}`}
+                      className={`flex items-center gap-4 px-4 py-3 transition-colors ${i !== groupTasks.length - 1 ? "border-b border-gray-50" : ""} ${done ? "bg-gray-50/50" : "hover:bg-blue-50/20"}`}
                     >
                       <button
                         onClick={() => toggleDone(task.id)}
-                        className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all ${task.done ? "border-green-400 bg-green-400" : "border-gray-300 hover:border-green-400"}`}
+                        className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all ${done ? "border-green-400 bg-green-400" : "border-gray-300 hover:border-green-400"}`}
                       >
-                        {task.done && <CheckCircle size={11} className="text-white" />}
+                        {done && <CheckCircle size={11} className="text-white" />}
                       </button>
                       <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: cfg.bg }}>
                         <cfg.icon size={13} style={{ color: cfg.color }} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <span className={`text-sm font-semibold ${task.done ? "line-through text-gray-400" : "text-gray-800"}`}>{task.title}</span>
+                        <span className={`text-sm font-semibold ${done ? "line-through text-gray-400" : "text-gray-800"}`}>{task.title}</span>
                       </div>
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-medium shrink-0">{task.contact}</span>
-                      {task.deal && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium shrink-0 hidden lg:inline">{task.deal}</span>
-                      )}
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${group === "Overdue" && !task.done ? "bg-red-50 text-red-500" : "bg-gray-100 text-gray-500"}`}>
-                        {task.dueDate}
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-medium shrink-0">{task.contactName}</span>
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${group === "Overdue" && !done ? "bg-red-50 text-red-500" : "bg-gray-100 text-gray-500"}`}>
+                        {task.dateFormatted}
                       </span>
-                      <span
-                        className="w-2.5 h-2.5 rounded-full shrink-0"
-                        style={{ backgroundColor: priorityColors[task.priority as keyof typeof priorityColors] }}
-                        title={`${task.priority} priority`}
-                      />
-                      {isHovered && !task.done && (
-                        <div className="flex items-center gap-1 shrink-0">
-                          <button className="w-6 h-6 rounded-md bg-gray-100 flex items-center justify-center hover:bg-blue-100 transition-colors">
-                            <Edit2 size={11} className="text-gray-500" />
-                          </button>
-                          <button className="w-6 h-6 rounded-md bg-gray-100 flex items-center justify-center hover:bg-amber-100 transition-colors">
-                            <RefreshCw size={11} className="text-gray-500" />
-                          </button>
-                          <button className="w-6 h-6 rounded-md bg-gray-100 flex items-center justify-center hover:bg-red-100 transition-colors">
-                            <Trash2 size={11} className="text-red-400" />
-                          </button>
-                        </div>
-                      )}
                     </div>
                   );
                 })}
@@ -203,7 +247,7 @@ export default function TasksPage() {
             </div>
           );
         })}
-        {filter === "Overdue" && tasks.filter((t) => t.group === "Overdue" && !t.done).length === 0 && (
+        {filter === "Overdue" && tasks.filter((t) => t.group === "Overdue" && !doneIds.has(t.id)).length === 0 && (
           <div className="bg-white rounded-2xl p-12 text-center shadow-sm border border-gray-100">
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
               <CheckCircle size={28} className="text-green-500" />
@@ -246,9 +290,20 @@ export default function TasksPage() {
                 />
               </div>
 
+              {/* Due Date */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Due Date</label>
+                <input
+                  type="date"
+                  value={newDueDate}
+                  onChange={(e) => setNewDueDate(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-[#0EA5E9]"
+                />
+              </div>
+
               {/* Contact */}
               <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Contact</label>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Contact <span className="normal-case text-gray-400 font-normal">(optional)</span></label>
                 <div className="relative">
                   <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                   <select
@@ -308,7 +363,7 @@ export default function TasksPage() {
               </button>
               <button
                 onClick={() => createTaskMutation.mutate()}
-                disabled={!newContactId || !newTitle.trim() || createTaskMutation.isPending}
+                disabled={!newTitle.trim() || createTaskMutation.isPending}
                 className="flex items-center gap-2 px-5 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-50 transition-all"
                 style={{ backgroundColor: "#0EA5E9" }}
               >

@@ -3,6 +3,7 @@
 import { useAuth } from "@clerk/nextjs";
 import { useQuery } from "@tanstack/react-query";
 import { getDashboardSummary } from "@/lib/api/dashboard";
+import { listAllActivities } from "@/lib/api/activities";
 import {
   TrendingUp, TrendingDown, Users, AlertCircle, CheckCircle,
   Phone, Mail, FileText, Home, MessageSquare, Sparkles,
@@ -797,6 +798,29 @@ export default function DashboardPage() {
     queryKey: ["dashboard-summary"],
     queryFn: async () => { const token = await getToken(); return getDashboardSummary(token!); },
   });
+
+  const { data: tasksApiData } = useQuery({
+    queryKey: ["dashboard-tasks"],
+    queryFn: async () => { const token = await getToken(); return listAllActivities(token!, "task"); },
+  });
+
+  useEffect(() => {
+    if (tasksApiData?.activities?.length) {
+      const mapped = tasksApiData.activities.slice(0, 5).map((a: { created_at: string; contact_name?: string; type: string; id: string }, i: number) => {
+        const isOverdue = new Date(a.created_at) < new Date(new Date().toDateString());
+        return {
+          id: i + 1,
+          contact: a.contact_name || "Unknown",
+          type: a.type === "task" ? "Follow-up" : a.type.charAt(0).toUpperCase() + a.type.slice(1),
+          time: isOverdue ? timeAgo(a.created_at) : new Date(a.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+          overdue: isOverdue,
+          icon: (activityIcons[a.type] || FileText) as typeof FileText,
+          done: false,
+        };
+      });
+      setTasks(mapped);
+    }
+  }, [tasksApiData]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { listContacts, createContact, type ContactFilters } from "@/lib/api/contacts";
+import { createBuyerProfile } from "@/lib/api/buyer-profiles";
 import {
   Search,
   Plus,
@@ -136,8 +137,21 @@ export default function ContactsPage() {
         source: newSource || undefined,
       });
     },
-    onSuccess: () => {
+    onSuccess: async (createdContact) => {
       queryClient.invalidateQueries({ queryKey: ["contacts"] });
+      // Create buyer profile if budget/location data provided
+      if (newBudgetMin || newBudgetMax || newLocation) {
+        try {
+          const token = await getToken();
+          await createBuyerProfile(token!, createdContact.id, {
+            budget_min: newBudgetMin ? Number(newBudgetMin) : undefined,
+            budget_max: newBudgetMax ? Number(newBudgetMax) : undefined,
+            locations: newLocation ? [newLocation] : undefined,
+          });
+        } catch {
+          // Silently fail — buyer profile is optional
+        }
+      }
       setShowAdd(false);
       setNewFirst(""); setNewLast(""); setNewEmail(""); setNewPhone(""); setNewSource(""); setNewType(""); setNewNotes(""); setNewBudgetMin(""); setNewBudgetMax(""); setNewLocation("");
     },
@@ -745,10 +759,10 @@ export default function ContactsPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                        <button className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center hover:bg-blue-100 transition-colors" title="Call">
+                        <button className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center hover:bg-blue-100 transition-colors" title="Call" onClick={() => c.phone && window.open("tel:" + c.phone)}>
                           <Phone size={13} className="text-gray-500" />
                         </button>
-                        <button className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center hover:bg-blue-100 transition-colors" title="Email">
+                        <button className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center hover:bg-blue-100 transition-colors" title="Email" onClick={() => c.email && window.open("mailto:" + c.email)}>
                           <Mail size={13} className="text-gray-500" />
                         </button>
                         <button
