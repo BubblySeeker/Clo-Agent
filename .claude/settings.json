@@ -9,6 +9,14 @@
             "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r '.tool_input.file_path'); if echo \"$FILE\" | grep -qE 'frontend/.*\\.tsx?$'; then cd /Users/matthewfaust/CloAgent/Clo-Agent/frontend && npx prettier --write \"$FILE\" 2>/dev/null; elif echo \"$FILE\" | grep -qE 'backend/.*\\.go$'; then gofmt -w \"$FILE\" 2>/dev/null; fi"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/gsd-context-monitor.js"
+          }
+        ]
       }
     ],
     "PreToolUse": [
@@ -18,6 +26,16 @@
           {
             "type": "command",
             "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r '.tool_input.file_path'); if echo \"$FILE\" | grep -qE '\\.env'; then echo 'BLOCKED: Do not modify .env files directly. Secrets and environment variables should be managed manually.' >&2; exit 2; fi"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/gsd-check-update.js"
           }
         ]
       }
@@ -31,5 +49,9 @@
     "claude-md-management@claude-plugins-official": true,
     "skill-creator@claude-plugins-official": true,
     "ui-ux-pro-max@ui-ux-pro-max-skill": true
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "node .claude/hooks/gsd-statusline.js"
   }
 }
