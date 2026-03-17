@@ -16,7 +16,7 @@ CREATE TABLE properties (
     city          TEXT,
     state         TEXT,
     zip           TEXT,
-    price         BIGINT,
+    price         NUMERIC(12,2),
     bedrooms      INT,
     bathrooms     NUMERIC(3,1),
     sqft          INT,
@@ -25,7 +25,7 @@ CREATE TABLE properties (
     listing_type  TEXT,       -- listing (seller-side), showing (buyer-side)
     mls_id        TEXT,
     description   TEXT,
-    photos        JSONB NOT NULL DEFAULT '[]',
+    photos        JSONB NOT NULL DEFAULT '[]',  -- array of URL strings
     year_built    INT,
     lot_size      NUMERIC(10,2),
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -37,7 +37,11 @@ CREATE INDEX idx_properties_status ON properties(status);
 
 ALTER TABLE properties ENABLE ROW LEVEL SECURITY;
 CREATE POLICY properties_agent_isolation ON properties
-    USING (agent_id = current_setting('app.current_agent_id')::uuid);
+    USING (agent_id = current_agent_id());
+
+CREATE TRIGGER trg_properties_updated_at
+    BEFORE UPDATE ON properties
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 ```
 
 ### Schema Change: `deals.property_id`
@@ -45,6 +49,8 @@ CREATE POLICY properties_agent_isolation ON properties
 ```sql
 ALTER TABLE deals ADD COLUMN property_id UUID REFERENCES properties(id) ON DELETE SET NULL;
 ```
+
+Deleting a property sets `property_id = NULL` on linked deals; deals themselves are preserved.
 
 ## API Endpoints
 
@@ -76,7 +82,7 @@ GET /api/deals/{id} includes `property_address` via LEFT JOIN on property_id whe
 
 ## AI Tools
 
-5 new tools. Total goes from 23 to 28 (14 read, 14 write).
+6 new tools. Total goes from 24 to 30 (15 read, 15 write).
 
 ### Read Tools (3)
 
@@ -86,12 +92,13 @@ GET /api/deals/{id} includes `property_address` via LEFT JOIN on property_id whe
 | get_property | property_id | Full property details + linked deals |
 | match_buyer_to_properties | contact_id | Buyer profile fields + ranked property matches with scores |
 
-### Write Tools (2)
+### Write Tools (3)
 
 | Tool | Required | Optional |
 |------|----------|----------|
 | create_property | address | city, state, zip, price, bedrooms, bathrooms, sqft, property_type, status, listing_type, mls_id, description, year_built, lot_size |
 | update_property | property_id | Any property field |
+| delete_property | property_id | — |
 
 Write tools follow the existing pending_actions confirmation flow.
 
@@ -132,7 +139,7 @@ Header: address, price, status badge, edit/delete buttons.
 - TestCreatePropertyValidation — rejects missing address, invalid JSON
 
 ### Python Tests (update `tests/test_tools.py`)
-- Update expected read/write tool counts (14 each)
+- Update expected read/write tool counts (15 each)
 - Add new tools to expected_read_tools and expected_write_tools sets
 - Schema test for create_property (address in required)
 
@@ -150,7 +157,7 @@ Header: address, price, status badge, edit/delete buttons.
 
 ### Modify
 - `backend/cmd/api/main.go` — register property routes
-- `ai-service/app/tools.py` — add 5 tools + update READ_TOOLS/WRITE_TOOLS sets
+- `ai-service/app/tools.py` — add 6 tools + update READ_TOOLS/WRITE_TOOLS sets
 - `ai-service/tests/test_tools.py` — update counts and expected tool sets
 - `frontend/src/app/dashboard/layout.tsx` — add nav item + +New option
 - `frontend/src/app/dashboard/pipeline/page.tsx` — property selector in deal create, address on cards
