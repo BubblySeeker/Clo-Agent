@@ -62,7 +62,7 @@
 
 | Phase | Name | Requirements | Count |
 |-------|------|-------------|-------|
-| 1 | Integration & Structure | INTG-01, INTG-02 | 2 |
+| 1 | 1/1 | Complete    | 2026-03-17 |
 | 2 | Tool Defaults & Routing Rules | TOOL-01, TOOL-02, TOOL-03, TOOL-04, TOOL-05 | 5 |
 | 3 | Hard Constraints & Exclusions | CNST-01, CNST-02, CNST-03 | 3 |
 | **Total** | | | **10** |
