@@ -95,96 +95,8 @@ const LAYERS = [
   },
 ];
 
-/* ─── Part A: CRM Intro Hero ─── */
-function HeroIntro() {
-  return (
-    <section className="relative min-h-screen flex flex-col items-center justify-center px-6 overflow-hidden">
-      {/* Radial glow background */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="w-[700px] h-[700px] rounded-full bg-[#2563EB]/15 blur-[140px]" />
-      </div>
-
-      <div className="relative z-10 text-center max-w-3xl mx-auto">
-        <motion.p
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6 }}
-          className="text-xs font-semibold tracking-[0.25em] uppercase text-[#2563EB] font-[family-name:var(--font-dm-sans)] mb-6"
-        >
-          AI-Powered Real Estate CRM
-        </motion.p>
-
-        <motion.h1
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6, delay: 0.1 }}
-          className="text-5xl md:text-6xl lg:text-7xl font-bold font-[family-name:var(--font-sora)] text-white mb-6 leading-[1.1]"
-        >
-          The AI-Powered CRM{" "}
-          <span className="text-gradient-blue">Built for Real Estate</span>
-        </motion.h1>
-
-        <motion.p
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6, delay: 0.2 }}
-          className="text-lg md:text-xl text-slate-400 font-[family-name:var(--font-dm-sans)] max-w-xl mx-auto mb-12"
-        >
-          Manage your pipeline, nurture leads, and close deals faster with
-          intelligent automation built for how agents actually work.
-        </motion.p>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6, delay: 0.3 }}
-          className="flex flex-col sm:flex-row items-center justify-center gap-4"
-        >
-          <Link
-            href="/sign-up"
-            className="inline-flex items-center justify-center gap-2 px-8 py-3.5 text-sm font-semibold text-white rounded-xl transition-all hover:shadow-lg hover:shadow-[#F97316]/25 hover:scale-[1.02] active:scale-[0.98] font-[family-name:var(--font-dm-sans)]"
-            style={{ backgroundColor: "#F97316" }}
-          >
-            Start Free Trial
-            <ArrowRight className="w-4 h-4" />
-          </Link>
-          <Link
-            href="/features"
-            className="inline-flex items-center justify-center px-8 py-3.5 text-sm font-semibold text-white rounded-xl border border-[#2563EB]/40 hover:border-[#2563EB]/70 hover:bg-[#2563EB]/10 transition-all hover:scale-[1.02] active:scale-[0.98] font-[family-name:var(--font-dm-sans)]"
-          >
-            See Features
-          </Link>
-        </motion.div>
-      </div>
-
-      {/* Scroll indicator */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        whileInView={{ opacity: 1 }}
-        viewport={{ once: true }}
-        transition={{ delay: 0.8, duration: 0.6 }}
-        className="absolute bottom-8 flex flex-col items-center gap-2"
-      >
-        <span className="text-xs text-slate-500 font-[family-name:var(--font-dm-sans)]">
-          Scroll to explore
-        </span>
-        <motion.div
-          animate={{ y: [0, 8, 0] }}
-          transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-        >
-          <ChevronDown className="w-4 h-4 text-slate-500" />
-        </motion.div>
-      </motion.div>
-    </section>
-  );
-}
-
-/* ─── Desktop: 3D Stack Assembly (sticky) ─── */
-function StackAssembly() {
+/* ─── Desktop: Split-screen hero → cards center + fan out (sticky) ─── */
+function DesktopHero() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const { scrollYProgress } = useScroll({
@@ -192,104 +104,143 @@ function StackAssembly() {
     offset: ["start start", "end end"],
   });
 
-  // Title fades in slowly
-  const titleOpacity = useTransform(scrollYProgress, [0, 0.05, 0.12], [0, 0, 1]);
-  const titleY = useTransform(scrollYProgress, [0.05, 0.12], [30, 0]);
+  const springCfg = { stiffness: 50, damping: 30 };
 
-  // 3D scene rotation — very slow build, long hold
-  const sceneRotateX = useTransform(
-    scrollYProgress,
-    [0, 0.08, 0.2, 0.8, 0.92],
-    [0, 0, 25, 25, 0]
+  // ── Text: starts visible on left, fades out quickly on scroll ──
+  const textOpacity = useSpring(
+    useTransform(scrollYProgress, [0, 0.05, 0.15], [1, 1, 0]),
+    springCfg
   );
-  const sceneRotateY = useTransform(
-    scrollYProgress,
-    [0, 0.08, 0.2, 0.8, 0.92],
-    [0, 0, -20, -20, 0]
+  const textX = useSpring(
+    useTransform(scrollYProgress, [0, 0.15], [0, -200]),
+    springCfg
   );
 
-  // Radial glow
-  const glowOpacity = useTransform(
-    scrollYProgress,
-    [0, 0.2, 0.8, 1.0],
-    [0.3, 0.6, 0.6, 0.3]
+  // ── Card stack: starts in right half, moves to center on scroll ──
+  const stackX = useSpring(
+    useTransform(scrollYProgress, [0, 0.1, 0.3], [350, 350, 0]),
+    springCfg
+  );
+
+  // ── 3D rotation: persistent angle throughout ──
+  const sceneRotateX = useSpring(
+    useTransform(scrollYProgress, [0, 0.3, 0.7, 1], [18, 20, 20, 15]),
+    springCfg
+  );
+  const sceneRotateY = useSpring(
+    useTransform(scrollYProgress, [0, 0.3, 0.7, 1], [-15, -18, -18, -12]),
+    springCfg
+  );
+
+  // ── Scale: starts at ~40% to fit right half, grows to full size ──
+  const sceneScale = useSpring(
+    useTransform(scrollYProgress, [0, 0.12, 0.35, 0.6], [0.4, 0.5, 0.85, 1]),
+    springCfg
+  );
+
+  // ── Glow ──
+  const glowOpacity = useSpring(
+    useTransform(scrollYProgress, [0, 0.2, 0.5, 0.85, 1], [0.2, 0.4, 0.6, 0.6, 0.3]),
+    springCfg
+  );
+
+  // ── Scroll indicator fades out ──
+  const scrollIndicatorOpacity = useSpring(
+    useTransform(scrollYProgress, [0, 0.05, 0.12], [1, 1, 0]),
+    springCfg
   );
 
   return (
     <section
       ref={containerRef}
       className="relative hidden md:block"
-      style={{ height: "500vh", isolation: "isolate" }}
+      style={{ height: "350vh", isolation: "isolate" }}
     >
-      <div className="sticky top-0 h-screen overflow-hidden">
-        {/* Radial glow background */}
+      <div className="sticky top-0 h-screen">
+        {/* Radial glow */}
         <motion.div
-          className="absolute inset-0 flex items-center justify-center pointer-events-none"
+          className="absolute inset-0 flex items-center justify-center pointer-events-none z-0"
           style={{ opacity: glowOpacity }}
         >
-          <div className="w-[600px] h-[600px] rounded-full bg-[#2563EB]/20 blur-[120px]" />
+          <div className="w-[900px] h-[900px] rounded-full bg-[#2563EB]/25 blur-[160px]" />
         </motion.div>
 
-        <div className="h-full flex flex-col items-center justify-center relative">
-          {/* Section title */}
-          <motion.div
-            className="absolute top-20 text-center z-10 px-6"
-            style={{ opacity: titleOpacity, y: titleY }}
-          >
-            <p className="text-xs font-semibold tracking-[0.2em] uppercase text-[#2563EB] font-[family-name:var(--font-dm-sans)] mb-4">
-              Under the Hood
+        {/* Left half: Text content — flexbox centered in left 50% */}
+        <motion.div
+          className="absolute left-0 top-0 w-1/2 h-full flex items-center px-[7%] z-20"
+          style={{ opacity: textOpacity, x: textX }}
+        >
+          <div className="max-w-lg">
+            <p className="text-xs font-semibold tracking-[0.25em] uppercase text-[#2563EB] font-[family-name:var(--font-dm-sans)] mb-5">
+              AI-Powered Real Estate CRM
             </p>
-            <h2 className="text-5xl lg:text-6xl font-bold font-[family-name:var(--font-sora)] text-white mb-5">
-              Five Layers of{" "}
-              <span className="text-gradient-blue">Intelligence</span>
-            </h2>
-            <p className="text-lg text-slate-400 font-[family-name:var(--font-dm-sans)] max-w-xl mx-auto">
-              Scroll to explore what powers your CRM.
+            <h1 className="text-5xl lg:text-6xl xl:text-7xl font-bold font-[family-name:var(--font-sora)] text-white mb-6 leading-[1.08]">
+              The Future of{" "}
+              <span className="text-gradient-blue">CRMs</span>
+            </h1>
+            <p className="text-lg lg:text-xl text-slate-400 font-[family-name:var(--font-dm-sans)] mb-10 leading-relaxed">
+              Five intelligent layers working together to manage your pipeline, nurture leads, and close deals faster.
             </p>
-          </motion.div>
-
-          {/* 3D scene */}
-          <div style={{ perspective: 1200 }}>
-            <motion.div
-              className="preserve-3d relative"
-              style={{
-                rotateX: sceneRotateX,
-                rotateY: sceneRotateY,
-                width: 720,
-                height: 1000,
-              }}
-            >
-              {LAYERS.map((layer, i) => (
-                <StackLayer
-                  key={layer.id}
-                  layer={layer}
-                  index={i}
-                  scrollProgress={scrollYProgress}
-                />
-              ))}
-            </motion.div>
+            <div className="flex items-center gap-4">
+              <Link
+                href="/sign-up"
+                className="inline-flex items-center justify-center gap-2 px-8 py-3.5 text-sm font-semibold text-white rounded-xl transition-all hover:shadow-lg hover:shadow-[#F97316]/25 hover:scale-[1.02] active:scale-[0.98] font-[family-name:var(--font-dm-sans)]"
+                style={{ backgroundColor: "#F97316" }}
+              >
+                Start Free Trial
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+              <Link
+                href="/features"
+                className="inline-flex items-center justify-center px-8 py-3.5 text-sm font-semibold text-white rounded-xl border border-[#2563EB]/40 hover:border-[#2563EB]/70 hover:bg-[#2563EB]/10 transition-all hover:scale-[1.02] active:scale-[0.98] font-[family-name:var(--font-dm-sans)]"
+              >
+                See Features
+              </Link>
+            </div>
           </div>
+        </motion.div>
 
-          {/* Scroll indicator at bottom */}
-          <motion.div
-            className="absolute bottom-8 flex flex-col items-center gap-2"
-            style={{ opacity: titleOpacity }}
-          >
-            <span className="text-xs text-slate-500 font-[family-name:var(--font-dm-sans)]">
-              Keep scrolling
-            </span>
-            <motion.div
-              animate={{ y: [0, 8, 0] }}
-              transition={{
-                duration: 1.5,
-                repeat: Infinity,
-                ease: "easeInOut",
-              }}
-            >
-              <ChevronDown className="w-4 h-4 text-slate-500" />
-            </motion.div>
+        {/* Card stack — fills viewport, animates from right to center */}
+        <div className="absolute inset-0 flex items-center justify-center z-10">
+          <motion.div style={{ x: stackX, scale: sceneScale }}>
+            <div style={{ perspective: 2000 }}>
+              <motion.div
+                className="preserve-3d relative"
+                style={{
+                  rotateX: sceneRotateX,
+                  rotateY: sceneRotateY,
+                  width: 1400,
+                  height: 1000,
+                }}
+              >
+                {LAYERS.map((layer, i) => (
+                  <StackLayer
+                    key={layer.id}
+                    layer={layer}
+                    index={i}
+                    scrollProgress={scrollYProgress}
+                  />
+                ))}
+              </motion.div>
+            </div>
           </motion.div>
         </div>
+
+        {/* Scroll indicator */}
+        <motion.div
+          className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 z-20"
+          style={{ opacity: scrollIndicatorOpacity }}
+        >
+          <span className="text-xs text-slate-500 font-[family-name:var(--font-dm-sans)]">
+            Scroll to explore
+          </span>
+          <motion.div
+            animate={{ y: [0, 8, 0] }}
+            transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+          >
+            <ChevronDown className="w-4 h-4 text-slate-500" />
+          </motion.div>
+        </motion.div>
       </div>
     </section>
   );
@@ -306,23 +257,29 @@ function StackLayer({
   scrollProgress: ReturnType<typeof useScroll>["scrollYProgress"];
 }) {
   const Mockup = MOCKUP_COMPONENTS[layer.id];
-  const centerOffset = index - 2;
+  const centerOffset = index - 2; // -2, -1, 0, 1, 2
 
-  // Stack assembly: layers spread very dramatically
-  // Starts collapsed, holds, then slowly fans out to massive 200px gaps
+  // Cards start slightly fanned, then spread dramatically to fill the viewport
+  // Final: 170px between card centers (cards 150px tall → 20px gap between each)
   const rawY = useTransform(
     scrollProgress,
-    [0, 0.1, 0.2, 0.35, 0.6],
-    [0, 0, centerOffset * 30, centerOffset * 120, centerOffset * 200]
+    [0, 0.12, 0.3, 0.55, 0.8],
+    [centerOffset * 25, centerOffset * 25, centerOffset * 60, centerOffset * 120, centerOffset * 170]
   );
+  // Z depth gives dramatic 3D layering
   const rawZ = useTransform(
     scrollProgress,
-    [0, 0.1, 0.2, 0.35, 0.55],
-    [0, 0, (4 - index) * 5, (4 - index) * 20, (4 - index) * 40]
+    [0, 0.12, 0.3, 0.55, 0.8],
+    [(4 - index) * 10, (4 - index) * 10, (4 - index) * 20, (4 - index) * 35, (4 - index) * 50]
   );
 
-  // Very soft springs for ultra-smooth, slow-feeling motion
-  const springCfg = { stiffness: 30, damping: 25 };
+  // Card opacity — all visible from start
+  const opacity = useSpring(
+    useTransform(scrollProgress, [0, 0.05], [1, 1]),
+    { stiffness: 50, damping: 30 }
+  );
+
+  const springCfg = { stiffness: 50, damping: 30 };
   const y = useSpring(rawY, springCfg);
   const z = useSpring(rawZ, springCfg);
 
@@ -335,25 +292,25 @@ function StackLayer({
   return (
     <motion.div
       className="absolute inset-0 flex items-center justify-center will-change-transform"
-      style={{ transform }}
+      style={{ transform, opacity }}
     >
       <div
-        className="relative w-[720px] h-[140px] rounded-xl border border-white/[0.08] bg-[#0F172A]/95 backdrop-blur-sm overflow-hidden"
+        className="relative w-[1200px] h-[150px] rounded-2xl border border-white/[0.12] bg-[#0F172A]/95 backdrop-blur-sm overflow-hidden"
         style={{
-          boxShadow: `0 -2px 30px ${layer.color}15, inset 0 1px 0 ${layer.color}30`,
+          boxShadow: `0 8px 60px ${layer.color}25, inset 0 1px 0 ${layer.color}35, 0 0 0 1px ${layer.color}15`,
         }}
       >
         <div
-          className="absolute top-0 left-0 right-0 h-[2px] rounded-t-xl"
+          className="absolute top-0 left-0 right-0 h-[3px] rounded-t-2xl"
           style={{ backgroundColor: layer.color }}
         />
         <Mockup />
-        <div className="absolute bottom-2 right-3 flex items-center gap-2">
+        <div className="absolute bottom-3 right-4 flex items-center gap-2">
           <layer.icon
-            className="w-3.5 h-3.5"
+            className="w-4 h-4"
             style={{ color: layer.color }}
           />
-          <span className="text-[10px] font-semibold text-white/70 font-[family-name:var(--font-dm-sans)]">
+          <span className="text-xs font-semibold text-white/80 font-[family-name:var(--font-dm-sans)]">
             {layer.title}
           </span>
         </div>
@@ -692,18 +649,15 @@ export default function HeroExplodedView() {
 
   return (
     <>
-      {/* Mobile */}
-      <MobileAccordion />
-
-      {/* Desktop: Part A — CRM Intro Hero */}
-      <div className="hidden md:block">
-        <HeroIntro />
+      {/* Mobile only */}
+      <div className="md:hidden">
+        <MobileAccordion />
       </div>
 
-      {/* Desktop: Part B — 3D Stack Assembly (sticky scroll) */}
-      <StackAssembly />
+      {/* Desktop: Split-screen hero with scroll-driven stack animation */}
+      <DesktopHero />
 
-      {/* Desktop: Part C — Layer Expansion Cards (scroll-revealed) */}
+      {/* Desktop: Layer Expansion Cards (scroll-revealed) */}
       <LayerExpansionSection />
     </>
   );
