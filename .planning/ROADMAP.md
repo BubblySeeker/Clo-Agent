@@ -64,7 +64,7 @@
 |-------|------|-------------|-------|
 | 1 | 1/1 | Complete    | 2026-03-17 |
 | 2 | 1/1 | Complete    | 2026-03-17 |
-| 3 | Hard Constraints & Exclusions | CNST-01, CNST-02, CNST-03 | 3 |
+| 3 | 1/1 | Complete    | 2026-03-17 |
 | **Total** | | | **10** |
 
 ---
