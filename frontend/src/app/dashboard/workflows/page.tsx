@@ -94,6 +94,7 @@ const TEMPLATES: {
 function RunStatusBadge({ status }: { status: string }) {
   const config = {
     running: { icon: Clock, color: "text-blue-600", bg: "bg-blue-50", label: "Running" },
+    waiting: { icon: Clock, color: "text-amber-600", bg: "bg-amber-50", label: "Waiting" },
     completed: { icon: CheckCircle2, color: "text-green-600", bg: "bg-green-50", label: "Completed" },
     failed: { icon: AlertCircle, color: "text-red-600", bg: "bg-red-50", label: "Failed" },
   }[status] ?? { icon: Clock, color: "text-gray-600", bg: "bg-gray-50", label: status };
