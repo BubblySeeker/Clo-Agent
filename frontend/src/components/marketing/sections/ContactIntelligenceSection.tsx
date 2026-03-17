@@ -32,11 +32,11 @@ function OverviewView() {
           {CONTACT.initials}
         </div>
         <div>
-          <p className="text-sm font-semibold text-white font-[family-name:var(--font-josefin)]">{CONTACT.name}</p>
-          <p className="text-xs text-slate-400 font-[family-name:var(--font-josefin)]">{CONTACT.source} Lead</p>
+          <p className="text-sm font-semibold text-white font-[family-name:var(--font-dm-sans)]">{CONTACT.name}</p>
+          <p className="text-xs text-slate-400 font-[family-name:var(--font-dm-sans)]">{CONTACT.source} Lead</p>
         </div>
       </div>
-      <div className="space-y-2 text-xs text-slate-300 font-[family-name:var(--font-josefin)]">
+      <div className="space-y-2 text-xs text-slate-300 font-[family-name:var(--font-dm-sans)]">
         <p>✉️ {CONTACT.email}</p>
         <p>📱 {CONTACT.phone}</p>
         <p>📍 Looking in Westside</p>
@@ -52,7 +52,7 @@ function OverviewView() {
 function BuyerProfileView() {
   return (
     <div className="p-5 space-y-4">
-      <h4 className="text-xs font-semibold text-[#10B981] font-[family-name:var(--font-josefin)] uppercase tracking-wider">Buyer Profile</h4>
+      <h4 className="text-xs font-semibold text-[#10B981] font-[family-name:var(--font-dm-sans)] uppercase tracking-wider">Buyer Profile</h4>
       <div className="grid grid-cols-2 gap-3">
         <div className="flex items-center gap-2">
           <DollarSign className="w-3.5 h-3.5 text-[#10B981]" />
@@ -103,10 +103,10 @@ function AIProfileView() {
   }, []);
   return (
     <div className="p-5">
-      <h4 className="text-xs font-semibold text-[#10B981] font-[family-name:var(--font-josefin)] uppercase tracking-wider mb-3">AI Profile</h4>
+      <h4 className="text-xs font-semibold text-[#10B981] font-[family-name:var(--font-dm-sans)] uppercase tracking-wider mb-3">AI Profile</h4>
       <div className="flex items-center gap-2 mb-3">
         <Brain className="w-4 h-4 text-[#F97316]" />
-        <span className="text-xs text-slate-400 font-[family-name:var(--font-josefin)]">Generated Summary</span>
+        <span className="text-xs text-slate-400 font-[family-name:var(--font-dm-sans)]">Generated Summary</span>
       </div>
       {typing ? (
         <div className="space-y-2">
@@ -115,7 +115,7 @@ function AIProfileView() {
           <div className="h-2 bg-white/[0.08] rounded-full animate-pulse w-3/5" />
         </div>
       ) : (
-        <p className="text-xs text-slate-300 font-[family-name:var(--font-josefin)] leading-relaxed">
+        <p className="text-xs text-slate-300 font-[family-name:var(--font-dm-sans)] leading-relaxed">
           Sarah is a motivated first-time buyer with strong financial readiness. She prioritizes proximity to good schools and modern amenities. Response rate is high — she typically replies within 2 hours. Recommend focusing on Westside listings with updated kitchens.
         </p>
       )}
@@ -132,13 +132,13 @@ function ActivityHistoryView() {
   ];
   return (
     <div className="p-5">
-      <h4 className="text-xs font-semibold text-[#10B981] font-[family-name:var(--font-josefin)] uppercase tracking-wider mb-3">Activity History</h4>
+      <h4 className="text-xs font-semibold text-[#10B981] font-[family-name:var(--font-dm-sans)] uppercase tracking-wider mb-3">Activity History</h4>
       <div className="space-y-3">
         {activities.map((a, i) => (
           <div key={i} className="flex items-start gap-2">
             <Clock className="w-3 h-3 text-slate-500 mt-0.5 shrink-0" />
             <div>
-              <p className="text-xs text-slate-300 font-[family-name:var(--font-josefin)]">{a.text}</p>
+              <p className="text-xs text-slate-300 font-[family-name:var(--font-dm-sans)]">{a.text}</p>
               <p className="text-[10px] text-slate-500">{a.time}</p>
             </div>
           </div>
@@ -177,13 +177,13 @@ export default function ContactIntelligenceSection() {
           animate={inView ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.6 }}
         >
-          <span className="text-xs font-semibold tracking-[0.2em] uppercase text-[#10B981] font-[family-name:var(--font-josefin)]">
+          <span className="text-xs font-semibold tracking-[0.2em] uppercase text-[#10B981] font-[family-name:var(--font-dm-sans)]">
             Layer 4
           </span>
-          <h2 className="mt-4 text-4xl lg:text-5xl font-bold font-[family-name:var(--font-cinzel)] text-white">
+          <h2 className="mt-4 text-4xl lg:text-5xl font-bold font-[family-name:var(--font-sora)] text-white">
             Contact <span className="bg-clip-text text-transparent" style={{ backgroundImage: "linear-gradient(135deg, #10B981, #34D399)" }}>Intelligence</span>
           </h2>
-          <p className="mt-4 text-lg text-slate-400 font-[family-name:var(--font-josefin)] max-w-xl mx-auto">
+          <p className="mt-4 text-lg text-slate-400 font-[family-name:var(--font-dm-sans)] max-w-xl mx-auto">
             Every contact is a complete picture — profile, preferences, history, and AI insights.
           </p>
         </motion.div>
@@ -202,7 +202,7 @@ export default function ContactIntelligenceSection() {
                 <button
                   key={view}
                   onClick={() => setActiveView(i)}
-                  className={`text-[11px] px-3 py-1.5 rounded-lg font-[family-name:var(--font-josefin)] transition-colors whitespace-nowrap ${
+                  className={`text-[11px] px-3 py-1.5 rounded-lg font-[family-name:var(--font-dm-sans)] transition-colors whitespace-nowrap ${
                     activeView === i
                       ? "bg-[#10B981]/20 text-[#10B981] font-semibold"
                       : "text-slate-500 hover:text-slate-300"
@@ -237,7 +237,7 @@ export default function ContactIntelligenceSection() {
             transition={{ delay: 0.4, duration: 0.6 }}
           >
             <div className="w-full">
-              <h3 className="text-sm font-semibold text-white font-[family-name:var(--font-josefin)] mb-8">
+              <h3 className="text-sm font-semibold text-white font-[family-name:var(--font-dm-sans)] mb-8">
                 Contact Journey
               </h3>
               <div className="relative">
@@ -269,11 +269,11 @@ export default function ContactIntelligenceSection() {
                         )}
                       </div>
                       <div>
-                        <p className={`text-sm font-[family-name:var(--font-josefin)] ${step.done ? "text-white font-semibold" : "text-slate-500"}`}>
+                        <p className={`text-sm font-[family-name:var(--font-dm-sans)] ${step.done ? "text-white font-semibold" : "text-slate-500"}`}>
                           {step.stage}
                         </p>
                         {step.date && (
-                          <p className="text-[10px] text-slate-500 font-[family-name:var(--font-josefin)]">{step.date}</p>
+                          <p className="text-[10px] text-slate-500 font-[family-name:var(--font-dm-sans)]">{step.date}</p>
                         )}
                       </div>
                     </motion.div>

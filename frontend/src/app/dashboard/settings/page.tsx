@@ -328,9 +328,9 @@ function SettingsContent() {
     }
   }, [realStages]);
   const notifs = notificationsData;
-  const [notifFreqs, setNotifFreqs] = useState<Record<string, string>>({
+  const notifFreqs: Record<string, string> = {
     stale: "Daily Digest", newlead: "Instant", tasks: "Instant", ai: "Weekly", deals: "Instant",
-  });
+  };
   const [commRate, setCommRate] = useState("2.5");
   const [commSplit, setCommSplit] = useState("70/30");
   const [commStatus, setCommStatus] = useState<"idle" | "success">("idle");

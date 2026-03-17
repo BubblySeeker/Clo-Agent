@@ -14,7 +14,7 @@ import MiniMap from "@/components/marketing/sections/MiniMap";
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-[#0F172A] font-[family-name:var(--font-josefin)]">
+    <div className="min-h-screen bg-[#0F172A] font-[family-name:var(--font-dm-sans)]">
       <MarketingNav />
       <MiniMap />
 

@@ -124,13 +124,13 @@ export default function PipelineDemoSection() {
           animate={inView ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.6 }}
         >
-          <span className="text-xs font-semibold tracking-[0.2em] uppercase text-[#3B82F6] font-[family-name:var(--font-josefin)]">
+          <span className="text-xs font-semibold tracking-[0.2em] uppercase text-[#3B82F6] font-[family-name:var(--font-dm-sans)]">
             Layer 1
           </span>
-          <h2 className="mt-4 text-4xl lg:text-5xl font-bold font-[family-name:var(--font-cinzel)] text-white">
+          <h2 className="mt-4 text-4xl lg:text-5xl font-bold font-[family-name:var(--font-sora)] text-white">
             Pipeline <span className="text-gradient-blue">Management</span>
           </h2>
-          <p className="mt-4 text-lg text-slate-400 font-[family-name:var(--font-josefin)] max-w-xl mx-auto">
+          <p className="mt-4 text-lg text-slate-400 font-[family-name:var(--font-dm-sans)] max-w-xl mx-auto">
             Drag deals between stages. Try moving one to Closed for a surprise.
           </p>
         </motion.div>
@@ -147,11 +147,11 @@ export default function PipelineDemoSection() {
               key={activeDeals}
               initial={reduced ? false : { scale: 1.3 }}
               animate={{ scale: 1 }}
-              className="text-2xl font-bold text-white font-[family-name:var(--font-cinzel)]"
+              className="text-2xl font-bold text-white font-[family-name:var(--font-sora)]"
             >
               {activeDeals}
             </motion.span>
-            <p className="text-xs text-slate-500 font-[family-name:var(--font-josefin)]">Active Deals</p>
+            <p className="text-xs text-slate-500 font-[family-name:var(--font-dm-sans)]">Active Deals</p>
           </div>
           <div className="w-px bg-white/[0.08]" />
           <div className="text-center">
@@ -159,11 +159,11 @@ export default function PipelineDemoSection() {
               key={totalValue}
               initial={reduced ? false : { scale: 1.3 }}
               animate={{ scale: 1 }}
-              className="text-2xl font-bold text-white font-[family-name:var(--font-cinzel)]"
+              className="text-2xl font-bold text-white font-[family-name:var(--font-sora)]"
             >
               {formatValue(totalValue)}
             </motion.span>
-            <p className="text-xs text-slate-500 font-[family-name:var(--font-josefin)]">Pipeline Value</p>
+            <p className="text-xs text-slate-500 font-[family-name:var(--font-dm-sans)]">Pipeline Value</p>
           </div>
         </motion.div>
 
@@ -190,7 +190,7 @@ export default function PipelineDemoSection() {
                 {/* Stage header */}
                 <div className="flex items-center gap-1.5 mb-3 px-1">
                   <div className="w-2 h-2 rounded-full" style={{ backgroundColor: stage.color }} />
-                  <span className="text-[11px] font-semibold text-slate-300 font-[family-name:var(--font-josefin)] truncate">
+                  <span className="text-[11px] font-semibold text-slate-300 font-[family-name:var(--font-dm-sans)] truncate">
                     {stage.name}
                   </span>
                   <span className="text-[11px] text-slate-500 ml-auto">{stage.deals.length}</span>
@@ -216,10 +216,10 @@ export default function PipelineDemoSection() {
                         <div className="flex items-center gap-1.5">
                           <GripVertical size={12} className="text-slate-600 flex-shrink-0" />
                           <div className="min-w-0">
-                            <p className="text-[11px] text-slate-300 font-[family-name:var(--font-josefin)] truncate">
+                            <p className="text-[11px] text-slate-300 font-[family-name:var(--font-dm-sans)] truncate">
                               {deal.title}
                             </p>
-                            <p className="text-[11px] font-bold text-white font-[family-name:var(--font-cinzel)]">
+                            <p className="text-[11px] font-bold text-white font-[family-name:var(--font-sora)]">
                               {formatValue(deal.value)}
                             </p>
                           </div>

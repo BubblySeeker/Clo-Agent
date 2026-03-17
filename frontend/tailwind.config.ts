@@ -78,6 +78,29 @@ const config: Config = {
           "0%": { transform: "translateY(100%)", opacity: "0" },
           "100%": { transform: "translateY(0)", opacity: "1" },
         },
+        "dot-pulse": {
+          "0%, 100%": { opacity: "0.15" },
+          "50%": { opacity: "0.6" },
+        },
+        "orb-float": {
+          "0%, 100%": { transform: "translateY(0) translateX(0)" },
+          "33%": { transform: "translateY(-12px) translateX(8px)" },
+          "66%": { transform: "translateY(6px) translateX(-6px)" },
+        },
+        "spotlight-pulse": {
+          "0%, 100%": { opacity: "0.3" },
+          "50%": { opacity: "0.7" },
+        },
+        "card-drift": {
+          "0%": { transform: "translate3d(0, 0, 0) rotate(0deg)" },
+          "33%": { transform: "translate3d(6px, -8px, 0) rotate(0.5deg)" },
+          "66%": { transform: "translate3d(-4px, 5px, 0) rotate(-0.3deg)" },
+          "100%": { transform: "translate3d(0, 0, 0) rotate(0deg)" },
+        },
+        "orb-breathe": {
+          "0%, 100%": { transform: "scale(1)", opacity: "0.12" },
+          "50%": { transform: "scale(1.15)", opacity: "0.18" },
+        },
       },
       animation: {
         wiggle: "wiggle 0.35s ease-in-out infinite",
@@ -87,6 +110,11 @@ const config: Config = {
         "float-slow": "float-slow 8s ease-in-out infinite",
         "border-glow": "border-glow 3s ease-in-out infinite",
         "slide-up": "slide-up 0.6s ease-out",
+        "dot-pulse": "dot-pulse 3s ease-in-out infinite",
+        "orb-float": "orb-float 8s ease-in-out infinite",
+        "spotlight-pulse": "spotlight-pulse 4s ease-in-out infinite",
+        "card-drift": "card-drift 12s ease-in-out infinite",
+        "orb-breathe": "orb-breathe 4s ease-in-out infinite",
       },
     },
   },

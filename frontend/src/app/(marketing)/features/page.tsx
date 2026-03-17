@@ -49,10 +49,10 @@ const additionalFeatures = [
 const springTransition = { type: "spring" as const, stiffness: 100, damping: 20 };
 
 const meshGradients = [
-  "radial-gradient(ellipse at 20% 50%, rgba(14,165,233,0.15) 0%, transparent 50%), radial-gradient(ellipse at 80% 20%, rgba(99,102,241,0.1) 0%, transparent 50%), radial-gradient(ellipse at 50% 80%, rgba(14,165,233,0.08) 0%, transparent 50%)",
-  "radial-gradient(ellipse at 80% 50%, rgba(14,165,233,0.15) 0%, transparent 50%), radial-gradient(ellipse at 20% 80%, rgba(56,189,248,0.1) 0%, transparent 50%), radial-gradient(ellipse at 50% 20%, rgba(99,102,241,0.08) 0%, transparent 50%)",
-  "radial-gradient(ellipse at 50% 30%, rgba(14,165,233,0.12) 0%, transparent 50%), radial-gradient(ellipse at 80% 80%, rgba(125,211,252,0.1) 0%, transparent 50%), radial-gradient(ellipse at 20% 60%, rgba(99,102,241,0.08) 0%, transparent 50%)",
-  "radial-gradient(ellipse at 30% 70%, rgba(14,165,233,0.15) 0%, transparent 50%), radial-gradient(ellipse at 70% 30%, rgba(56,189,248,0.08) 0%, transparent 50%), radial-gradient(ellipse at 50% 50%, rgba(99,102,241,0.1) 0%, transparent 50%)",
+  "radial-gradient(ellipse at 20% 50%, rgba(37,99,235,0.08) 0%, transparent 50%), radial-gradient(ellipse at 80% 20%, rgba(99,102,241,0.05) 0%, transparent 50%), radial-gradient(ellipse at 50% 80%, rgba(37,99,235,0.04) 0%, transparent 50%)",
+  "radial-gradient(ellipse at 80% 50%, rgba(37,99,235,0.08) 0%, transparent 50%), radial-gradient(ellipse at 20% 80%, rgba(56,189,248,0.05) 0%, transparent 50%), radial-gradient(ellipse at 50% 20%, rgba(99,102,241,0.04) 0%, transparent 50%)",
+  "radial-gradient(ellipse at 50% 30%, rgba(37,99,235,0.06) 0%, transparent 50%), radial-gradient(ellipse at 80% 80%, rgba(125,211,252,0.05) 0%, transparent 50%), radial-gradient(ellipse at 20% 60%, rgba(99,102,241,0.04) 0%, transparent 50%)",
+  "radial-gradient(ellipse at 30% 70%, rgba(37,99,235,0.08) 0%, transparent 50%), radial-gradient(ellipse at 70% 30%, rgba(56,189,248,0.04) 0%, transparent 50%), radial-gradient(ellipse at 50% 50%, rgba(99,102,241,0.05) 0%, transparent 50%)",
 ];
 
 export default function FeaturesPage() {
@@ -71,20 +71,20 @@ export default function FeaturesPage() {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ ...springTransition, delay: 0.1 }}
-              className="inline-block px-4 py-2 rounded-full bg-[#0EA5E9]/[0.08] border border-[#0EA5E9]/20 mb-8"
+              className="inline-block px-4 py-2 rounded-full bg-[#2563EB]/10 border border-[#2563EB]/20 mb-8"
             >
-              <span className="text-[#0EA5E9] text-sm font-medium tracking-wide">Features</span>
+              <span className="text-[#2563EB] text-sm font-medium tracking-wide">Features</span>
             </motion.div>
             <h1 className="font-[family-name:var(--font-sora)] text-5xl md:text-6xl font-bold text-white mb-6 leading-tight">
               Everything you need to
               <br />
-              <span className="text-gradient">dominate your market</span>
+              <span className="text-gradient-blue">dominate your market</span>
             </h1>
             <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.3, duration: 0.6 }}
-              className="text-xl text-white/50 leading-relaxed"
+              className="text-xl text-slate-400 leading-relaxed"
             >
               CloAgent combines powerful features with an intuitive interface to help you close more deals and grow your real estate business.
             </motion.p>
@@ -111,15 +111,15 @@ export default function FeaturesPage() {
                     whileInView={{ opacity: 1, scale: 1 }}
                     viewport={{ once: true }}
                     transition={{ ...springTransition, delay: 0.2 }}
-                    className="w-14 h-14 rounded-2xl bg-[#0EA5E9]/[0.08] flex items-center justify-center mb-6 group/icon relative"
+                    className="w-14 h-14 rounded-2xl bg-[#2563EB]/10 flex items-center justify-center mb-6 group/icon relative"
                   >
-                    <div className="absolute inset-0 rounded-2xl bg-[#0EA5E9]/[0.12] opacity-0 blur-xl transition-opacity duration-500 group-hover/icon:opacity-100" />
-                    <feature.icon size={28} className="text-[#0EA5E9] relative z-10" />
+                    <div className="absolute inset-0 rounded-2xl bg-[#2563EB]/20 opacity-0 blur-xl transition-opacity duration-500 group-hover/icon:opacity-100" />
+                    <feature.icon size={28} className="text-[#2563EB] relative z-10" />
                   </motion.div>
                   <h2 className="font-[family-name:var(--font-sora)] text-3xl md:text-4xl font-bold text-white mb-4">
                     {feature.title}
                   </h2>
-                  <p className="text-lg text-white/50 mb-8 leading-relaxed">{feature.description}</p>
+                  <p className="text-lg text-slate-400 mb-8 leading-relaxed">{feature.description}</p>
                   <ul className="space-y-4">
                     {feature.benefits.map((benefit, bIdx) => (
                       <motion.li
@@ -131,10 +131,10 @@ export default function FeaturesPage() {
                         className="flex items-center gap-3"
                       >
                         <div className="relative flex items-center justify-center flex-shrink-0">
-                          <span className="absolute w-4 h-4 rounded-full bg-[#0EA5E9]/20 animate-ping" style={{ animationDuration: "3s" }} />
-                          <span className="relative w-2 h-2 rounded-full bg-[#0EA5E9]" />
+                          <span className="absolute w-4 h-4 rounded-full bg-[#2563EB]/20 animate-ping" style={{ animationDuration: "3s" }} />
+                          <span className="relative w-2 h-2 rounded-full bg-[#2563EB]" />
                         </div>
-                        <span className="text-white/50">{benefit}</span>
+                        <span className="text-slate-400">{benefit}</span>
                       </motion.li>
                     ))}
                   </ul>
@@ -143,7 +143,7 @@ export default function FeaturesPage() {
                   <motion.div
                     whileHover={{ scale: 1.02 }}
                     transition={springTransition}
-                    className="relative rounded-2xl overflow-hidden border border-white/[0.06] shadow-2xl group"
+                    className="relative rounded-2xl overflow-hidden border border-white/[0.08] shadow-2xl group"
                   >
                     {/* Gradient mesh overlay */}
                     <div
@@ -152,15 +152,15 @@ export default function FeaturesPage() {
                     />
                     {/* Subtle grid pattern */}
                     <div
-                      className="absolute inset-0 z-10 opacity-[0.03]"
+                      className="absolute inset-0 z-10 opacity-[0.06]"
                       style={{
-                        backgroundImage: "linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)",
+                        backgroundImage: "linear-gradient(rgba(0,0,0,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.04) 1px, transparent 1px)",
                         backgroundSize: "40px 40px",
                       }}
                     />
-                    <div className="relative bg-white/[0.02] aspect-[4/3] flex items-center justify-center">
+                    <div className="relative bg-white/[0.03] aspect-[4/3] flex items-center justify-center">
                       {/* Abstract glow orbs */}
-                      <div className="absolute w-32 h-32 rounded-full bg-[#0EA5E9]/20 blur-3xl top-1/4 left-1/4 group-hover:bg-[#0EA5E9]/30 transition-colors duration-700" />
+                      <div className="absolute w-32 h-32 rounded-full bg-[#2563EB]/20 blur-3xl top-1/4 left-1/4 group-hover:bg-[#2563EB]/30 transition-colors duration-700" />
                       <div className="absolute w-24 h-24 rounded-full bg-[#6366F1]/15 blur-3xl bottom-1/4 right-1/4 group-hover:bg-[#6366F1]/25 transition-colors duration-700" />
                       <div className="absolute w-16 h-16 rounded-full bg-[#38BDF8]/20 blur-2xl top-1/2 right-1/3 group-hover:bg-[#38BDF8]/30 transition-colors duration-700" />
                       {/* Floating icon */}
@@ -169,7 +169,7 @@ export default function FeaturesPage() {
                         transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
                         className="relative z-30"
                       >
-                        <feature.icon size={48} className="text-white/20" strokeWidth={1} />
+                        <feature.icon size={48} className="text-slate-500" strokeWidth={1} />
                       </motion.div>
                     </div>
                   </motion.div>
@@ -181,7 +181,7 @@ export default function FeaturesPage() {
       </section>
 
       {/* Additional Features Grid */}
-      <section className="py-24 bg-white/[0.02]">
+      <section className="py-24">
         <div className="max-w-7xl mx-auto px-6">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -191,9 +191,9 @@ export default function FeaturesPage() {
             className="text-center mb-16"
           >
             <h2 className="font-[family-name:var(--font-sora)] text-4xl md:text-5xl font-bold text-white mb-4">
-              And <span className="text-gradient">so much more</span>
+              And <span className="text-gradient-blue">so much more</span>
             </h2>
-            <p className="text-xl text-white/50 max-w-2xl mx-auto">Every feature you need to run a modern real estate business</p>
+            <p className="text-xl text-slate-400 max-w-2xl mx-auto">Every feature you need to run a modern real estate business</p>
           </motion.div>
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             {additionalFeatures.map((feature, index) => (
@@ -204,14 +204,14 @@ export default function FeaturesPage() {
                 viewport={{ once: true }}
                 transition={{ ...springTransition, delay: index * 0.06 }}
                 whileHover={{ y: -6 }}
-                className="glass-card-hover p-6 rounded-2xl group"
+                className="bg-white/[0.04] border border-white/[0.08] rounded-2xl hover:shadow-lg hover:border-white/[0.15] transition-all duration-300 p-6 group"
               >
-                <div className="w-12 h-12 rounded-xl bg-[#0EA5E9]/[0.08] flex items-center justify-center mb-4 relative">
-                  <div className="absolute inset-0 rounded-xl bg-[#0EA5E9]/[0.15] opacity-0 blur-lg group-hover:opacity-100 transition-opacity duration-500" />
-                  <feature.icon size={24} className="text-[#0EA5E9] relative z-10 group-hover:scale-110 transition-transform duration-300" />
+                <div className="w-12 h-12 rounded-xl bg-[#2563EB]/10 flex items-center justify-center mb-4 relative">
+                  <div className="absolute inset-0 rounded-xl bg-[#2563EB]/20 opacity-0 blur-lg group-hover:opacity-100 transition-opacity duration-500" />
+                  <feature.icon size={24} className="text-[#2563EB] relative z-10 group-hover:scale-110 transition-transform duration-300" />
                 </div>
                 <h3 className="font-[family-name:var(--font-sora)] text-lg font-semibold text-white mb-2">{feature.title}</h3>
-                <p className="text-white/30 text-sm leading-relaxed">{feature.description}</p>
+                <p className="text-slate-400 text-sm leading-relaxed">{feature.description}</p>
               </motion.div>
             ))}
           </div>
@@ -229,9 +229,9 @@ export default function FeaturesPage() {
             className="text-center max-w-3xl mx-auto"
           >
             <h2 className="font-[family-name:var(--font-sora)] text-4xl md:text-5xl font-bold text-white mb-4">
-              Integrates with your <span className="text-gradient">favorite tools</span>
+              Integrates with your <span className="text-gradient-blue">favorite tools</span>
             </h2>
-            <p className="text-xl text-white/50 mb-12 leading-relaxed">Connect CloAgent with the tools you already use. Seamless integration with email, calendar, MLS, and more.</p>
+            <p className="text-xl text-slate-400 mb-12 leading-relaxed">Connect CloAgent with the tools you already use. Seamless integration with email, calendar, MLS, and more.</p>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-12">
               {["Gmail", "Outlook", "Zillow", "MLS", "Slack", "Zapier", "Calendly", "Stripe"].map((tool, index) => (
                 <motion.div
@@ -242,16 +242,16 @@ export default function FeaturesPage() {
                   transition={{ ...springTransition, delay: index * 0.06 }}
                   whileHover={{
                     scale: 1.05,
-                    borderColor: "rgba(14, 165, 233, 0.3)",
-                    boxShadow: "0 0 20px rgba(14, 165, 233, 0.1)",
+                    borderColor: "rgba(37, 99, 235, 0.3)",
+                    boxShadow: "0 0 20px rgba(37, 99, 235, 0.1)",
                   }}
-                  className="p-6 rounded-xl bg-white/[0.02] border border-white/[0.06] flex items-center justify-center font-[family-name:var(--font-sora)] text-white font-semibold transition-colors duration-300 cursor-default"
+                  className="p-6 rounded-xl bg-white/[0.02] border border-white/[0.08] flex items-center justify-center font-[family-name:var(--font-sora)] text-white font-semibold transition-colors duration-300 cursor-default"
                 >
                   {tool}
                 </motion.div>
               ))}
             </div>
-            <p className="text-white/30 text-sm mb-6">And 100+ more integrations via Zapier</p>
+            <p className="text-slate-400 text-sm mb-6">And 100+ more integrations via Zapier</p>
           </motion.div>
         </div>
       </section>
@@ -268,18 +268,18 @@ export default function FeaturesPage() {
           >
             {/* Animated border glow */}
             <div className="absolute inset-0 rounded-3xl animate-border-glow p-px">
-              <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-[#0EA5E9]/20 via-transparent to-[#6366F1]/20" />
+              <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-[#2563EB]/20 via-transparent to-[#6366F1]/20" />
             </div>
             {/* Inner background */}
             <div className="absolute inset-px rounded-[23px] bg-white/[0.02] backdrop-blur-sm" />
             {/* Border */}
-            <div className="absolute inset-0 rounded-3xl border border-white/[0.06]" />
+            <div className="absolute inset-0 rounded-3xl border border-white/[0.08]" />
             {/* Content */}
             <div className="relative z-10">
               <h2 className="font-[family-name:var(--font-sora)] text-4xl md:text-5xl font-bold text-white mb-4">
-                Experience all features <span className="text-gradient">free for 14 days</span>
+                Experience all features <span className="text-gradient-blue">free for 14 days</span>
               </h2>
-              <p className="text-xl text-white/50 mb-8">No credit card required. Get started in minutes.</p>
+              <p className="text-xl text-slate-400 mb-8">No credit card required. Get started in minutes.</p>
               <div className="flex flex-wrap gap-4 justify-center">
                 <LinkButton href="/sign-up" variant="primary">
                   Start Free Trial

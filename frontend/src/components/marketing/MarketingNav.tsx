@@ -47,7 +47,7 @@ export function MarketingNav() {
             >
               <Building2 size={20} className="text-white" />
             </motion.div>
-            <span className={`text-xl font-[family-name:var(--font-cinzel)] font-semibold tracking-tight transition-colors duration-300 ${useDarkNav ? 'text-white' : 'text-slate-900'}`}>
+            <span className={`text-xl font-[family-name:var(--font-sora)] font-semibold tracking-tight transition-colors duration-300 ${useDarkNav ? 'text-white' : 'text-slate-900'}`}>
               Estate CRM
             </span>
           </Link>
@@ -60,7 +60,7 @@ export function MarketingNav() {
                 <Link
                   key={link.href}
                   href={link.href}
-                  className="relative px-4 py-2 text-sm font-[family-name:var(--font-josefin)] font-medium transition-colors rounded-lg group"
+                  className="relative px-4 py-2 text-sm font-[family-name:var(--font-dm-sans)] font-medium transition-colors rounded-lg group"
                 >
                   <span
                     className={
@@ -91,13 +91,13 @@ export function MarketingNav() {
           <div className="hidden md:flex items-center gap-3">
             <Link
               href="/sign-in"
-              className={`inline-flex items-center justify-center px-5 py-2.5 text-sm font-medium rounded-xl transition-all duration-300 font-[family-name:var(--font-josefin)] ${useDarkNav ? 'text-slate-300 hover:text-white hover:bg-white/10' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}`}
+              className={`inline-flex items-center justify-center px-5 py-2.5 text-sm font-medium rounded-xl transition-all duration-300 font-[family-name:var(--font-dm-sans)] ${useDarkNav ? 'text-slate-300 hover:text-white hover:bg-white/10' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}`}
             >
               Login
             </Link>
             <Link
               href="/sign-up"
-              className="inline-flex items-center justify-center px-6 py-2.5 text-sm font-semibold text-white rounded-xl transition-all duration-300 hover:shadow-lg hover:shadow-[#F97316]/25 hover:scale-[1.02] active:scale-[0.98] font-[family-name:var(--font-josefin)]"
+              className="inline-flex items-center justify-center px-6 py-2.5 text-sm font-semibold text-white rounded-xl transition-all duration-300 hover:shadow-lg hover:shadow-[#F97316]/25 hover:scale-[1.02] active:scale-[0.98] font-[family-name:var(--font-dm-sans)]"
               style={{ backgroundColor: "#F97316" }}
             >
               Get Started
@@ -136,7 +136,7 @@ export function MarketingNav() {
                       <Link
                         href={link.href}
                         onClick={() => setMobileMenuOpen(false)}
-                        className={`block px-4 py-2.5 rounded-lg text-sm font-[family-name:var(--font-josefin)] transition-colors ${
+                        className={`block px-4 py-2.5 rounded-lg text-sm font-[family-name:var(--font-dm-sans)] transition-colors ${
                           isActive
                             ? useDarkNav ? "text-white bg-white/10 font-medium" : "text-[#1E293B] bg-slate-100 font-medium"
                             : useDarkNav ? "text-slate-400 hover:text-white hover:bg-white/5" : "text-slate-500 hover:text-slate-900 hover:bg-slate-50"
@@ -151,14 +151,14 @@ export function MarketingNav() {
                   <Link
                     href="/sign-in"
                     onClick={() => setMobileMenuOpen(false)}
-                    className={`block w-full text-center px-5 py-2.5 text-sm font-medium rounded-xl transition-all duration-300 font-[family-name:var(--font-josefin)] ${useDarkNav ? 'text-slate-300 hover:text-white hover:bg-white/10' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}`}
+                    className={`block w-full text-center px-5 py-2.5 text-sm font-medium rounded-xl transition-all duration-300 font-[family-name:var(--font-dm-sans)] ${useDarkNav ? 'text-slate-300 hover:text-white hover:bg-white/10' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}`}
                   >
                     Login
                   </Link>
                   <Link
                     href="/sign-up"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="block w-full text-center px-6 py-2.5 text-sm font-semibold text-white rounded-xl transition-all duration-300 font-[family-name:var(--font-josefin)]"
+                    className="block w-full text-center px-6 py-2.5 text-sm font-semibold text-white rounded-xl transition-all duration-300 font-[family-name:var(--font-dm-sans)]"
                     style={{ backgroundColor: "#F97316" }}
                   >
                     Get Started

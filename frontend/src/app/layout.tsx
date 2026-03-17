@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { DM_Sans, Sora } from "next/font/google";
+import { DM_Sans, Sora, Cinzel, Josefin_Sans } from "next/font/google";
 import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
 import { Providers } from "@/components/shared/providers";
@@ -12,6 +12,18 @@ const dmSans = DM_Sans({
 const sora = Sora({
   subsets: ["latin"],
   variable: "--font-sora",
+});
+
+const cinzel = Cinzel({
+  subsets: ["latin"],
+  variable: "--font-cinzel",
+  weight: ["400", "500", "600", "700"],
+});
+
+const josefinSans = Josefin_Sans({
+  subsets: ["latin"],
+  variable: "--font-josefin",
+  weight: ["300", "400", "500", "600", "700"],
 });
 
 export const metadata: Metadata = {
@@ -32,7 +44,7 @@ export default function RootLayout({
       afterSignUpUrl="/dashboard"
     >
       <html lang="en">
-        <body className={`${dmSans.variable} ${sora.variable} ${dmSans.className}`}>
+        <body className={`${dmSans.variable} ${sora.variable} ${cinzel.variable} ${josefinSans.variable} ${dmSans.className}`}>
           <Providers>{children}</Providers>
         </body>
       </html>

@@ -20,14 +20,12 @@ const socialLinks = [
   { icon: Twitter, label: "Twitter", href: "#" },
   { icon: Linkedin, label: "LinkedIn", href: "#" },
   { icon: Github, label: "GitHub", href: "#" },
-  { icon: Mail, label: "Email", href: "mailto:hello@cloagent.com" },
+  { icon: Mail, label: "Email", href: "mailto:hello@estatecrm.com" },
 ];
 
 export function MarketingFooter() {
   return (
-    <footer className="relative border-t border-white/[0.06]">
-      {/* Top glow line */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/2 h-px glow-line opacity-40" />
+    <footer className="relative bg-[#0F172A]">
 
       <div className="max-w-7xl mx-auto px-6 py-16">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-10 mb-10">
@@ -37,22 +35,23 @@ export function MarketingFooter() {
               <motion.div
                 whileHover={{ scale: 1.08, rotate: -3 }}
                 transition={{ type: "spring", stiffness: 400, damping: 15 }}
-                className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0EA5E9] to-[#0284C7] flex items-center justify-center shadow-lg shadow-[#0EA5E9]/20"
+                className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#2563EB] to-[#3B82F6] flex items-center justify-center shadow-lg shadow-[#2563EB]/20"
               >
                 <Building2 size={20} className="text-white" />
               </motion.div>
               <span className="text-xl font-[family-name:var(--font-sora)] font-semibold text-white tracking-tight">
-                CloAgent
+                Estate CRM
               </span>
             </Link>
-            <p className="text-white/40 text-sm leading-relaxed">
-              The modern CRM platform designed for real estate professionals who demand excellence.
+            <p className="text-slate-400 text-sm leading-relaxed font-[family-name:var(--font-dm-sans)]">
+              The modern CRM platform for real estate professionals who demand
+              excellence.
             </p>
           </div>
 
           {/* Product */}
           <div>
-            <h4 className="text-white/80 font-[family-name:var(--font-sora)] font-semibold text-sm uppercase tracking-wider mb-5">
+            <h4 className="text-slate-200 font-[family-name:var(--font-sora)] font-semibold text-sm uppercase tracking-wider mb-5">
               Product
             </h4>
             <ul className="space-y-3">
@@ -60,7 +59,7 @@ export function MarketingFooter() {
                 <li key={link.href}>
                   <Link
                     href={link.href}
-                    className="text-white/40 hover:text-[#0EA5E9] text-sm transition-colors duration-300"
+                    className="text-slate-400 hover:text-blue-400 text-sm transition-colors duration-300 font-[family-name:var(--font-dm-sans)]"
                   >
                     {link.label}
                   </Link>
@@ -71,7 +70,7 @@ export function MarketingFooter() {
 
           {/* Company */}
           <div>
-            <h4 className="text-white/80 font-[family-name:var(--font-sora)] font-semibold text-sm uppercase tracking-wider mb-5">
+            <h4 className="text-slate-200 font-[family-name:var(--font-sora)] font-semibold text-sm uppercase tracking-wider mb-5">
               Company
             </h4>
             <ul className="space-y-3">
@@ -79,7 +78,7 @@ export function MarketingFooter() {
                 <li key={link.href}>
                   <Link
                     href={link.href}
-                    className="text-white/40 hover:text-[#0EA5E9] text-sm transition-colors duration-300"
+                    className="text-slate-400 hover:text-blue-400 text-sm transition-colors duration-300 font-[family-name:var(--font-dm-sans)]"
                   >
                     {link.label}
                   </Link>
@@ -90,7 +89,7 @@ export function MarketingFooter() {
 
           {/* Connect */}
           <div>
-            <h4 className="text-white/80 font-[family-name:var(--font-sora)] font-semibold text-sm uppercase tracking-wider mb-5">
+            <h4 className="text-slate-200 font-[family-name:var(--font-sora)] font-semibold text-sm uppercase tracking-wider mb-5">
               Connect
             </h4>
             <div className="flex gap-3">
@@ -100,10 +99,14 @@ export function MarketingFooter() {
                   href={social.href}
                   whileHover={{ scale: 1.1, y: -2 }}
                   whileTap={{ scale: 0.95 }}
-                  className="w-10 h-10 rounded-xl bg-white/[0.04] border border-white/[0.06] hover:bg-[#0EA5E9]/10 hover:border-[#0EA5E9]/30 flex items-center justify-center transition-colors duration-300 group"
+                  transition={{ type: "spring", stiffness: 400, damping: 15 }}
+                  className="w-10 h-10 rounded-xl bg-slate-800 hover:bg-slate-700 flex items-center justify-center transition-colors duration-300 group"
                   aria-label={social.label}
                 >
-                  <social.icon size={17} className="text-white/40 group-hover:text-[#0EA5E9]" />
+                  <social.icon
+                    size={17}
+                    className="text-slate-400 group-hover:text-blue-400 transition-colors duration-300"
+                  />
                 </motion.a>
               ))}
             </div>
@@ -111,13 +114,21 @@ export function MarketingFooter() {
         </div>
 
         {/* Bottom Bar */}
-        <div className="pt-8 border-t border-white/[0.06] flex flex-col md:flex-row justify-between items-center gap-4">
-          <p className="text-white/25 text-sm">© 2026 CloAgent. All rights reserved.</p>
+        <div className="pt-8 border-t border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4">
+          <p className="text-slate-500 text-sm font-[family-name:var(--font-dm-sans)]">
+            &copy; 2026 Estate CRM. All rights reserved.
+          </p>
           <div className="flex gap-8">
-            <Link href="#" className="text-white/25 hover:text-white/50 text-sm transition-colors duration-300">
+            <Link
+              href="#"
+              className="text-slate-500 hover:text-slate-300 text-sm transition-colors duration-300 font-[family-name:var(--font-dm-sans)]"
+            >
               Privacy Policy
             </Link>
-            <Link href="#" className="text-white/25 hover:text-white/50 text-sm transition-colors duration-300">
+            <Link
+              href="#"
+              className="text-slate-500 hover:text-slate-300 text-sm transition-colors duration-300 font-[family-name:var(--font-dm-sans)]"
+            >
               Terms of Service
             </Link>
           </div>

@@ -45,20 +45,20 @@ export default function AboutPage() {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ ...springFast, delay: 0.1 }}
-              className="inline-block px-4 py-2 rounded-full bg-white/[0.04] border border-white/[0.06] backdrop-blur-sm mb-8"
+              className="inline-block px-4 py-2 rounded-full bg-[#2563EB]/10 border border-[#2563EB]/20 backdrop-blur-sm mb-8"
             >
-              <span className="text-white/50 text-sm font-medium tracking-wide uppercase">About Us</span>
+              <span className="text-[#2563EB] text-sm font-medium tracking-wide uppercase">About Us</span>
             </motion.div>
             <h1 className="font-[family-name:var(--font-sora)] text-5xl md:text-6xl lg:text-7xl font-bold text-white mb-6 leading-[1.1]">
               We&apos;re building the future of
               <br />
-              <span className="text-gradient">real estate CRM</span>
+              <span className="text-gradient-blue">real estate CRM</span>
             </h1>
             <motion.p
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ ...spring, delay: 0.2 }}
-              className="text-lg md:text-xl text-white/50 leading-relaxed max-w-2xl mx-auto"
+              className="text-lg md:text-xl text-slate-400 leading-relaxed max-w-2xl mx-auto"
             >
               CloAgent was founded by real estate professionals who were tired of clunky, outdated CRM systems. We set out to build something better—a platform that&apos;s powerful yet intuitive, and designed specifically for the way agents work today.
             </motion.p>
@@ -67,7 +67,7 @@ export default function AboutPage() {
       </section>
 
       {/* Stats */}
-      <section className="py-20 bg-white/[0.02]">
+      <section className="py-20">
         <div className="max-w-7xl mx-auto px-6">
           <div className="grid md:grid-cols-3 gap-6">
             {stats.map((stat, index) => (
@@ -77,13 +77,13 @@ export default function AboutPage() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ ...spring, delay: index * 0.1 }}
-                className="glass-card text-center p-10 group"
+                className="bg-white/[0.04] border border-white/[0.08] rounded-2xl text-center p-10 group"
               >
-                <div className="relative w-16 h-16 rounded-2xl bg-[#0EA5E9]/10 flex items-center justify-center mx-auto mb-5 transition-all duration-500 group-hover:bg-[#0EA5E9]/20 group-hover:shadow-[0_0_30px_rgba(14,165,233,0.2)]">
-                  <stat.icon size={30} className="text-[#0EA5E9] transition-transform duration-500 group-hover:scale-110" />
+                <div className="relative w-16 h-16 rounded-2xl bg-[#2563EB]/10 flex items-center justify-center mx-auto mb-5 transition-all duration-500 group-hover:bg-[#2563EB]/20 group-hover:shadow-[0_0_30px_rgba(37,99,235,0.2)]">
+                  <stat.icon size={30} className="text-[#2563EB] transition-transform duration-500 group-hover:scale-110" />
                 </div>
                 <div className="font-[family-name:var(--font-sora)] text-4xl font-bold text-white mb-2">{stat.value}</div>
-                <div className="text-white/30 text-sm tracking-wide uppercase">{stat.label}</div>
+                <div className="text-slate-500 text-sm tracking-wide uppercase">{stat.label}</div>
               </motion.div>
             ))}
           </div>
@@ -101,7 +101,7 @@ export default function AboutPage() {
               transition={spring}
             >
               <h2 className="font-[family-name:var(--font-sora)] text-4xl md:text-5xl font-bold text-white mb-8">Our Story</h2>
-              <div className="space-y-5 text-white/50 text-lg leading-relaxed">
+              <div className="space-y-5 text-slate-400 text-lg leading-relaxed">
                 <p>
                   In 2021, our founders—experienced real estate agents and technology leaders—sat down over coffee to discuss a shared frustration: existing CRM tools were built for generic sales teams, not real estate professionals.
                 </p>
@@ -120,19 +120,19 @@ export default function AboutPage() {
               transition={spring}
               className="relative"
             >
-              <div className="relative rounded-2xl overflow-hidden border border-white/[0.06] shadow-2xl">
+              <div className="relative rounded-2xl overflow-hidden border border-white/[0.08] shadow-2xl">
                 {/* Layered gradient overlays for depth */}
-                <div className="absolute inset-0 bg-gradient-to-br from-[#0EA5E9]/20 via-transparent to-transparent z-10" />
+                <div className="absolute inset-0 bg-gradient-to-br from-[#2563EB]/20 via-transparent to-transparent z-10" />
                 <div className="absolute inset-0 bg-gradient-to-tl from-[#6366F1]/10 via-transparent to-transparent z-10" />
                 <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/20 to-black/40 z-10" />
-                <div className="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-[#0EA5E9]/10 to-transparent z-10" />
-                <div className="bg-[#060B14] p-12 aspect-[4/3] flex items-center justify-center relative">
-                  <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'radial-gradient(circle at 30% 40%, rgba(14, 165, 233, 0.15) 0%, transparent 60%), radial-gradient(circle at 70% 60%, rgba(99, 102, 241, 0.1) 0%, transparent 50%)' }} />
+                <div className="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-[#2563EB]/10 to-transparent z-10" />
+                <div className="bg-white/[0.04] p-12 aspect-[4/3] flex items-center justify-center relative">
+                  <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'radial-gradient(circle at 30% 40%, rgba(37, 99, 235, 0.15) 0%, transparent 60%), radial-gradient(circle at 70% 60%, rgba(99, 102, 241, 0.1) 0%, transparent 50%)' }} />
                   <div className="text-center relative z-20">
-                    <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-[#0EA5E9] to-[#0EA5E9]/70 mx-auto mb-4 flex items-center justify-center shadow-[0_0_40px_rgba(14,165,233,0.3)]">
+                    <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-[#2563EB] to-[#2563EB]/70 mx-auto mb-4 flex items-center justify-center shadow-[0_0_40px_rgba(37,99,235,0.3)]">
                       <Users size={48} className="text-white" />
                     </div>
-                    <div className="text-white/30 text-sm tracking-wide">Building the future together</div>
+                    <div className="text-slate-500 text-sm tracking-wide">Building the future together</div>
                   </div>
                 </div>
               </div>
@@ -142,7 +142,7 @@ export default function AboutPage() {
       </section>
 
       {/* Values */}
-      <section className="py-24 bg-white/[0.02]">
+      <section className="py-24">
         <div className="max-w-7xl mx-auto px-6">
           <motion.div
             initial={{ opacity: 0, y: 25 }}
@@ -152,7 +152,7 @@ export default function AboutPage() {
             className="text-center mb-16"
           >
             <h2 className="font-[family-name:var(--font-sora)] text-4xl md:text-5xl font-bold text-white mb-4">Our Core Values</h2>
-            <p className="text-lg text-white/30 max-w-2xl mx-auto">The principles that guide everything we do</p>
+            <p className="text-lg text-slate-500 max-w-2xl mx-auto">The principles that guide everything we do</p>
           </motion.div>
           <div className="grid md:grid-cols-2 gap-6">
             {values.map((value, index) => (
@@ -162,16 +162,16 @@ export default function AboutPage() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ ...spring, delay: index * 0.1 }}
-                className="glass-card-hover p-8 group cursor-default"
+                className="bg-white/[0.04] border border-white/[0.08] rounded-2xl hover:shadow-lg hover:border-white/[0.15] transition-all duration-300 p-8 group cursor-default"
               >
-                <div className="w-14 h-14 rounded-xl bg-[#0EA5E9]/10 flex items-center justify-center mb-5 transition-all duration-500 group-hover:bg-[#0EA5E9]/15">
+                <div className="w-14 h-14 rounded-xl bg-[#2563EB]/10 flex items-center justify-center mb-5 transition-all duration-500 group-hover:bg-[#2563EB]/15">
                   <value.icon
                     size={28}
-                    className="text-[#0EA5E9] transition-all duration-500 group-hover:scale-110 group-hover:rotate-6"
+                    className="text-[#2563EB] transition-all duration-500 group-hover:scale-110 group-hover:rotate-6"
                   />
                 </div>
                 <h3 className="font-[family-name:var(--font-sora)] text-xl font-semibold text-white mb-3">{value.title}</h3>
-                <p className="text-white/50 leading-relaxed">{value.description}</p>
+                <p className="text-slate-400 leading-relaxed">{value.description}</p>
               </motion.div>
             ))}
           </div>
@@ -189,7 +189,7 @@ export default function AboutPage() {
             className="text-center mb-20"
           >
             <h2 className="font-[family-name:var(--font-sora)] text-4xl md:text-5xl font-bold text-white mb-4">Our Journey</h2>
-            <p className="text-lg text-white/30">Key milestones that shaped CloAgent</p>
+            <p className="text-lg text-slate-500">Key milestones that shaped CloAgent</p>
           </motion.div>
           <div className="relative">
             {/* Vertical glowing line */}
@@ -197,13 +197,13 @@ export default function AboutPage() {
               <div
                 className="absolute inset-0"
                 style={{
-                  background: 'linear-gradient(to bottom, #0EA5E9 0%, rgba(14, 165, 233, 0.4) 50%, transparent 100%)',
+                  background: 'linear-gradient(to bottom, #2563EB 0%, rgba(37, 99, 235, 0.4) 50%, transparent 100%)',
                 }}
               />
               <div
                 className="absolute inset-0 blur-sm"
                 style={{
-                  background: 'linear-gradient(to bottom, #0EA5E9 0%, rgba(14, 165, 233, 0.3) 40%, transparent 100%)',
+                  background: 'linear-gradient(to bottom, #2563EB 0%, rgba(37, 99, 235, 0.3) 40%, transparent 100%)',
                 }}
               />
             </div>
@@ -222,19 +222,19 @@ export default function AboutPage() {
                   <div className="relative flex-shrink-0 w-12 md:w-16 flex justify-center">
                     <div className="relative">
                       {/* Pulse glow */}
-                      <div className="absolute inset-0 w-4 h-4 rounded-full bg-[#0EA5E9]/40 animate-ping" style={{ animationDuration: '3s' }} />
+                      <div className="absolute inset-0 w-4 h-4 rounded-full bg-[#2563EB]/40 animate-ping" style={{ animationDuration: '3s' }} />
                       {/* Outer glow */}
-                      <div className="absolute -inset-1 rounded-full bg-[#0EA5E9]/20 blur-sm" />
+                      <div className="absolute -inset-1 rounded-full bg-[#2563EB]/20 blur-sm" />
                       {/* Core dot */}
-                      <div className="relative w-4 h-4 rounded-full bg-[#0EA5E9] shadow-[0_0_12px_rgba(14,165,233,0.5)]" />
+                      <div className="relative w-4 h-4 rounded-full bg-[#2563EB] shadow-[0_0_12px_rgba(37,99,235,0.5)]" />
                     </div>
                   </div>
 
                   {/* Content card */}
-                  <div className="flex-1 glass-card p-6 mb-2">
-                    <div className="text-[#0EA5E9]/70 text-sm font-medium tracking-wider uppercase mb-1">{milestone.year}</div>
+                  <div className="flex-1 bg-white/[0.04] border border-white/[0.08] rounded-2xl p-6 mb-2">
+                    <div className="text-[#2563EB]/70 text-sm font-medium tracking-wider uppercase mb-1">{milestone.year}</div>
                     <h3 className="font-[family-name:var(--font-sora)] text-lg font-semibold text-white mb-2">{milestone.title}</h3>
-                    <p className="text-white/50 leading-relaxed">{milestone.description}</p>
+                    <p className="text-slate-400 leading-relaxed">{milestone.description}</p>
                   </div>
                 </motion.div>
               ))}
@@ -244,7 +244,7 @@ export default function AboutPage() {
       </section>
 
       {/* CTA */}
-      <section className="py-24 bg-white/[0.02]">
+      <section className="py-24">
         <div className="max-w-4xl mx-auto px-6">
           <motion.div
             initial={{ opacity: 0, y: 25 }}
@@ -254,15 +254,15 @@ export default function AboutPage() {
             className="relative p-12 md:p-16 rounded-3xl text-center"
           >
             {/* Gradient border effect */}
-            <div className="absolute inset-0 rounded-3xl p-px bg-gradient-to-br from-[#0EA5E9]/40 via-[#0EA5E9]/10 to-transparent">
-              <div className="w-full h-full rounded-[calc(1.5rem-1px)] bg-[#060B14]" />
+            <div className="absolute inset-0 rounded-3xl p-px bg-gradient-to-br from-[#2563EB]/40 via-[#2563EB]/10 to-transparent">
+              <div className="w-full h-full rounded-[calc(1.5rem-1px)] bg-white/[0.04]" />
             </div>
             {/* Ambient glow */}
-            <div className="absolute -inset-px rounded-3xl opacity-50 blur-xl bg-gradient-to-br from-[#0EA5E9]/10 via-transparent to-transparent pointer-events-none" />
+            <div className="absolute -inset-px rounded-3xl opacity-50 blur-xl bg-gradient-to-br from-[#2563EB]/10 via-transparent to-transparent pointer-events-none" />
 
             <div className="relative z-10">
               <h2 className="font-[family-name:var(--font-sora)] text-4xl md:text-5xl font-bold text-white mb-4">Join us on our mission</h2>
-              <p className="text-lg text-white/50 mb-10 max-w-xl mx-auto leading-relaxed">
+              <p className="text-lg text-slate-400 mb-10 max-w-xl mx-auto leading-relaxed">
                 We&apos;re looking for talented people to help shape the future of real estate technology.
               </p>
               <div className="flex flex-wrap gap-4 justify-center">
@@ -272,7 +272,7 @@ export default function AboutPage() {
                 </LinkButton>
                 <a
                   href="mailto:careers@cloagent.com"
-                  className="inline-flex items-center justify-center gap-2 rounded-lg px-8 py-3 text-sm font-medium transition-all duration-300 border border-white/[0.06] text-white/50 hover:text-white hover:bg-white/[0.04] hover:border-white/[0.12]"
+                  className="inline-flex items-center justify-center gap-2 rounded-lg px-8 py-3 text-sm font-medium transition-all duration-300 border border-white/[0.1] text-slate-300 hover:text-white hover:bg-white/[0.06] hover:border-white/[0.2]"
                 >
                   Join Our Team
                 </a>

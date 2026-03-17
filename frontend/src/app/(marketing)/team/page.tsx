@@ -94,16 +94,16 @@ export default function TeamPage() {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.1, duration: 0.5 }}
-              className="inline-block px-4 py-2 rounded-full bg-white/[0.04] backdrop-blur-sm border border-white/[0.06] mb-6"
+              className="inline-block px-4 py-2 rounded-full bg-blue-50 border border-blue-200/50 mb-6"
             >
               <span className="text-gradient text-sm font-medium">Our Team</span>
             </motion.div>
-            <h1 className="font-[family-name:var(--font-sora)] text-5xl md:text-6xl font-bold text-white mb-6 tracking-tight">
+            <h1 className="font-[family-name:var(--font-sora)] text-5xl md:text-6xl font-bold text-slate-900 mb-6 tracking-tight">
               Meet the people behind
               <br />
               <span className="text-gradient">CloAgent</span>
             </h1>
-            <p className="text-xl text-white/50 leading-relaxed">
+            <p className="text-xl text-slate-500 leading-relaxed">
               We're a diverse team of engineers, designers, and real estate experts united by a passion for building exceptional products.
             </p>
           </motion.div>
@@ -111,7 +111,7 @@ export default function TeamPage() {
       </section>
 
       {/* Leadership */}
-      <section className="py-20 bg-white/[0.02]">
+      <section className="py-20 bg-white">
         <div className="max-w-7xl mx-auto px-6">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -120,10 +120,10 @@ export default function TeamPage() {
             transition={{ duration: 0.6 }}
             className="text-center mb-16"
           >
-            <h2 className="font-[family-name:var(--font-sora)] text-4xl font-bold text-white mb-4 tracking-tight">
+            <h2 className="font-[family-name:var(--font-sora)] text-4xl font-bold text-slate-900 mb-4 tracking-tight">
               Leadership Team
             </h2>
-            <p className="text-white/50">The visionaries guiding CloAgent's mission</p>
+            <p className="text-slate-500">The visionaries guiding CloAgent's mission</p>
           </motion.div>
           <motion.div
             variants={stagger.container}
@@ -139,7 +139,7 @@ export default function TeamPage() {
                 whileHover={{ y: -6, transition: { type: "spring", stiffness: 300, damping: 20 } }}
                 className="group"
               >
-                <div className="glass-card-hover p-8 text-center relative overflow-hidden">
+                <div className="bg-white border border-slate-200 rounded-2xl shadow-sm hover:shadow-md hover:border-slate-300 transition-all duration-300 p-8 text-center relative overflow-hidden">
                   {/* Ambient glow behind avatar on hover */}
                   <div className="absolute top-12 left-1/2 -translate-x-1/2 w-40 h-40 rounded-full bg-[#0EA5E9]/0 group-hover:bg-[#0EA5E9]/10 blur-3xl transition-all duration-700 pointer-events-none" />
 
@@ -150,30 +150,30 @@ export default function TeamPage() {
                     </div>
                   </div>
 
-                  <h3 className="font-[family-name:var(--font-sora)] text-xl font-semibold text-white mb-1">
+                  <h3 className="font-[family-name:var(--font-sora)] text-xl font-semibold text-slate-900 mb-1">
                     {member.name}
                   </h3>
                   <p className="text-gradient text-sm font-medium mb-4">{member.role}</p>
-                  <p className="text-white/50 text-sm leading-relaxed mb-6">{member.bio}</p>
+                  <p className="text-slate-500 text-sm leading-relaxed mb-6">{member.bio}</p>
 
                   <div className="flex gap-3 justify-center">
                     <a
                       href={member.linkedin}
-                      className="w-9 h-9 rounded-lg bg-white/[0.04] backdrop-blur-sm border border-white/[0.06] hover:border-[#0EA5E9]/30 hover:bg-[#0EA5E9]/10 hover:shadow-[0_0_16px_rgba(14,165,233,0.15)] flex items-center justify-center transition-all duration-300 group/icon"
+                      className="w-9 h-9 rounded-lg bg-slate-50 border border-slate-200 hover:border-[#0EA5E9]/30 hover:bg-[#0EA5E9]/10 hover:shadow-[0_0_16px_rgba(14,165,233,0.15)] flex items-center justify-center transition-all duration-300 group/icon"
                     >
-                      <Linkedin size={15} className="text-white/30 group-hover/icon:text-white/80 transition-colors" />
+                      <Linkedin size={15} className="text-slate-400 group-hover/icon:text-slate-700 transition-colors" />
                     </a>
                     <a
                       href={member.twitter}
-                      className="w-9 h-9 rounded-lg bg-white/[0.04] backdrop-blur-sm border border-white/[0.06] hover:border-[#0EA5E9]/30 hover:bg-[#0EA5E9]/10 hover:shadow-[0_0_16px_rgba(14,165,233,0.15)] flex items-center justify-center transition-all duration-300 group/icon"
+                      className="w-9 h-9 rounded-lg bg-slate-50 border border-slate-200 hover:border-[#0EA5E9]/30 hover:bg-[#0EA5E9]/10 hover:shadow-[0_0_16px_rgba(14,165,233,0.15)] flex items-center justify-center transition-all duration-300 group/icon"
                     >
-                      <Twitter size={15} className="text-white/30 group-hover/icon:text-white/80 transition-colors" />
+                      <Twitter size={15} className="text-slate-400 group-hover/icon:text-slate-700 transition-colors" />
                     </a>
                     <a
                       href={`mailto:${member.email}`}
-                      className="w-9 h-9 rounded-lg bg-white/[0.04] backdrop-blur-sm border border-white/[0.06] hover:border-[#0EA5E9]/30 hover:bg-[#0EA5E9]/10 hover:shadow-[0_0_16px_rgba(14,165,233,0.15)] flex items-center justify-center transition-all duration-300 group/icon"
+                      className="w-9 h-9 rounded-lg bg-slate-50 border border-slate-200 hover:border-[#0EA5E9]/30 hover:bg-[#0EA5E9]/10 hover:shadow-[0_0_16px_rgba(14,165,233,0.15)] flex items-center justify-center transition-all duration-300 group/icon"
                     >
-                      <Mail size={15} className="text-white/30 group-hover/icon:text-white/80 transition-colors" />
+                      <Mail size={15} className="text-slate-400 group-hover/icon:text-slate-700 transition-colors" />
                     </a>
                   </div>
                 </div>
@@ -193,10 +193,10 @@ export default function TeamPage() {
             transition={{ duration: 0.6 }}
             className="text-center mb-16"
           >
-            <h2 className="font-[family-name:var(--font-sora)] text-4xl font-bold text-white mb-4 tracking-tight">
+            <h2 className="font-[family-name:var(--font-sora)] text-4xl font-bold text-slate-900 mb-4 tracking-tight">
               The Team
             </h2>
-            <p className="text-white/50">Talented individuals making it all happen</p>
+            <p className="text-slate-500">Talented individuals making it all happen</p>
           </motion.div>
           <motion.div
             variants={stagger.container}
@@ -210,17 +210,17 @@ export default function TeamPage() {
                 key={member.name}
                 variants={stagger.item}
                 whileHover={{ y: -4, transition: { type: "spring", stiffness: 300, damping: 20 } }}
-                className="glass-card-hover p-5 text-center group"
+                className="bg-white border border-slate-200 rounded-2xl shadow-sm hover:shadow-md hover:border-slate-300 transition-all duration-300 p-5 text-center group"
               >
                 <div className="relative mx-auto mb-3 w-20 h-20">
-                  <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#0EA5E9]/15 to-[#38BDF8]/5 border border-white/[0.06] flex items-center justify-center text-white text-lg font-bold group-hover:scale-110 transition-transform duration-500">
+                  <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#0EA5E9]/15 to-[#38BDF8]/5 border border-slate-200 flex items-center justify-center text-white text-lg font-bold group-hover:scale-110 transition-transform duration-500">
                     {member.avatar}
                   </div>
                 </div>
-                <h3 className="font-[family-name:var(--font-sora)] text-white font-semibold text-sm mb-1">
+                <h3 className="font-[family-name:var(--font-sora)] text-slate-900 font-semibold text-sm mb-1">
                   {member.name}
                 </h3>
-                <p className="text-white/30 text-xs">{member.role}</p>
+                <p className="text-slate-400 text-xs">{member.role}</p>
               </motion.div>
             ))}
           </motion.div>
@@ -228,7 +228,7 @@ export default function TeamPage() {
       </section>
 
       {/* Departments */}
-      <section className="py-24 bg-white/[0.02]">
+      <section className="py-24 bg-white">
         <div className="max-w-7xl mx-auto px-6">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -237,10 +237,10 @@ export default function TeamPage() {
             transition={{ duration: 0.6 }}
             className="text-center mb-16"
           >
-            <h2 className="font-[family-name:var(--font-sora)] text-4xl font-bold text-white mb-4 tracking-tight">
+            <h2 className="font-[family-name:var(--font-sora)] text-4xl font-bold text-slate-900 mb-4 tracking-tight">
               Our Departments
             </h2>
-            <p className="text-white/50">Cross-functional teams working in harmony</p>
+            <p className="text-slate-500">Cross-functional teams working in harmony</p>
           </motion.div>
           <motion.div
             variants={stagger.container}
@@ -254,15 +254,15 @@ export default function TeamPage() {
                 key={dept.name}
                 variants={stagger.item}
                 whileHover={{ y: -4, transition: { type: "spring", stiffness: 300, damping: 20 } }}
-                className="glass-card p-6 text-center"
+                className="bg-white border border-slate-200 rounded-2xl shadow-sm p-6 text-center"
               >
                 <div className="text-5xl font-bold text-gradient mb-3 font-[family-name:var(--font-sora)]">
                   {dept.count}
                 </div>
-                <h3 className="font-[family-name:var(--font-sora)] text-xl font-semibold text-white mb-2">
+                <h3 className="font-[family-name:var(--font-sora)] text-xl font-semibold text-slate-900 mb-2">
                   {dept.name}
                 </h3>
-                <p className="text-white/50 text-sm">{dept.description}</p>
+                <p className="text-slate-500 text-sm">{dept.description}</p>
               </motion.div>
             ))}
           </motion.div>
@@ -283,14 +283,14 @@ export default function TeamPage() {
             <div className="absolute -inset-px rounded-3xl bg-gradient-to-br from-[#0EA5E9]/20 via-transparent to-[#38BDF8]/10 pointer-events-none" />
             <div className="absolute inset-0 rounded-3xl bg-[#0EA5E9]/[0.03] blur-2xl pointer-events-none" />
 
-            <div className="relative p-12 rounded-3xl glass-card border-white/[0.06] text-center overflow-hidden">
+            <div className="relative p-12 rounded-3xl bg-white border border-slate-200 rounded-2xl shadow-sm text-center overflow-hidden">
               {/* Gradient border overlay */}
               <div className="absolute inset-0 rounded-3xl border border-gradient-to-br from-[#0EA5E9]/20 to-transparent pointer-events-none" />
 
-              <h2 className="font-[family-name:var(--font-sora)] text-4xl md:text-5xl font-bold text-white mb-4 tracking-tight">
+              <h2 className="font-[family-name:var(--font-sora)] text-4xl md:text-5xl font-bold text-slate-900 mb-4 tracking-tight">
                 Join our growing team
               </h2>
-              <p className="text-lg text-white/50 mb-8 max-w-xl mx-auto leading-relaxed">
+              <p className="text-lg text-slate-500 mb-8 max-w-xl mx-auto leading-relaxed">
                 We're always looking for talented, passionate people to join us on our mission.
               </p>
               <div className="flex flex-col md:flex-row gap-4 justify-center">
@@ -308,7 +308,7 @@ export default function TeamPage() {
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.98 }}
                   transition={{ type: "spring", stiffness: 400, damping: 20 }}
-                  className="inline-flex items-center justify-center px-8 py-3 rounded-xl bg-white/[0.04] backdrop-blur-sm border border-white/[0.06] text-white hover:bg-white/[0.08] hover:border-white/[0.12] font-medium transition-all duration-300"
+                  className="inline-flex items-center justify-center px-8 py-3 rounded-xl bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400 font-medium transition-all duration-300"
                 >
                   Send Your Resume
                 </motion.a>
@@ -319,7 +319,7 @@ export default function TeamPage() {
       </section>
 
       {/* Culture / Perks */}
-      <section className="py-24 bg-white/[0.02]">
+      <section className="py-24 bg-white">
         <div className="max-w-7xl mx-auto px-6">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -328,10 +328,10 @@ export default function TeamPage() {
             transition={{ duration: 0.6 }}
             className="text-center mb-16"
           >
-            <h2 className="font-[family-name:var(--font-sora)] text-4xl font-bold text-white mb-4 tracking-tight">
+            <h2 className="font-[family-name:var(--font-sora)] text-4xl font-bold text-slate-900 mb-4 tracking-tight">
               Life at CloAgent
             </h2>
-            <p className="text-white/50 max-w-2xl mx-auto">
+            <p className="text-slate-500 max-w-2xl mx-auto">
               We believe in creating an environment where people can do their best work.
             </p>
           </motion.div>
@@ -347,12 +347,12 @@ export default function TeamPage() {
                 key={perk.title}
                 variants={stagger.item}
                 whileHover={{ x: 4, transition: { type: "spring", stiffness: 300, damping: 20 } }}
-                className="p-6 rounded-xl bg-white/[0.02] backdrop-blur-sm border border-white/[0.06] border-l-2 border-l-[#0EA5E9]/30 transition-all duration-300 hover:bg-white/[0.04] hover:border-l-[#0EA5E9]/60"
+                className="p-6 rounded-xl bg-white border border-slate-200 border-l-2 border-l-blue-400 transition-all duration-300 hover:bg-slate-50 hover:border-l-blue-500"
               >
-                <h3 className="font-[family-name:var(--font-sora)] text-lg font-semibold text-white mb-2">
+                <h3 className="font-[family-name:var(--font-sora)] text-lg font-semibold text-slate-900 mb-2">
                   {perk.title}
                 </h3>
-                <p className="text-white/50 text-sm leading-relaxed">{perk.description}</p>
+                <p className="text-slate-500 text-sm leading-relaxed">{perk.description}</p>
               </motion.div>
             ))}
           </motion.div>

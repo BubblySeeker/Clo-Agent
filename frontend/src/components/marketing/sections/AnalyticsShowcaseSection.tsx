@@ -68,13 +68,13 @@ export default function AnalyticsShowcaseSection() {
           animate={inView ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.6 }}
         >
-          <span className="text-xs font-semibold tracking-[0.2em] uppercase text-[#8B5CF6] font-[family-name:var(--font-josefin)]">
+          <span className="text-xs font-semibold tracking-[0.2em] uppercase text-[#8B5CF6] font-[family-name:var(--font-dm-sans)]">
             Layer 3
           </span>
-          <h2 className="mt-4 text-4xl lg:text-5xl font-bold font-[family-name:var(--font-cinzel)] text-white">
+          <h2 className="mt-4 text-4xl lg:text-5xl font-bold font-[family-name:var(--font-sora)] text-white">
             Analytics & <span className="bg-clip-text text-transparent" style={{ backgroundImage: "linear-gradient(135deg, #8B5CF6, #A78BFA)" }}>Insights</span>
           </h2>
-          <p className="mt-4 text-lg text-slate-400 font-[family-name:var(--font-josefin)] max-w-xl mx-auto">
+          <p className="mt-4 text-lg text-slate-400 font-[family-name:var(--font-dm-sans)] max-w-xl mx-auto">
             Every metric, chart, and insight — animated and alive.
           </p>
         </motion.div>
@@ -90,10 +90,10 @@ export default function AnalyticsShowcaseSection() {
               transition={{ delay: i * 0.1, type: "spring", stiffness: 100, damping: 15 }}
             >
               <kpi.icon className="w-5 h-5 mx-auto mb-3" style={{ color: kpi.color }} />
-              <div className="text-3xl font-bold text-white font-[family-name:var(--font-cinzel)] mb-1">
+              <div className="text-3xl font-bold text-white font-[family-name:var(--font-sora)] mb-1">
                 <AnimatedCounter target={kpi.value} prefix={kpi.prefix} suffix={kpi.suffix} />
               </div>
-              <p className="text-xs text-slate-400 font-[family-name:var(--font-josefin)]">{kpi.label}</p>
+              <p className="text-xs text-slate-400 font-[family-name:var(--font-dm-sans)]">{kpi.label}</p>
             </motion.div>
           ))}
         </div>
@@ -107,13 +107,13 @@ export default function AnalyticsShowcaseSection() {
             animate={inView ? { opacity: 1, x: 0 } : {}}
             transition={{ delay: 0.3, duration: 0.6 }}
           >
-            <h3 className="text-sm font-semibold text-white font-[family-name:var(--font-josefin)] mb-6">
+            <h3 className="text-sm font-semibold text-white font-[family-name:var(--font-dm-sans)] mb-6">
               Conversion Funnel
             </h3>
             <div className="space-y-3">
               {FUNNEL_STAGES.map((stage, i) => (
                 <div key={stage.name} className="flex items-center gap-3">
-                  <span className="text-[11px] text-slate-400 font-[family-name:var(--font-josefin)] w-20 text-right">
+                  <span className="text-[11px] text-slate-400 font-[family-name:var(--font-dm-sans)] w-20 text-right">
                     {stage.name}
                   </span>
                   <div className="flex-1 h-8 bg-white/[0.04] rounded-lg overflow-hidden">
@@ -139,7 +139,7 @@ export default function AnalyticsShowcaseSection() {
             animate={inView ? { opacity: 1, x: 0 } : {}}
             transition={{ delay: 0.3, duration: 0.6 }}
           >
-            <h3 className="text-sm font-semibold text-white font-[family-name:var(--font-josefin)] mb-6">
+            <h3 className="text-sm font-semibold text-white font-[family-name:var(--font-dm-sans)] mb-6">
               Activity Timeline
             </h3>
             <div className="relative">
@@ -161,8 +161,8 @@ export default function AnalyticsShowcaseSection() {
                       <div className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }} />
                     </div>
                     <div>
-                      <p className="text-xs text-slate-300 font-[family-name:var(--font-josefin)]">{item.text}</p>
-                      <p className="text-[10px] text-slate-500 font-[family-name:var(--font-josefin)] mt-0.5">{item.time}</p>
+                      <p className="text-xs text-slate-300 font-[family-name:var(--font-dm-sans)]">{item.text}</p>
+                      <p className="text-[10px] text-slate-500 font-[family-name:var(--font-dm-sans)] mt-0.5">{item.time}</p>
                     </div>
                   </motion.div>
                 ))}

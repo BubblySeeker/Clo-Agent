@@ -56,7 +56,7 @@ export default function FinalCTASection() {
                   >
                     <div className="w-full h-[2px] absolute top-0 left-0 right-0 rounded-t-lg" style={{ backgroundColor: layer.color }} />
                     <layer.icon className="w-4 h-4 shrink-0" style={{ color: layer.color }} />
-                    <span className="text-xs font-semibold text-white/80 font-[family-name:var(--font-josefin)]">{layer.title}</span>
+                    <span className="text-xs font-semibold text-white/80 font-[family-name:var(--font-dm-sans)]">{layer.title}</span>
                     <div className="flex-1" />
                     <div className="flex gap-1">
                       <div className="w-8 h-1.5 rounded-full bg-white/10" />
@@ -75,24 +75,24 @@ export default function FinalCTASection() {
           animate={inView ? { opacity: 1, y: 0 } : {}}
           transition={{ delay: 1, duration: 0.6 }}
         >
-          <h2 className="text-4xl lg:text-5xl font-bold font-[family-name:var(--font-cinzel)] text-white mb-6">
+          <h2 className="text-4xl lg:text-5xl font-bold font-[family-name:var(--font-sora)] text-white mb-6">
             Ready to <span className="text-gradient-orange">Transform</span> Your Business?
           </h2>
-          <p className="text-lg text-slate-400 font-[family-name:var(--font-josefin)] max-w-xl mx-auto mb-10">
+          <p className="text-lg text-slate-400 font-[family-name:var(--font-dm-sans)] max-w-xl mx-auto mb-10">
             Join thousands of agents who&apos;ve replaced spreadsheets and sticky notes with five layers of intelligence.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
               href="/sign-up"
-              className="inline-flex items-center justify-center px-8 py-4 text-base font-semibold text-white rounded-xl transition-all hover:shadow-lg hover:shadow-[#F97316]/25 hover:scale-[1.02] active:scale-[0.98] font-[family-name:var(--font-josefin)]"
+              className="inline-flex items-center justify-center px-8 py-4 text-base font-semibold text-white rounded-xl transition-all hover:shadow-lg hover:shadow-[#F97316]/25 hover:scale-[1.02] active:scale-[0.98] font-[family-name:var(--font-dm-sans)]"
               style={{ backgroundColor: "#F97316" }}
             >
               Start Free Trial
             </Link>
             <Link
               href="/features"
-              className="inline-flex items-center justify-center px-8 py-4 text-base font-semibold rounded-xl border-2 border-[#2563EB] text-[#2563EB] hover:bg-[#2563EB] hover:text-white transition-all font-[family-name:var(--font-josefin)]"
+              className="inline-flex items-center justify-center px-8 py-4 text-base font-semibold rounded-xl border-2 border-[#2563EB] text-[#2563EB] hover:bg-[#2563EB] hover:text-white transition-all font-[family-name:var(--font-dm-sans)]"
             >
               Explore Features
             </Link>

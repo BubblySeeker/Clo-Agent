@@ -106,21 +106,21 @@ export default function PricingPage() {
             variants={stagger}
             className="text-center max-w-3xl mx-auto"
           >
-            <motion.div variants={fadeUp} className="inline-block px-4 py-2 rounded-full bg-[#0EA5E9]/10 border border-[#0EA5E9]/20 mb-8">
-              <span className="text-[#0EA5E9] text-sm font-medium tracking-wide uppercase">Pricing</span>
+            <motion.div variants={fadeUp} className="inline-block px-4 py-2 rounded-full bg-[#2563EB]/10 border border-[#2563EB]/20 mb-8">
+              <span className="text-[#2563EB] text-sm font-medium tracking-wide uppercase">Pricing</span>
             </motion.div>
             <motion.h1
               variants={fadeUp}
               className="font-[family-name:var(--font-sora)] text-5xl md:text-6xl lg:text-7xl font-bold text-white mb-6 tracking-tight"
             >
-              Simple, <span className="text-gradient">transparent</span> pricing
+              Simple, <span className="text-gradient-blue">transparent</span> pricing
             </motion.h1>
-            <motion.p variants={fadeUp} className="text-lg md:text-xl text-white/50 mb-10 leading-relaxed">
+            <motion.p variants={fadeUp} className="text-lg md:text-xl text-slate-400 mb-10 leading-relaxed">
               Choose the perfect plan for your business. All plans include a 14-day free trial.
             </motion.p>
 
             {/* Billing Toggle */}
-            <motion.div variants={fadeUp} className="inline-flex items-center gap-1 p-1.5 rounded-full bg-white/[0.04] border border-white/[0.06] backdrop-blur-sm">
+            <motion.div variants={fadeUp} className="inline-flex items-center gap-1 p-1.5 rounded-full bg-white/[0.04] border border-white/[0.08] backdrop-blur-sm">
               <button
                 onClick={() => setBillingPeriod("monthly")}
                 className="relative px-6 py-2.5 rounded-full text-sm font-medium transition-colors duration-300"
@@ -128,11 +128,11 @@ export default function PricingPage() {
                 {billingPeriod === "monthly" && (
                   <motion.div
                     layoutId="billing-indicator"
-                    className="absolute inset-0 rounded-full bg-[#0EA5E9]"
+                    className="absolute inset-0 rounded-full bg-[#2563EB]"
                     transition={{ type: "spring", stiffness: 400, damping: 30 }}
                   />
                 )}
-                <span className={`relative z-10 ${billingPeriod === "monthly" ? "text-white" : "text-white/40 hover:text-white/60"}`}>
+                <span className={`relative z-10 ${billingPeriod === "monthly" ? "text-white" : "text-slate-500 hover:text-slate-300"}`}>
                   Monthly
                 </span>
               </button>
@@ -143,14 +143,14 @@ export default function PricingPage() {
                 {billingPeriod === "annual" && (
                   <motion.div
                     layoutId="billing-indicator"
-                    className="absolute inset-0 rounded-full bg-[#0EA5E9]"
+                    className="absolute inset-0 rounded-full bg-[#2563EB]"
                     transition={{ type: "spring", stiffness: 400, damping: 30 }}
                   />
                 )}
-                <span className={`relative z-10 ${billingPeriod === "annual" ? "text-white" : "text-white/40 hover:text-white/60"}`}>
+                <span className={`relative z-10 ${billingPeriod === "annual" ? "text-white" : "text-slate-500 hover:text-slate-300"}`}>
                   Annual
                 </span>
-                <span className="relative z-10 text-xs bg-white/20 px-2 py-0.5 rounded-full text-white/80">
+                <span className="relative z-10 text-xs bg-[#2563EB]/20 px-2 py-0.5 rounded-full text-slate-300">
                   Save 20%
                 </span>
               </button>
@@ -173,15 +173,15 @@ export default function PricingPage() {
                 key={plan.name}
                 variants={fadeUp}
                 whileHover={{ y: -6, transition: { duration: 0.3 } }}
-                className={`relative glass-card p-8 lg:p-10 ${
+                className={`relative bg-white/[0.04] border border-white/[0.08] rounded-2xl p-8 lg:p-10 ${
                   plan.popular
-                    ? "border-[#0EA5E9]/20 shadow-[0_0_60px_-12px_rgba(14,165,233,0.15)] md:scale-[1.04]"
+                    ? "border-[#2563EB]/20 shadow-[0_0_60px_-12px_rgba(37,99,235,0.15)] md:scale-[1.04]"
                     : ""
                 }`}
               >
                 {plan.popular && (
                   <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                    <div className="relative px-5 py-1.5 rounded-full bg-gradient-to-r from-[#0EA5E9] to-[#38BDF8] text-white text-xs font-semibold tracking-wide uppercase flex items-center gap-1.5 overflow-hidden">
+                    <div className="relative px-5 py-1.5 rounded-full bg-gradient-to-r from-[#2563EB] to-[#3B82F6] text-white text-xs font-semibold tracking-wide uppercase flex items-center gap-1.5 overflow-hidden">
                       <div className="absolute inset-0 shimmer-btn" />
                       <Sparkles size={13} className="relative z-10" />
                       <span className="relative z-10">Most Popular</span>
@@ -191,12 +191,12 @@ export default function PricingPage() {
 
                 <div className="mb-8">
                   <h3 className="font-[family-name:var(--font-sora)] text-xl font-semibold text-white mb-2">{plan.name}</h3>
-                  <p className="text-white/30 text-sm">{plan.description}</p>
+                  <p className="text-slate-500 text-sm">{plan.description}</p>
                 </div>
 
                 <div className="mb-8">
                   <div className="flex items-baseline gap-2">
-                    <span className="text-white/30 text-2xl">$</span>
+                    <span className="text-slate-500 text-2xl">$</span>
                     <AnimatePresence mode="wait">
                       <motion.span
                         key={`${plan.name}-${billingPeriod}`}
@@ -209,14 +209,14 @@ export default function PricingPage() {
                         {billingPeriod === "monthly" ? plan.monthlyPrice : plan.annualPrice}
                       </motion.span>
                     </AnimatePresence>
-                    <span className="text-white/30 text-sm">/month</span>
+                    <span className="text-slate-500 text-sm">/month</span>
                   </div>
                   <div className="h-5 mt-2">
                     {billingPeriod === "annual" && (
                       <motion.p
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        className="text-white/20 text-sm"
+                        className="text-slate-500 text-sm"
                       >
                         Billed annually at ${plan.annualPrice * 12}
                       </motion.p>
@@ -227,7 +227,7 @@ export default function PricingPage() {
                 <LinkButton
                   href={plan.name === "Enterprise" ? "mailto:sales@cloagent.com" : "/sign-up"}
                   variant={plan.popular ? "primary" : "outline"}
-                  className={`w-full mb-8 ${!plan.popular ? "bg-white/[0.04] border-white/[0.08] hover:bg-white/[0.08]" : ""}`}
+                  className={`w-full mb-8 ${!plan.popular ? "bg-white/[0.02] border-white/[0.08] hover:bg-white/[0.08]" : ""}`}
                 >
                   {plan.cta}
                   {plan.name !== "Enterprise" && <ArrowRight size={16} className="ml-2" />}
@@ -236,10 +236,10 @@ export default function PricingPage() {
                 <div className="space-y-3.5">
                   {plan.features.map((feature) => (
                     <div key={feature} className="flex items-start gap-3">
-                      <div className="w-5 h-5 rounded-full bg-[#0EA5E9]/[0.08] flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <Check size={12} className="text-[#0EA5E9]" />
+                      <div className="w-5 h-5 rounded-full bg-[#2563EB]/[0.08] flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <Check size={12} className="text-[#2563EB]" />
                       </div>
-                      <span className="text-white/50 text-sm leading-relaxed">{feature}</span>
+                      <span className="text-slate-400 text-sm leading-relaxed">{feature}</span>
                     </div>
                   ))}
                 </div>
@@ -250,7 +250,7 @@ export default function PricingPage() {
       </section>
 
       {/* Feature Comparison */}
-      <section className="py-24 bg-white/[0.02]">
+      <section className="py-24">
         <div className="max-w-5xl mx-auto px-6">
           <motion.div
             initial="hidden"
@@ -260,9 +260,9 @@ export default function PricingPage() {
             className="text-center mb-14"
           >
             <motion.h2 variants={fadeUp} className="font-[family-name:var(--font-sora)] text-4xl font-bold text-white mb-4">
-              Compare all <span className="text-gradient">features</span>
+              Compare all <span className="text-gradient-blue">features</span>
             </motion.h2>
-            <motion.p variants={fadeUp} className="text-white/30">See what&apos;s included in each plan</motion.p>
+            <motion.p variants={fadeUp} className="text-slate-500">See what&apos;s included in each plan</motion.p>
           </motion.div>
 
           <motion.div
@@ -270,37 +270,37 @@ export default function PricingPage() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.5 }}
-            className="glass-card overflow-hidden"
+            className="bg-white/[0.04] border border-white/[0.08] rounded-2xl overflow-hidden"
           >
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-white/[0.06]">
-                    <th className="text-left py-5 px-6 text-white/50 text-xs font-semibold uppercase tracking-wider">Feature</th>
-                    <th className="text-center py-5 px-6 text-white/50 text-xs font-semibold uppercase tracking-wider">Starter</th>
-                    <th className="text-center py-5 px-6 text-white/50 text-xs font-semibold uppercase tracking-wider">
-                      <span className="text-gradient">Professional</span>
+                  <tr className="border-b border-white/[0.08]">
+                    <th className="text-left py-5 px-6 text-slate-400 text-xs font-semibold uppercase tracking-wider">Feature</th>
+                    <th className="text-center py-5 px-6 text-slate-400 text-xs font-semibold uppercase tracking-wider">Starter</th>
+                    <th className="text-center py-5 px-6 text-slate-400 text-xs font-semibold uppercase tracking-wider">
+                      <span className="text-gradient-blue">Professional</span>
                     </th>
-                    <th className="text-center py-5 px-6 text-white/50 text-xs font-semibold uppercase tracking-wider">Enterprise</th>
+                    <th className="text-center py-5 px-6 text-slate-400 text-xs font-semibold uppercase tracking-wider">Enterprise</th>
                   </tr>
                 </thead>
                 <tbody>
                   {comparisonRows.map((row, rowIndex) => (
                     <tr
                       key={row.feature}
-                      className={`border-b border-white/[0.04] ${rowIndex % 2 === 0 ? "bg-white/[0.01]" : ""}`}
+                      className={`border-b border-white/[0.06] ${rowIndex % 2 === 0 ? "bg-white/[0.02]" : ""}`}
                     >
-                      <td className="py-4 px-6 text-white/50 text-sm">{row.feature}</td>
+                      <td className="py-4 px-6 text-slate-400 text-sm">{row.feature}</td>
                       {row.values.map((value, i) => (
                         <td key={i} className="text-center py-4 px-6">
                           {value === "check" ? (
-                            <div className="inline-flex w-5 h-5 rounded-full bg-[#0EA5E9]/[0.08] items-center justify-center">
-                              <Check size={12} className="text-[#0EA5E9]" />
+                            <div className="inline-flex w-5 h-5 rounded-full bg-[#2563EB]/[0.08] items-center justify-center">
+                              <Check size={12} className="text-[#2563EB]" />
                             </div>
                           ) : value === "-" ? (
-                            <span className="text-white/20">&mdash;</span>
+                            <span className="text-slate-500">&mdash;</span>
                           ) : (
-                            <span className="text-white/50 text-sm">{value}</span>
+                            <span className="text-slate-400 text-sm">{value}</span>
                           )}
                         </td>
                       ))}
@@ -324,9 +324,9 @@ export default function PricingPage() {
             className="text-center mb-14"
           >
             <motion.h2 variants={fadeUp} className="font-[family-name:var(--font-sora)] text-4xl font-bold text-white mb-4">
-              Frequently asked <span className="text-gradient">questions</span>
+              Frequently asked <span className="text-gradient-blue">questions</span>
             </motion.h2>
-            <motion.p variants={fadeUp} className="text-white/30">Everything you need to know about pricing</motion.p>
+            <motion.p variants={fadeUp} className="text-slate-500">Everything you need to know about pricing</motion.p>
           </motion.div>
 
           <motion.div
@@ -340,10 +340,10 @@ export default function PricingPage() {
               <motion.div
                 key={faq.question}
                 variants={fadeUp}
-                className="glass-card p-6 transition-all duration-300 hover:bg-white/[0.06] hover:border-white/[0.12]"
+                className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-6 transition-all duration-300 hover:bg-white/[0.06] hover:border-white/[0.15]"
               >
                 <h3 className="font-[family-name:var(--font-sora)] text-base font-semibold text-white mb-2">{faq.question}</h3>
-                <p className="text-white/30 text-sm leading-relaxed">{faq.answer}</p>
+                <p className="text-slate-500 text-sm leading-relaxed">{faq.answer}</p>
               </motion.div>
             ))}
           </motion.div>
@@ -351,7 +351,7 @@ export default function PricingPage() {
       </section>
 
       {/* CTA */}
-      <section className="py-24 bg-white/[0.02]">
+      <section className="py-24">
         <div className="max-w-4xl mx-auto px-6">
           <motion.div
             initial={{ opacity: 0, y: 24 }}
@@ -361,17 +361,17 @@ export default function PricingPage() {
             className="relative p-12 md:p-16 rounded-3xl text-center overflow-hidden"
           >
             {/* Gradient border glow */}
-            <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-[#0EA5E9]/20 via-[#38BDF8]/10 to-[#6366F1]/10 p-px">
-              <div className="absolute inset-px rounded-[23px] bg-[#0a0a0f]" />
+            <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-[#2563EB]/20 via-[#3B82F6]/10 to-[#6366F1]/10 p-px">
+              <div className="absolute inset-px rounded-[23px] bg-white/[0.04]" />
             </div>
             {/* Glow effect */}
-            <div className="absolute inset-0 rounded-3xl shadow-[0_0_80px_-20px_rgba(14,165,233,0.2)]" />
+            <div className="absolute inset-0 rounded-3xl shadow-[0_0_80px_-20px_rgba(37,99,235,0.2)]" />
 
             <div className="relative z-10">
               <h2 className="font-[family-name:var(--font-sora)] text-4xl md:text-5xl font-bold text-white mb-4 tracking-tight">
-                Still have <span className="text-gradient">questions</span>?
+                Still have <span className="text-gradient-blue">questions</span>?
               </h2>
-              <p className="text-lg text-white/30 mb-10 max-w-lg mx-auto leading-relaxed">
+              <p className="text-lg text-slate-400 mb-10 max-w-lg mx-auto leading-relaxed">
                 Our team is here to help. Schedule a demo or reach out to sales.
               </p>
               <div className="flex flex-wrap gap-4 justify-center">
@@ -381,7 +381,7 @@ export default function PricingPage() {
                 </LinkButton>
                 <a
                   href="mailto:sales@cloagent.com"
-                  className="inline-flex items-center justify-center gap-2 rounded-xl px-8 py-3 text-sm font-medium transition-all duration-300 border border-white/[0.08] text-white/50 hover:text-white hover:bg-white/[0.04] hover:border-white/[0.15]"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl px-8 py-3 text-sm font-medium transition-all duration-300 border border-white/[0.1] text-slate-300 hover:text-white hover:bg-white/[0.06] hover:border-white/[0.2]"
                 >
                   Contact Sales
                 </a>

@@ -101,7 +101,7 @@ export function LayerCard({ layer, index, scrollProgress, totalLayers }: LayerCa
         {/* Label overlay - bottom right */}
         <div className="absolute bottom-2 right-3 flex items-center gap-2">
           <layer.icon className="w-3.5 h-3.5" style={{ color: layer.color }} />
-          <span className="text-[10px] font-semibold text-white/70 font-[family-name:var(--font-josefin)]">
+          <span className="text-[10px] font-semibold text-white/70 font-[family-name:var(--font-dm-sans)]">
             {layer.title}
           </span>
         </div>

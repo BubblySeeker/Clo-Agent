@@ -34,13 +34,13 @@ export default function SecurityTrustSection() {
           animate={inView ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.6 }}
         >
-          <span className="text-xs font-semibold tracking-[0.2em] uppercase text-[#EF4444] font-[family-name:var(--font-josefin)]">
+          <span className="text-xs font-semibold tracking-[0.2em] uppercase text-[#EF4444] font-[family-name:var(--font-dm-sans)]">
             Layer 5
           </span>
-          <h2 className="mt-4 text-4xl lg:text-5xl font-bold font-[family-name:var(--font-cinzel)] text-white">
+          <h2 className="mt-4 text-4xl lg:text-5xl font-bold font-[family-name:var(--font-sora)] text-white">
             Security & <span className="bg-clip-text text-transparent" style={{ backgroundImage: "linear-gradient(135deg, #EF4444, #F87171)" }}>Trust</span>
           </h2>
-          <p className="mt-4 text-lg text-slate-400 font-[family-name:var(--font-josefin)] max-w-xl mx-auto">
+          <p className="mt-4 text-lg text-slate-400 font-[family-name:var(--font-dm-sans)] max-w-xl mx-auto">
             Five concentric layers of protection around every piece of data.
           </p>
         </motion.div>
@@ -111,7 +111,7 @@ export default function SecurityTrustSection() {
                     transition={{ delay: ring.delay + 1 }}
                   >
                     <ring.icon className="w-3 h-3" style={{ color: ring.color }} />
-                    <span className="text-[9px] font-semibold text-white/70 font-[family-name:var(--font-josefin)] whitespace-nowrap">
+                    <span className="text-[9px] font-semibold text-white/70 font-[family-name:var(--font-dm-sans)] whitespace-nowrap">
                       {ring.label}
                     </span>
                   </motion.div>
@@ -134,8 +134,8 @@ export default function SecurityTrustSection() {
                   <Shield className="w-5 h-5 text-[#EF4444]" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-white font-[family-name:var(--font-josefin)]">{badge.label}</p>
-                  <p className="text-xs text-slate-400 font-[family-name:var(--font-josefin)] mt-0.5">{badge.desc}</p>
+                  <p className="text-sm font-semibold text-white font-[family-name:var(--font-dm-sans)]">{badge.label}</p>
+                  <p className="text-xs text-slate-400 font-[family-name:var(--font-dm-sans)] mt-0.5">{badge.desc}</p>
                 </div>
               </motion.div>
             ))}

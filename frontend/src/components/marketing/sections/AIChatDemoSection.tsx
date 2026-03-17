@@ -106,13 +106,13 @@ export default function AIChatDemoSection() {
           animate={inView ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.6 }}
         >
-          <span className="text-xs font-semibold tracking-[0.2em] uppercase text-[#F97316] font-[family-name:var(--font-josefin)]">
+          <span className="text-xs font-semibold tracking-[0.2em] uppercase text-[#F97316] font-[family-name:var(--font-dm-sans)]">
             Layer 2
           </span>
-          <h2 className="mt-4 text-4xl lg:text-5xl font-bold font-[family-name:var(--font-cinzel)] text-white">
+          <h2 className="mt-4 text-4xl lg:text-5xl font-bold font-[family-name:var(--font-sora)] text-white">
             AI <span className="text-gradient-orange">Intelligence</span>
           </h2>
-          <p className="mt-4 text-lg text-slate-400 font-[family-name:var(--font-josefin)] max-w-xl mx-auto">
+          <p className="mt-4 text-lg text-slate-400 font-[family-name:var(--font-dm-sans)] max-w-xl mx-auto">
             Watch the AI work in real-time, then try it yourself.
           </p>
         </motion.div>
@@ -129,9 +129,9 @@ export default function AIChatDemoSection() {
             {/* Chat header */}
             <div className="flex items-center gap-2 px-4 py-3 border-b border-white/[0.08]">
               <div className="w-2 h-2 rounded-full bg-[#22C55E] animate-pulse" />
-              <span className="text-xs text-slate-400 font-[family-name:var(--font-josefin)]">Clo Assistant</span>
+              <span className="text-xs text-slate-400 font-[family-name:var(--font-dm-sans)]">Clo Assistant</span>
               <div className="flex-1" />
-              <span className="text-[10px] text-slate-600 font-[family-name:var(--font-josefin)]">Live Demo</span>
+              <span className="text-[10px] text-slate-600 font-[family-name:var(--font-dm-sans)]">Live Demo</span>
             </div>
 
             {/* Messages */}
@@ -139,7 +139,7 @@ export default function AIChatDemoSection() {
               {messages.length === 0 && !isTyping && (
                 <div className="text-center py-12">
                   <Bot className="w-8 h-8 text-[#F97316]/40 mx-auto mb-3" />
-                  <p className="text-sm text-slate-500 font-[family-name:var(--font-josefin)]">
+                  <p className="text-sm text-slate-500 font-[family-name:var(--font-dm-sans)]">
                     {hasAutoPlayed ? "Type a message below..." : "Watch the demo..."}
                   </p>
                 </div>
@@ -157,7 +157,7 @@ export default function AIChatDemoSection() {
                         <Bot size={14} className="text-[#F97316]" />
                       </div>
                     )}
-                    <div className={`rounded-xl px-4 py-2.5 text-sm font-[family-name:var(--font-josefin)] max-w-[80%] whitespace-pre-line ${
+                    <div className={`rounded-xl px-4 py-2.5 text-sm font-[family-name:var(--font-dm-sans)] max-w-[80%] whitespace-pre-line ${
                       msg.role === "user"
                         ? "bg-[#2563EB] text-white"
                         : "bg-white/[0.06] text-slate-300"
@@ -200,7 +200,7 @@ export default function AIChatDemoSection() {
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSend()}
                   placeholder="Try: how many deals, follow up..."
-                  className="flex-1 bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 outline-none focus:border-[#F97316]/40 font-[family-name:var(--font-josefin)]"
+                  className="flex-1 bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 outline-none focus:border-[#F97316]/40 font-[family-name:var(--font-dm-sans)]"
                 />
                 <button
                   onClick={handleSend}
@@ -214,7 +214,7 @@ export default function AIChatDemoSection() {
                   <button
                     key={q}
                     onClick={() => setInput(q)}
-                    className="text-[11px] px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/[0.06] text-slate-400 hover:text-white hover:border-white/[0.12] transition-colors font-[family-name:var(--font-josefin)]"
+                    className="text-[11px] px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/[0.06] text-slate-400 hover:text-white hover:border-white/[0.12] transition-colors font-[family-name:var(--font-dm-sans)]"
                   >
                     {q}
                   </button>
@@ -225,7 +225,7 @@ export default function AIChatDemoSection() {
 
           {/* Tool execution panel - 2 cols */}
           <div className="lg:col-span-2 space-y-4">
-            <h3 className="text-sm font-semibold text-slate-400 font-[family-name:var(--font-josefin)] mb-2">
+            <h3 className="text-sm font-semibold text-slate-400 font-[family-name:var(--font-dm-sans)] mb-2">
               Tool Execution
             </h3>
             <AnimatePresence>
@@ -245,11 +245,11 @@ export default function AIChatDemoSection() {
                       <CheckCircle2 className="w-4 h-4 text-[#22C55E]" />
                     )}
                     <div>
-                      <p className="text-xs font-semibold text-white font-[family-name:var(--font-josefin)]">
+                      <p className="text-xs font-semibold text-white font-[family-name:var(--font-dm-sans)]">
                         {tool.status === "loading" ? tool.title : tool.result}
                       </p>
                       {tool.status === "done" && (
-                        <p className="text-[10px] text-slate-500 font-[family-name:var(--font-josefin)]">
+                        <p className="text-[10px] text-slate-500 font-[family-name:var(--font-dm-sans)]">
                           Completed
                         </p>
                       )}
@@ -262,7 +262,7 @@ export default function AIChatDemoSection() {
             {toolCards.length === 0 && (
               <div className="rounded-xl border border-dashed border-white/[0.08] p-8 text-center">
                 <Search className="w-6 h-6 text-slate-600 mx-auto mb-2" />
-                <p className="text-xs text-slate-600 font-[family-name:var(--font-josefin)]">
+                <p className="text-xs text-slate-600 font-[family-name:var(--font-dm-sans)]">
                   Tool calls will appear here
                 </p>
               </div>
@@ -275,17 +275,17 @@ export default function AIChatDemoSection() {
               animate={inView && hasAutoPlayed ? { opacity: 1 } : { opacity: 0 }}
               transition={{ delay: 3.5 }}
             >
-              <p className="text-xs font-semibold text-[#F97316] font-[family-name:var(--font-josefin)] mb-2">
+              <p className="text-xs font-semibold text-[#F97316] font-[family-name:var(--font-dm-sans)] mb-2">
                 Pending Confirmation
               </p>
-              <p className="text-xs text-slate-400 font-[family-name:var(--font-josefin)] mb-3">
+              <p className="text-xs text-slate-400 font-[family-name:var(--font-dm-sans)] mb-3">
                 Create follow-up task: &quot;Call Sarah about 742 Evergreen&quot;
               </p>
               <div className="flex gap-2">
-                <button className="px-3 py-1.5 rounded-lg bg-[#F97316] text-white text-[11px] font-semibold font-[family-name:var(--font-josefin)] hover:bg-[#EA6C10] transition-colors">
+                <button className="px-3 py-1.5 rounded-lg bg-[#F97316] text-white text-[11px] font-semibold font-[family-name:var(--font-dm-sans)] hover:bg-[#EA6C10] transition-colors">
                   Confirm
                 </button>
-                <button className="px-3 py-1.5 rounded-lg border border-white/[0.1] text-slate-400 text-[11px] font-[family-name:var(--font-josefin)] hover:text-white transition-colors">
+                <button className="px-3 py-1.5 rounded-lg border border-white/[0.1] text-slate-400 text-[11px] font-[family-name:var(--font-dm-sans)] hover:text-white transition-colors">
                   Cancel
                 </button>
               </div>

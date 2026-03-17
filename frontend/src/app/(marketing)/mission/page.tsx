@@ -44,11 +44,11 @@ export default function MissionPage() {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ ...spring, delay: 0.1 }}
-              className="inline-block px-4 py-2 rounded-full bg-white/[0.04] border border-white/[0.06] mb-8"
+              className="inline-block px-4 py-2 rounded-full bg-blue-50 border border-blue-200/50 mb-8"
             >
-              <span className="text-white/50 text-sm font-medium tracking-wide">Our Mission</span>
+              <span className="text-blue-600 text-sm font-medium tracking-wide">Our Mission</span>
             </motion.div>
-            <h1 className="font-[family-name:var(--font-sora)] text-5xl md:text-6xl lg:text-7xl font-bold text-white mb-6 leading-[1.1] tracking-tight">
+            <h1 className="font-[family-name:var(--font-sora)] text-5xl md:text-6xl lg:text-7xl font-bold text-slate-900 mb-6 leading-[1.1] tracking-tight">
               Empowering real estate professionals to
               <br />
               <span className="text-gradient">achieve extraordinary results</span>
@@ -57,7 +57,7 @@ export default function MissionPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ ...spring, delay: 0.2 }}
-              className="text-lg md:text-xl text-white/50 leading-relaxed max-w-3xl mx-auto"
+              className="text-lg md:text-xl text-slate-500 leading-relaxed max-w-3xl mx-auto"
             >
               We're on a mission to transform the real estate industry by building the most intelligent, intuitive, and powerful CRM platform ever created. Our vision is a world where every agent has the tools to succeed.
             </motion.p>
@@ -78,7 +78,7 @@ export default function MissionPage() {
             >
               {/* Gradient border glow */}
               <div className="absolute -inset-[1px] rounded-3xl bg-gradient-to-br from-[#0EA5E9]/30 via-[#0EA5E9]/10 to-transparent opacity-60 group-hover:opacity-100 transition-opacity duration-500 blur-[1px]" />
-              <div className="relative p-10 md:p-12 rounded-3xl glass-card border-0 bg-white/[0.03]">
+              <div className="relative p-10 md:p-12 rounded-3xl bg-white border border-slate-200 rounded-2xl shadow-sm">
                 {/* Icon with ambient glow */}
                 <div className="relative w-16 h-16 mb-8">
                   <div className="absolute inset-0 rounded-2xl bg-[#0EA5E9]/20 blur-xl" />
@@ -86,12 +86,12 @@ export default function MissionPage() {
                     <Target size={32} className="text-[#0EA5E9]" />
                   </div>
                 </div>
-                <h2 className="font-[family-name:var(--font-sora)] text-3xl font-bold text-white mb-4">Our Mission</h2>
-                <p className="text-lg text-white/50 leading-relaxed">
+                <h2 className="font-[family-name:var(--font-sora)] text-3xl font-bold text-slate-900 mb-4">Our Mission</h2>
+                <p className="text-lg text-slate-500 leading-relaxed">
                   To empower real estate professionals with intelligent technology that streamlines their workflow, amplifies their impact, and helps them build lasting relationships with clients.
                 </p>
-                <div className="mt-8 pt-8 border-t border-white/[0.06]">
-                  <p className="text-white/30 italic leading-relaxed">
+                <div className="mt-8 pt-8 border-t border-slate-200">
+                  <p className="text-slate-400 italic leading-relaxed">
                     "We exist to make real estate professionals more successful by eliminating the busywork and amplifying what matters most: relationships."
                   </p>
                 </div>
@@ -107,7 +107,7 @@ export default function MissionPage() {
             >
               {/* Gradient border glow */}
               <div className="absolute -inset-[1px] rounded-3xl bg-gradient-to-br from-[#0EA5E9]/30 via-[#0EA5E9]/10 to-transparent opacity-60 group-hover:opacity-100 transition-opacity duration-500 blur-[1px]" />
-              <div className="relative p-10 md:p-12 rounded-3xl glass-card border-0 bg-white/[0.03]">
+              <div className="relative p-10 md:p-12 rounded-3xl bg-white border border-slate-200 rounded-2xl shadow-sm">
                 {/* Icon with ambient glow */}
                 <div className="relative w-16 h-16 mb-8">
                   <div className="absolute inset-0 rounded-2xl bg-[#0EA5E9]/20 blur-xl" />
@@ -115,12 +115,12 @@ export default function MissionPage() {
                     <Eye size={32} className="text-[#0EA5E9]" />
                   </div>
                 </div>
-                <h2 className="font-[family-name:var(--font-sora)] text-3xl font-bold text-white mb-4">Our Vision</h2>
-                <p className="text-lg text-white/50 leading-relaxed">
+                <h2 className="font-[family-name:var(--font-sora)] text-3xl font-bold text-slate-900 mb-4">Our Vision</h2>
+                <p className="text-lg text-slate-500 leading-relaxed">
                   To become the operating system for real estate professionals worldwide—the single platform that powers every aspect of their business, from lead generation to closing and beyond.
                 </p>
-                <div className="mt-8 pt-8 border-t border-white/[0.06]">
-                  <p className="text-white/30 italic leading-relaxed">
+                <div className="mt-8 pt-8 border-t border-slate-200">
+                  <p className="text-slate-400 italic leading-relaxed">
                     "Imagine a world where agents spend 80% of their time building relationships and only 20% on admin. That's the future we're building."
                   </p>
                 </div>
@@ -131,7 +131,7 @@ export default function MissionPage() {
       </section>
 
       {/* Guiding Principles */}
-      <section className="py-24 bg-white/[0.02]">
+      <section className="py-24 bg-white">
         <div className="max-w-7xl mx-auto px-6">
           <motion.div
             initial={{ opacity: 0, y: 30 }}
@@ -146,8 +146,8 @@ export default function MissionPage() {
                 <Compass size={32} className="text-[#0EA5E9]" />
               </div>
             </div>
-            <h2 className="font-[family-name:var(--font-sora)] text-4xl md:text-5xl font-bold text-white mb-4">Our Guiding Principles</h2>
-            <p className="text-xl text-white/50 max-w-2xl mx-auto">The core beliefs that shape our product and culture</p>
+            <h2 className="font-[family-name:var(--font-sora)] text-4xl md:text-5xl font-bold text-slate-900 mb-4">Our Guiding Principles</h2>
+            <p className="text-xl text-slate-500 max-w-2xl mx-auto">The core beliefs that shape our product and culture</p>
           </motion.div>
           <motion.div
             initial="hidden"
@@ -164,13 +164,13 @@ export default function MissionPage() {
                   visible: { opacity: 1, y: 0, transition: { ...spring, delay: index * 0.1 } },
                 }}
                 whileHover={{ y: -4, transition: { ...spring } }}
-                className="glass-card-hover p-8 rounded-2xl group"
+                className="bg-white border border-slate-200 rounded-2xl shadow-sm hover:shadow-md hover:border-slate-300 transition-all duration-300 p-8 group"
               >
                 <div className="w-14 h-14 rounded-xl bg-[#0EA5E9]/10 border border-[#0EA5E9]/20 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform duration-300">
                   <principle.icon size={28} className="text-[#0EA5E9]" />
                 </div>
-                <h3 className="font-[family-name:var(--font-sora)] text-xl font-semibold text-white mb-3">{principle.title}</h3>
-                <p className="text-white/50 leading-relaxed">{principle.description}</p>
+                <h3 className="font-[family-name:var(--font-sora)] text-xl font-semibold text-slate-900 mb-3">{principle.title}</h3>
+                <p className="text-slate-500 leading-relaxed">{principle.description}</p>
               </motion.div>
             ))}
           </motion.div>
@@ -187,8 +187,8 @@ export default function MissionPage() {
             transition={{ ...spring }}
             className="text-center mb-16"
           >
-            <h2 className="font-[family-name:var(--font-sora)] text-4xl md:text-5xl font-bold text-white mb-4">Our Impact</h2>
-            <p className="text-xl text-white/50 max-w-2xl mx-auto">Measurable results that demonstrate our commitment to agent success</p>
+            <h2 className="font-[family-name:var(--font-sora)] text-4xl md:text-5xl font-bold text-slate-900 mb-4">Our Impact</h2>
+            <p className="text-xl text-slate-500 max-w-2xl mx-auto">Measurable results that demonstrate our commitment to agent success</p>
           </motion.div>
           <motion.div
             initial="hidden"
@@ -204,10 +204,10 @@ export default function MissionPage() {
                   hidden: { opacity: 0, scale: 0.9 },
                   visible: { opacity: 1, scale: 1, transition: { ...spring, delay: index * 0.1 } },
                 }}
-                className="glass-card p-8 rounded-2xl text-center"
+                className="bg-white border border-slate-200 rounded-2xl shadow-sm p-8 text-center"
               >
                 <div className="font-[family-name:var(--font-sora)] text-5xl font-bold text-gradient mb-3">{item.stat}</div>
-                <div className="text-white/50">{item.label}</div>
+                <div className="text-slate-500">{item.label}</div>
               </motion.div>
             ))}
           </motion.div>
@@ -215,7 +215,7 @@ export default function MissionPage() {
       </section>
 
       {/* What Drives Us */}
-      <section className="py-24 bg-white/[0.02]">
+      <section className="py-24 bg-white">
         <div className="max-w-7xl mx-auto px-6">
           <div className="grid md:grid-cols-2 gap-12 items-center">
             <motion.div
@@ -224,19 +224,19 @@ export default function MissionPage() {
               viewport={{ once: true }}
               transition={{ ...spring }}
             >
-              <h2 className="font-[family-name:var(--font-sora)] text-4xl font-bold text-white mb-8">What Drives Us</h2>
+              <h2 className="font-[family-name:var(--font-sora)] text-4xl font-bold text-slate-900 mb-8">What Drives Us</h2>
               <div className="space-y-8">
                 <div>
-                  <h3 className="font-[family-name:var(--font-sora)] text-xl font-semibold text-white mb-3">We've walked in your shoes</h3>
-                  <p className="text-white/50 leading-relaxed">Our founders spent years in real estate, experiencing firsthand the frustrations of outdated tools and inefficient processes. We built CloAgent to solve the problems we lived with every day.</p>
+                  <h3 className="font-[family-name:var(--font-sora)] text-xl font-semibold text-slate-900 mb-3">We've walked in your shoes</h3>
+                  <p className="text-slate-500 leading-relaxed">Our founders spent years in real estate, experiencing firsthand the frustrations of outdated tools and inefficient processes. We built CloAgent to solve the problems we lived with every day.</p>
                 </div>
                 <div>
-                  <h3 className="font-[family-name:var(--font-sora)] text-xl font-semibold text-white mb-3">Technology should enable, not complicate</h3>
-                  <p className="text-white/50 leading-relaxed">Too many CRMs are built by engineers for engineers. We believe software should be intuitive, delightful, and powerful—all at the same time.</p>
+                  <h3 className="font-[family-name:var(--font-sora)] text-xl font-semibold text-slate-900 mb-3">Technology should enable, not complicate</h3>
+                  <p className="text-slate-500 leading-relaxed">Too many CRMs are built by engineers for engineers. We believe software should be intuitive, delightful, and powerful—all at the same time.</p>
                 </div>
                 <div>
-                  <h3 className="font-[family-name:var(--font-sora)] text-xl font-semibold text-white mb-3">Your success is our success</h3>
-                  <p className="text-white/50 leading-relaxed">We measure our impact by the success of our users. Every feature, every decision is made with one question in mind: "Will this help agents close more deals?"</p>
+                  <h3 className="font-[family-name:var(--font-sora)] text-xl font-semibold text-slate-900 mb-3">Your success is our success</h3>
+                  <p className="text-slate-500 leading-relaxed">We measure our impact by the success of our users. Every feature, every decision is made with one question in mind: "Will this help agents close more deals?"</p>
                 </div>
               </div>
             </motion.div>
@@ -247,10 +247,10 @@ export default function MissionPage() {
               transition={{ ...spring }}
               className="relative"
             >
-              <div className="relative rounded-2xl overflow-hidden border border-white/[0.06] aspect-square">
+              <div className="relative rounded-2xl overflow-hidden border border-slate-200 aspect-square">
                 {/* Layered gradient background */}
                 <div className="absolute inset-0 bg-gradient-to-br from-[#0EA5E9]/10 via-transparent to-[#0EA5E9]/5" />
-                <div className="absolute inset-0 bg-gradient-to-tl from-white/[0.03] via-transparent to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-tl from-slate-50 via-transparent to-transparent" />
 
                 {/* Floating shapes */}
                 <motion.div
@@ -261,12 +261,12 @@ export default function MissionPage() {
                 <motion.div
                   animate={{ y: [6, -10, 6], rotate: [0, -3, 0] }}
                   transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-                  className="absolute bottom-16 left-10 w-32 h-32 rounded-full bg-[#0EA5E9]/[0.06] border border-white/[0.06]"
+                  className="absolute bottom-16 left-10 w-32 h-32 rounded-full bg-[#0EA5E9]/[0.06] border border-slate-200"
                 />
                 <motion.div
                   animate={{ y: [-5, 12, -5], x: [-3, 5, -3] }}
                   transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
-                  className="absolute top-1/3 left-1/4 w-16 h-16 rounded-xl bg-white/[0.04] border border-white/[0.06] rotate-12"
+                  className="absolute top-1/3 left-1/4 w-16 h-16 rounded-xl bg-slate-50 border border-slate-200 rotate-12"
                 />
                 <motion.div
                   animate={{ scale: [1, 1.1, 1], opacity: [0.3, 0.6, 0.3] }}
@@ -283,7 +283,7 @@ export default function MissionPage() {
                         <Heart size={48} className="text-white" />
                       </div>
                     </div>
-                    <div className="text-white/30 text-sm tracking-wide">Built with passion</div>
+                    <div className="text-slate-400 text-sm tracking-wide">Built with passion</div>
                   </div>
                 </div>
               </div>
@@ -302,8 +302,8 @@ export default function MissionPage() {
             transition={{ ...spring }}
             className="text-center mb-16"
           >
-            <h2 className="font-[family-name:var(--font-sora)] text-4xl md:text-5xl font-bold text-white mb-4">The Road Ahead</h2>
-            <p className="text-xl text-white/50 max-w-2xl mx-auto">A glimpse into what we're building next</p>
+            <h2 className="font-[family-name:var(--font-sora)] text-4xl md:text-5xl font-bold text-slate-900 mb-4">The Road Ahead</h2>
+            <p className="text-xl text-slate-500 max-w-2xl mx-auto">A glimpse into what we're building next</p>
           </motion.div>
           <motion.div
             initial="hidden"
@@ -319,7 +319,7 @@ export default function MissionPage() {
                   hidden: { opacity: 0, y: 30 },
                   visible: { opacity: 1, y: 0, transition: { ...spring, delay: index * 0.1 } },
                 }}
-                className="glass-card p-6 rounded-2xl border-l-2 border-l-[#0EA5E9]/40"
+                className="bg-white border border-slate-200 rounded-2xl shadow-sm p-6 border-l-2 border-l-blue-400"
               >
                 <div className="inline-block px-3 py-1 rounded-full bg-[#0EA5E9]/10 border border-[#0EA5E9]/20 mb-4">
                   <span className="text-[#0EA5E9] text-sm font-medium">{quarter.title}</span>
@@ -328,7 +328,7 @@ export default function MissionPage() {
                   {quarter.items.map((item) => (
                     <li key={item} className="flex items-start gap-2.5">
                       <div className="w-1.5 h-1.5 rounded-full bg-[#0EA5E9]/60 mt-2 flex-shrink-0" />
-                      <span className="text-white/50 text-sm leading-relaxed">{item}</span>
+                      <span className="text-slate-500 text-sm leading-relaxed">{item}</span>
                     </li>
                   ))}
                 </ul>
@@ -339,7 +339,7 @@ export default function MissionPage() {
       </section>
 
       {/* CTA */}
-      <section className="py-24 bg-white/[0.02]">
+      <section className="py-24 bg-white">
         <div className="max-w-4xl mx-auto px-6">
           <motion.div
             initial={{ opacity: 0, y: 30 }}
@@ -351,9 +351,9 @@ export default function MissionPage() {
             {/* Gradient border with glow */}
             <div className="absolute -inset-[1px] rounded-3xl bg-gradient-to-br from-[#0EA5E9]/40 via-[#0EA5E9]/15 to-[#0EA5E9]/5 opacity-70 group-hover:opacity-100 transition-opacity duration-500 blur-[1px]" />
             <div className="absolute -inset-4 rounded-3xl bg-[#0EA5E9]/5 blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
-            <div className="relative p-12 md:p-16 rounded-3xl bg-white/[0.03] backdrop-blur-sm text-center">
-              <h2 className="font-[family-name:var(--font-sora)] text-4xl md:text-5xl font-bold text-white mb-4">Join us on our mission</h2>
-              <p className="text-xl text-white/50 mb-10 max-w-2xl mx-auto">Be part of the movement transforming real estate technology. Start your free trial today.</p>
+            <div className="relative p-12 md:p-16 rounded-3xl bg-white border border-slate-200 shadow-sm text-center">
+              <h2 className="font-[family-name:var(--font-sora)] text-4xl md:text-5xl font-bold text-slate-900 mb-4">Join us on our mission</h2>
+              <p className="text-xl text-slate-500 mb-10 max-w-2xl mx-auto">Be part of the movement transforming real estate technology. Start your free trial today.</p>
               <div className="flex flex-wrap gap-4 justify-center">
                 <LinkButton href="/sign-up" variant="primary">
                   Start Free Trial

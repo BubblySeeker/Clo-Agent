@@ -66,7 +66,7 @@ export default function MiniMap() {
                 aria-label={`Scroll to ${section.label}`}
               >
                 {/* Tooltip */}
-                <span className="absolute right-full mr-3 text-xs text-white/70 font-[family-name:var(--font-josefin)] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                <span className="absolute right-full mr-3 text-xs text-white/70 font-[family-name:var(--font-dm-sans)] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                   {section.label}
                 </span>
 
