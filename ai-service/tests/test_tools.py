@@ -73,13 +73,13 @@ class TestToolDefinitions:
         assert not overlap, f"Tools classified as both read and write: {overlap}"
 
     def test_read_tools_count(self):
-        assert len(self.read_tools) >= 11, (
-            f"Expected at least 11 read tools, got {len(self.read_tools)}"
+        assert len(self.read_tools) >= 14, (
+            f"Expected at least 14 read tools, got {len(self.read_tools)}"
         )
 
     def test_write_tools_count(self):
-        assert len(self.write_tools) >= 12, (
-            f"Expected at least 12 write tools, got {len(self.write_tools)}"
+        assert len(self.write_tools) >= 15, (
+            f"Expected at least 15 write tools, got {len(self.write_tools)}"
         )
 
     def test_expected_read_tools_exist(self):
@@ -96,6 +96,9 @@ class TestToolDefinitions:
             "get_analytics",
             "get_overdue_tasks",
             "semantic_search",
+            "search_properties",
+            "get_property",
+            "match_buyer_to_properties",
         }
         missing = expected - self.read_tools
         assert not missing, f"Missing read tools: {missing}"
@@ -114,6 +117,9 @@ class TestToolDefinitions:
             "create_task",
             "complete_task",
             "reschedule_task",
+            "create_property",
+            "update_property",
+            "delete_property",
         }
         missing = expected - self.write_tools
         assert not missing, f"Missing write tools: {missing}"
@@ -147,6 +153,12 @@ class TestToolDefinitions:
         assert schema.get("required", []) == [], (
             "search_contacts should have no required fields"
         )
+
+    def test_create_property_schema(self):
+        tool = next(t for t in self.definitions if t["name"] == "create_property")
+        schema = tool["input_schema"]
+        assert "address" in schema["properties"]
+        assert "address" in schema["required"]
 
 
 class TestToolTriggerMapping:

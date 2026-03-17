@@ -20,6 +20,8 @@ export interface Deal {
   contact_name: string;
   stage_name: string;
   stage_color: string;
+  property_id: string | null;
+  property_address: string;
 }
 
 export interface DealsResponse {
@@ -38,6 +40,7 @@ export interface CreateDealBody {
   title: string;
   value?: number;
   notes?: string;
+  property_id?: string;
 }
 
 export interface UpdateDealBody {
@@ -46,6 +49,7 @@ export interface UpdateDealBody {
   value?: number;
   notes?: string;
   contact_id?: string;
+  property_id?: string;
 }
 
 export function listDealStages(token: string): Promise<DealStage[]> {

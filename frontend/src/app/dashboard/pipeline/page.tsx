@@ -6,7 +6,7 @@ import { useAuth } from "@clerk/nextjs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { listDeals, listDealStages, updateDeal, createDeal, type Deal } from "@/lib/api/deals";
 import { listContacts } from "@/lib/api/contacts";
-import { Plus, Search, AlertTriangle, GripVertical, X, DollarSign, FileText, User } from "lucide-react";
+import { Plus, Search, AlertTriangle, GripVertical, X, DollarSign, FileText, User, Building } from "lucide-react";
 
 function getAvatarColor(id: string) {
   const colors = ["#0EA5E9", "#22C55E", "#F59E0B", "#8B5CF6", "#EF4444", "#1E3A5F"];
@@ -356,7 +356,13 @@ export default function PipelinePage() {
                           <span className="text-xs font-bold text-gray-800 truncate">{deal.contact_name}</span>
                           <GripVertical size={12} className="text-gray-300 ml-auto shrink-0 opacity-0 group-hover:opacity-100" />
                         </div>
-                        <p className="text-xs text-gray-500 mb-2 truncate">{deal.title}</p>
+                        <p className="text-xs text-gray-500 mb-1 truncate">{deal.title}</p>
+                        {deal.property_address && (
+                          <div className="flex items-center gap-1 text-xs text-gray-400 mb-1">
+                            <Building size={11} className="shrink-0" />
+                            <span className="truncate">{deal.property_address}</span>
+                          </div>
+                        )}
                         <div className="flex items-center justify-between">
                           <span className="text-sm font-bold" style={{ color: "#1E3A5F" }}>
                             {formatValue(deal.value)}

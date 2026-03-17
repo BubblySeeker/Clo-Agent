@@ -129,6 +129,14 @@ func run() error {
 		// Deal stages
 		r.Get("/api/deal-stages", handlers.ListDealStages(pool))
 
+		// Properties
+		r.Get("/api/properties", handlers.ListProperties(pool))
+		r.Post("/api/properties", handlers.CreateProperty(pool))
+		r.Get("/api/properties/{id}", handlers.GetProperty(pool))
+		r.Patch("/api/properties/{id}", handlers.UpdateProperty(pool))
+		r.Delete("/api/properties/{id}", handlers.DeleteProperty(pool))
+		r.Get("/api/properties/{id}/matches", handlers.GetPropertyMatches(pool))
+
 		// Conversations
 		r.Get("/api/ai/conversations", handlers.ListConversations(pool))
 		r.Post("/api/ai/conversations", handlers.CreateConversation(pool))

@@ -27,6 +27,12 @@ export const toolLabel: Record<string, string> = {
   create_task: "Creating task",
   complete_task: "Completing task",
   reschedule_task: "Rescheduling task",
+  search_properties: "Searching properties",
+  get_property: "Loading property",
+  match_buyer_to_properties: "Matching buyer to properties",
+  create_property: "Creating property",
+  update_property: "Updating property",
+  delete_property: "Deleting property",
 };
 
 export const confirmLabel: Record<string, string> = {
@@ -42,6 +48,9 @@ export const confirmLabel: Record<string, string> = {
   reschedule_task: "Reschedule Task",
   create_buyer_profile: "Create Buyer Profile",
   update_buyer_profile: "Update Buyer Profile",
+  create_property: "Add New Property",
+  update_property: "Update Property",
+  delete_property: "Delete Property",
 };
 
 export function formatPreview(tool: string, preview: Record<string, unknown>): string {
@@ -83,6 +92,12 @@ export function formatPreview(tool: string, preview: Record<string, unknown>): s
       const bpFields = Object.entries(preview).filter(([k]) => k !== "contact_id").map(([k, v]) => `${k.replace(/_/g, " ")}: ${Array.isArray(v) ? v.join(", ") : v}`).join(", ");
       return `Update buyer profile: ${bpFields}`;
     }
+    case "create_property":
+      return `${preview.address}${preview.city ? `, ${preview.city}` : ""}${preview.price ? ` — $${Number(preview.price).toLocaleString()}` : ""}`;
+    case "update_property":
+      return `Property ${(preview.property_id as string)?.slice(0, 8)}… — ${Object.keys(preview).filter((k: string) => k !== "property_id").join(", ")}`;
+    case "delete_property":
+      return `Property ${(preview.property_id as string)?.slice(0, 8)}…`;
     default:
       return Object.entries(preview).map(([k, v]) => `${k.replace(/_/g, " ")}: ${v}`).join(", ");
   }
