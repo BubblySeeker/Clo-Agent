@@ -159,16 +159,34 @@ export default function AIChatBubble() {
   const handleConfirm = async (pendingId: string) => {
     const token = await getToken();
     if (!token || !chatConversationId) return;
+    const current = useUIStore.getState().chatMessages;
+    const last = current[current.length - 1];
+    const actionInfo = last?.confirmationData;
     try {
       await confirmToolAction(token, chatConversationId, pendingId);
-      updateLastMessage({ confirmationData: undefined, content: "✓ Action completed." });
+      updateLastMessage({
+        confirmationData: undefined,
+        content: "",
+        resolvedAction: actionInfo ? { tool: actionInfo.tool, preview: actionInfo.preview, status: "confirmed" } : undefined,
+      });
     } catch {
-      updateLastMessage({ confirmationData: undefined, content: "Failed to execute action." });
+      updateLastMessage({
+        confirmationData: undefined,
+        content: "",
+        resolvedAction: actionInfo ? { tool: actionInfo.tool, preview: actionInfo.preview, status: "failed" } : undefined,
+      });
     }
   };
 
   const handleCancel = () => {
-    updateLastMessage({ confirmationData: undefined, content: "Action cancelled." });
+    const current = useUIStore.getState().chatMessages;
+    const last = current[current.length - 1];
+    const actionInfo = last?.confirmationData;
+    updateLastMessage({
+      confirmationData: undefined,
+      content: "",
+      resolvedAction: actionInfo ? { tool: actionInfo.tool, preview: actionInfo.preview, status: "cancelled" } : undefined,
+    });
   };
 
   const placeholder = contactId
@@ -273,7 +291,7 @@ export default function AIChatBubble() {
               </div>
             )}
 
-            {/* Confirmation card */}
+            {/* Confirmation card — pending */}
             {msg.confirmationData && (
               <div className="bg-blue-50 border border-[#0EA5E9]/20 rounded-xl p-3 w-full max-w-[90%] text-xs">
                 <p className="font-semibold text-[#1E3A5F] mb-2">
@@ -296,6 +314,34 @@ export default function AIChatBubble() {
                     <XCircle size={10} /> Cancel
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* Resolved action card — after confirm/cancel */}
+            {msg.resolvedAction && (
+              <div className={`rounded-xl p-3 w-full max-w-[90%] text-xs border ${
+                msg.resolvedAction.status === "confirmed"
+                  ? "bg-green-50 border-green-200"
+                  : msg.resolvedAction.status === "failed"
+                  ? "bg-red-50 border-red-200"
+                  : "bg-gray-50 border-gray-200"
+              }`}>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  {msg.resolvedAction.status === "confirmed" ? (
+                    <Check size={12} className="text-green-600" />
+                  ) : (
+                    <XCircle size={12} className={msg.resolvedAction.status === "failed" ? "text-red-500" : "text-gray-500"} />
+                  )}
+                  <span className={`font-semibold ${
+                    msg.resolvedAction.status === "confirmed" ? "text-green-700" : msg.resolvedAction.status === "failed" ? "text-red-700" : "text-gray-700"
+                  }`}>
+                    {confirmLabel[msg.resolvedAction.tool] ?? msg.resolvedAction.tool}
+                    {msg.resolvedAction.status === "confirmed" ? " — Done" : msg.resolvedAction.status === "failed" ? " — Failed" : " — Cancelled"}
+                  </span>
+                </div>
+                <p className="text-gray-600">
+                  {formatPreview(msg.resolvedAction.tool, msg.resolvedAction.preview)}
+                </p>
               </div>
             )}
           </div>

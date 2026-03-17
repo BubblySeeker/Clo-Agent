@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { listAllActivities, createActivity } from "@/lib/api/activities";
+import { listAllActivities, createActivity, createGeneralActivity } from "@/lib/api/activities";
 import { listContacts } from "@/lib/api/contacts";
 import { Phone, Mail, FileText, Home, CheckSquare, ChevronDown, Plus, X, User } from "lucide-react";
 
@@ -63,6 +63,8 @@ export default function ActivitiesPage() {
   const [newType, setNewType] = useState<"call" | "email" | "note" | "showing" | "task">("call");
   const [newContactId, setNewContactId] = useState("");
   const [newBody, setNewBody] = useState("");
+  const [newDueDate, setNewDueDate] = useState("");
+  const [newPriority, setNewPriority] = useState<"high" | "medium" | "low">("medium");
 
   const typeFilter = tabTypeMap[activeTab];
 
@@ -87,14 +89,26 @@ export default function ActivitiesPage() {
   const createMutation = useMutation({
     mutationFn: async () => {
       const token = await getToken();
+      if (newType === "task") {
+        return createGeneralActivity(token!, {
+          type: "task",
+          body: newBody || undefined,
+          contact_id: newContactId || undefined,
+          due_date: newDueDate || undefined,
+          priority: newPriority,
+        });
+      }
       return createActivity(token!, newContactId, { type: newType, body: newBody || undefined });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["all-activities"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
       setShowAdd(false);
       setNewType("call");
       setNewContactId("");
       setNewBody("");
+      setNewDueDate("");
+      setNewPriority("medium");
     },
   });
 
@@ -296,7 +310,11 @@ export default function ActivitiesPage() {
 
               {/* Contact */}
               <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Contact</label>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">
+                  Contact{newType === "task" && (
+                    <span className="normal-case text-gray-400 font-normal"> (optional)</span>
+                  )}
+                </label>
                 <div className="relative">
                   <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                   <select
@@ -304,7 +322,7 @@ export default function ActivitiesPage() {
                     onChange={(e) => setNewContactId(e.target.value)}
                     className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-[#0EA5E9] appearance-none"
                   >
-                    <option value="">Select a contact...</option>
+                    <option value="">{newType === "task" ? "No contact" : "Select a contact..."}</option>
                     {contacts.map((c: { id: string; first_name: string; last_name: string }) => (
                       <option key={c.id} value={c.id}>
                         {c.first_name} {c.last_name}
@@ -314,6 +332,56 @@ export default function ActivitiesPage() {
                   <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                 </div>
               </div>
+
+              {/* Task-specific fields: Due Date + Priority */}
+              {newType === "task" && (
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">
+                      Due Date
+                    </label>
+                    <input
+                      type="date"
+                      value={newDueDate}
+                      onChange={(e) => setNewDueDate(e.target.value)}
+                      className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-[#0EA5E9]"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">
+                      Priority
+                    </label>
+                    <div className="flex gap-1.5">
+                      {(
+                        [
+                          { value: "high" as const, label: "High", color: "#EF4444", bg: "#FEF2F2" },
+                          { value: "medium" as const, label: "Med", color: "#F59E0B", bg: "#FFFBEB" },
+                          { value: "low" as const, label: "Low", color: "#22C55E", bg: "#F0FDF4" },
+                        ] as const
+                      ).map((p) => {
+                        const selected = newPriority === p.value;
+                        return (
+                          <button
+                            key={p.value}
+                            type="button"
+                            onClick={() => setNewPriority(p.value)}
+                            className="flex items-center gap-1.5 flex-1 py-2 rounded-xl border-2 justify-center transition-all"
+                            style={{
+                              borderColor: selected ? p.color : "#f3f4f6",
+                              backgroundColor: selected ? p.bg : "white",
+                            }}
+                          >
+                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }} />
+                            <span className="text-xs font-semibold" style={{ color: selected ? p.color : "#6b7280" }}>
+                              {p.label}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Notes / Body */}
               <div>
@@ -346,7 +414,7 @@ export default function ActivitiesPage() {
               </button>
               <button
                 onClick={() => createMutation.mutate()}
-                disabled={!newContactId || createMutation.isPending}
+                disabled={(newType === "task" ? !newBody.trim() : !newContactId) || createMutation.isPending}
                 className="flex items-center gap-2 px-5 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-50 transition-all"
                 style={{ backgroundColor: "#0EA5E9" }}
               >

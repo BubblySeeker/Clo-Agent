@@ -174,6 +174,14 @@ func CreateContact(pool *pgxpool.Pool) http.HandlerFunc {
 			return
 		}
 
+		// Auto-create a deal in "Lead" stage for every new contact
+		_, _ = tx.Exec(r.Context(),
+			`INSERT INTO deals (contact_id, agent_id, stage_id, title)
+			 SELECT $1, $2, id, $3
+			 FROM deal_stages WHERE LOWER(name) = 'lead' LIMIT 1`,
+			c.ID, agentID, body.FirstName+" "+body.LastName,
+		)
+
 		tx.Commit(r.Context())
 		respondJSON(w, http.StatusCreated, c)
 	}

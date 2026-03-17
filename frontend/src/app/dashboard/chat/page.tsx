@@ -232,28 +232,51 @@ export default function ChatPage() {
   const handleConfirm = async (pendingId: string, assistantMsgId: string) => {
     const token = await getToken();
     if (!token || !activeConvId) return;
+    const targetMsg = localMessages.find((m) => m.id === assistantMsgId);
+    const actionInfo = targetMsg?.confirmationData;
     try {
       await confirmToolAction(token, activeConvId, pendingId);
       setChatMessages((prev) =>
         prev.map((m) =>
           m.id === assistantMsgId
-            ? { ...m, confirmationData: undefined, content: m.content || "✓ Action completed." }
+            ? {
+                ...m,
+                confirmationData: undefined,
+                content: "",
+                resolvedAction: actionInfo ? { tool: actionInfo.tool, preview: actionInfo.preview, status: "confirmed" as const } : undefined,
+              }
             : m
         )
       );
     } catch {
       setChatMessages((prev) =>
         prev.map((m) =>
-          m.id === assistantMsgId ? { ...m, confirmationData: undefined, content: "Failed to execute action." } : m
+          m.id === assistantMsgId
+            ? {
+                ...m,
+                confirmationData: undefined,
+                content: "",
+                resolvedAction: actionInfo ? { tool: actionInfo.tool, preview: actionInfo.preview, status: "failed" as const } : undefined,
+              }
+            : m
         )
       );
     }
   };
 
   const handleCancel = (assistantMsgId: string) => {
+    const targetMsg = localMessages.find((m) => m.id === assistantMsgId);
+    const actionInfo = targetMsg?.confirmationData;
     setChatMessages((prev) =>
       prev.map((m) =>
-        m.id === assistantMsgId ? { ...m, confirmationData: undefined, content: "Action cancelled." } : m
+        m.id === assistantMsgId
+          ? {
+              ...m,
+              confirmationData: undefined,
+              content: "",
+              resolvedAction: actionInfo ? { tool: actionInfo.tool, preview: actionInfo.preview, status: "cancelled" as const } : undefined,
+            }
+          : m
       )
     );
   };
@@ -459,7 +482,7 @@ export default function ChatPage() {
                       </div>
                     )}
 
-                    {/* Confirmation card */}
+                    {/* Confirmation card — pending */}
                     {msg.confirmationData && (
                       <div className="bg-blue-50 border border-[#0EA5E9]/20 rounded-xl p-3 w-full text-xs">
                         <p className="font-semibold text-[#1E3A5F] mb-2">
@@ -482,6 +505,34 @@ export default function ChatPage() {
                             <XCircle size={11} /> Cancel
                           </button>
                         </div>
+                      </div>
+                    )}
+
+                    {/* Resolved action card — after confirm/cancel */}
+                    {msg.resolvedAction && (
+                      <div className={`rounded-xl p-3 w-full text-xs border ${
+                        msg.resolvedAction.status === "confirmed"
+                          ? "bg-green-50 border-green-200"
+                          : msg.resolvedAction.status === "failed"
+                          ? "bg-red-50 border-red-200"
+                          : "bg-gray-50 border-gray-200"
+                      }`}>
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          {msg.resolvedAction.status === "confirmed" ? (
+                            <Check size={12} className="text-green-600" />
+                          ) : (
+                            <XCircle size={12} className={msg.resolvedAction.status === "failed" ? "text-red-500" : "text-gray-500"} />
+                          )}
+                          <span className={`font-semibold ${
+                            msg.resolvedAction.status === "confirmed" ? "text-green-700" : msg.resolvedAction.status === "failed" ? "text-red-700" : "text-gray-700"
+                          }`}>
+                            {confirmLabel[msg.resolvedAction.tool] ?? msg.resolvedAction.tool}
+                            {msg.resolvedAction.status === "confirmed" ? " — Done" : msg.resolvedAction.status === "failed" ? " — Failed" : " — Cancelled"}
+                          </span>
+                        </div>
+                        <p className="text-gray-600">
+                          {formatPreview(msg.resolvedAction.tool, msg.resolvedAction.preview)}
+                        </p>
                       </div>
                     )}
                   </div>

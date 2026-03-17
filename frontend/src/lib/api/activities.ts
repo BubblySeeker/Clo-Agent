@@ -23,6 +23,8 @@ export interface CreateActivityBody {
   type: "call" | "email" | "note" | "showing" | "task";
   body?: string;
   deal_id?: string;
+  due_date?: string;
+  priority?: string;
 }
 
 export function listActivities(token: string, contactId: string, typeFilter?: string): Promise<ActivitiesResponse> {

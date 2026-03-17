@@ -103,6 +103,8 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const [note, setNote] = useState("");
   const [noteType, setNoteType] = useState<"call" | "email" | "note" | "showing" | "task">("note");
+  const [taskDueDate, setTaskDueDate] = useState("");
+  const [taskPriority, setTaskPriority] = useState<"high" | "medium" | "low">("medium");
 
   // Edit contact modal
   const [showEdit, setShowEdit] = useState(false);
@@ -191,11 +193,21 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
   const logMutation = useMutation({
     mutationFn: async () => {
       const token = await getToken();
-      return createActivity(token!, id, { type: noteType, body: note });
+      return createActivity(token!, id, {
+        type: noteType,
+        body: note || undefined,
+        ...(noteType === "task" ? {
+          due_date: taskDueDate || undefined,
+          priority: taskPriority,
+        } : {}),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["activities", id] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
       setNote("");
+      setTaskDueDate("");
+      setTaskPriority("medium");
     },
   });
 
@@ -1298,10 +1310,46 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
                   id="activity-input"
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
-                  placeholder={`Log a ${noteType} for ${contact.first_name}...`}
+                  placeholder={noteType === "task" ? "Describe the task..." : `Log a ${noteType} for ${contact.first_name}...`}
                   className="w-full text-sm text-gray-700 placeholder-gray-400 outline-none resize-none bg-transparent"
                   rows={2}
                 />
+                {noteType === "task" && (
+                  <div className="flex gap-3 mt-2 pt-2 border-t border-gray-100">
+                    <div className="flex-1">
+                      <input
+                        type="date"
+                        value={taskDueDate}
+                        onChange={(e) => setTaskDueDate(e.target.value)}
+                        className="w-full px-3 py-1.5 rounded-lg border border-gray-200 bg-gray-50 text-xs outline-none focus:border-[#0EA5E9]"
+                        placeholder="Due date"
+                      />
+                    </div>
+                    <div className="flex gap-1">
+                      {(
+                        [
+                          { value: "high" as const, label: "High", color: "#EF4444" },
+                          { value: "medium" as const, label: "Med", color: "#F59E0B" },
+                          { value: "low" as const, label: "Low", color: "#22C55E" },
+                        ] as const
+                      ).map((p) => (
+                        <button
+                          key={p.value}
+                          type="button"
+                          onClick={() => setTaskPriority(p.value)}
+                          className="px-2 py-1 rounded-lg border text-xs font-semibold transition-all"
+                          style={{
+                            borderColor: taskPriority === p.value ? p.color : "#e5e7eb",
+                            color: taskPriority === p.value ? p.color : "#9ca3af",
+                            backgroundColor: taskPriority === p.value ? `${p.color}10` : "transparent",
+                          }}
+                        >
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="flex justify-end mt-2">
                   <button
                     disabled={!note.trim() || logMutation.isPending}

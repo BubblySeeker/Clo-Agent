@@ -11,6 +11,11 @@ export interface ChatMessage {
     preview: Record<string, unknown>;
     pending_id: string;
   };
+  resolvedAction?: {
+    tool: string;
+    preview: Record<string, unknown>;
+    status: "confirmed" | "cancelled" | "failed";
+  };
 }
 
 interface UIState {

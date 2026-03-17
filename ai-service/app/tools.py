@@ -274,14 +274,14 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "create_task",
-        "description": "Create a new task with due date and priority. Requires confirmation.",
+        "description": "Create a new task with due date and priority. Resolve relative dates (tomorrow, next Monday, etc.) to YYYY-MM-DD before calling. Requires confirmation.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "contact_id": {"type": "string"},
+                "contact_id": {"type": "string", "description": "Optional contact UUID to associate the task with"},
                 "body": {"type": "string", "description": "Task description"},
-                "due_date": {"type": "string", "description": "YYYY-MM-DD"},
-                "priority": {"type": "string", "enum": ["high", "medium", "low"]},
+                "due_date": {"type": "string", "description": "Due date in YYYY-MM-DD format. Default to tomorrow if user doesn't specify."},
+                "priority": {"type": "string", "enum": ["high", "medium", "low"], "description": "Default to medium if not specified."},
             },
             "required": ["body", "due_date"],
         },
@@ -687,7 +687,23 @@ def _create_contact(agent_id: str, inp: dict) -> dict:
             (agent_id, inp["first_name"], inp["last_name"],
              inp.get("email"), inp.get("phone"), inp.get("source")),
         )
-        return dict(cur.fetchone())
+        contact = dict(cur.fetchone())
+
+        # Auto-create a deal in "Lead" stage for every new contact
+        deal_title = f"{inp['first_name']} {inp['last_name']}"
+        cur.execute(
+            """INSERT INTO deals (contact_id, agent_id, stage_id, title)
+               SELECT %s, %s, id, %s
+               FROM deal_stages WHERE LOWER(name) = 'lead' LIMIT 1
+               RETURNING id""",
+            (contact["id"], agent_id, deal_title),
+        )
+        deal_row = cur.fetchone()
+        if deal_row:
+            contact["deal_id"] = deal_row["id"]
+            contact["pipeline_stage"] = "Lead"
+
+        return contact
 
 
 _CONTACT_FIELDS = {"first_name", "last_name", "email", "phone", "source"}
