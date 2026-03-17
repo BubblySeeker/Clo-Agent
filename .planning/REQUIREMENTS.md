@@ -45,22 +45,22 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| TOOL-01 | — | Pending |
-| TOOL-02 | — | Pending |
-| TOOL-03 | — | Pending |
-| TOOL-04 | — | Pending |
-| TOOL-05 | — | Pending |
-| CNST-01 | — | Pending |
-| CNST-02 | — | Pending |
-| CNST-03 | — | Pending |
-| INTG-01 | — | Pending |
-| INTG-02 | — | Pending |
+| INTG-01 | Phase 1 — Integration & Structure | Pending |
+| INTG-02 | Phase 1 — Integration & Structure | Pending |
+| TOOL-01 | Phase 2 — Tool Defaults & Routing Rules | Pending |
+| TOOL-02 | Phase 2 — Tool Defaults & Routing Rules | Pending |
+| TOOL-03 | Phase 2 — Tool Defaults & Routing Rules | Pending |
+| TOOL-04 | Phase 2 — Tool Defaults & Routing Rules | Pending |
+| TOOL-05 | Phase 2 — Tool Defaults & Routing Rules | Pending |
+| CNST-01 | Phase 3 — Hard Constraints & Exclusions | Pending |
+| CNST-02 | Phase 3 — Hard Constraints & Exclusions | Pending |
+| CNST-03 | Phase 3 — Hard Constraints & Exclusions | Pending |
 
 **Coverage:**
 - v1 requirements: 10 total
-- Mapped to phases: 0
-- Unmapped: 10
+- Mapped to phases: 10
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-17*
-*Last updated: 2026-03-17 after initial definition*
+*Last updated: 2026-03-17 after roadmap phase mapping*
