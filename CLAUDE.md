@@ -321,6 +321,56 @@ curl -fsSL https://bun.sh/install | bash
 cd .claude/skills/gstack && ./setup
 ```
 
+## Design & Build Tool Routing
+
+<!-- Last reviewed: 2026-03-17 -->
+
+When working on frontend UI, use the correct specialized tool based on file path and task type. Rules are evaluated top to bottom; first match wins.
+
+### Tool Inventory
+
+| Tool | Role | Domain |
+|------|------|--------|
+| `frontend-design` | Orchestrator | Dashboard/app UI: `dashboard/**`, `components/shared/**`, auth pages |
+| `ui-ux-pro-max` | Orchestrator | Landing/marketing: `(marketing)/**`, root `page.tsx`, `components/marketing/**` |
+| Stitch | Specialist | New reusable components, design system elements, pure styling (any domain) |
+| Gemini (nano banana 2) | Specialist | Image asset generation (any context) |
+| 21st.dev | Specialist | 3D/interactive components (marketing pages ONLY) |
+
+### Routing Rules
+
+1. **Image needed** → **Gemini** — then continue with the appropriate page tool to integrate
+2. **3D/interactive element + marketing page** → **21st.dev** — ONLY in `(marketing)/**` or root `page.tsx`
+3. **New reusable component (any domain)** → **Stitch** — output to `components/shared/` or `components/ui/`
+4. **Styling-only change (any domain)** → **Stitch** — colors, spacing, typography, animations only; NOT data/logic work
+5. **Marketing/landing page work** → **ui-ux-pro-max** — may delegate to Stitch for sub-components
+6. **Dashboard/app UI work** → **frontend-design** — follow `.claude/agents/frontend-page.md` conventions; may delegate to Stitch
+7. **Ambiguous** → ask the user
+
+### Multi-Tool Tasks
+
+When a task requires multiple tools, execute in this order:
+1. Assets first (Gemini for images)
+2. 3D components second (21st.dev)
+3. Reusable components third (Stitch)
+4. Page assembly last (ui-ux-pro-max or frontend-design)
+
+### Hard Constraints
+
+- **21st.dev is NEVER used in dashboard pages.** CRM workspace needs clean, fast UI.
+- **All tool output MUST use Tailwind CSS** conforming to the Frontend Patterns section below.
+- **Stitch components go in `components/shared/` or `components/ui/`**, never inline in page files.
+- **Design tools are NOT invoked for backend, AI service, or pure logic changes.**
+
+### Excluded Paths
+
+These paths NEVER trigger a design tool — they are logic/backend only:
+- `backend/`
+- `ai-service/`
+- `frontend/src/lib/api/`
+- `frontend/src/store/`
+- `frontend/src/middleware.ts`
+
 ## Backend Patterns
 
 ### Handler Factory
