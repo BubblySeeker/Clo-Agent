@@ -5,7 +5,8 @@ import { useSearchParams } from "next/navigation";
 import { useUser, useAuth } from "@clerk/nextjs";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/api/client";
-import { Camera, AlertTriangle, Info } from "lucide-react";
+import { getSettings, updateSettings, type AgentSettings } from "@/lib/api/settings";
+import { Camera, Info } from "lucide-react";
 
 const settingsSections = [
   { id: "profile", label: "Profile" },
@@ -33,15 +34,6 @@ const initialStages = [
   { id: "s6", name: "Closed", color: "#1E3A5F" },
 ];
 
-const notificationsData = [
-  { id: "stale", label: "Stale lead alerts", enabled: true },
-  { id: "newlead", label: "New lead notifications", enabled: true },
-  { id: "tasks", label: "Task reminders", enabled: true },
-  { id: "ai", label: "AI insight summaries", enabled: false },
-  { id: "deals", label: "Deal stage changes", enabled: true },
-];
-
-const frequencies = ["Instant", "Daily Digest", "Weekly"];
 
 type UserType = NonNullable<ReturnType<typeof useUser>["user"]>;
 
@@ -327,13 +319,33 @@ function SettingsContent() {
       setStages(realStages.map((s) => ({ id: s.id, name: s.name, color: s.color || "#0EA5E9" })));
     }
   }, [realStages]);
-  const notifs = notificationsData;
-  const notifFreqs: Record<string, string> = {
-    stale: "Daily Digest", newlead: "Instant", tasks: "Instant", ai: "Weekly", deals: "Instant",
-  };
+  // Load settings from API
+  const { data: savedSettings } = useQuery({
+    queryKey: ["agent-settings"],
+    queryFn: async () => {
+      const token = await getToken();
+      if (!token) return {} as AgentSettings;
+      return getSettings(token);
+    },
+  });
+
   const [commRate, setCommRate] = useState("2.5");
   const [commSplit, setCommSplit] = useState("70/30");
-  const [commStatus, setCommStatus] = useState<"idle" | "success">("idle");
+  const [commStatus, setCommStatus] = useState<"idle" | "saving" | "success">("idle");
+  const [notifToggles, setNotifToggles] = useState<Record<string, boolean>>({
+    new_leads: true, deal_updates: true, task_reminders: true, weekly_report: false,
+  });
+
+  // Sync local state when API data loads
+  useEffect(() => {
+    if (savedSettings) {
+      if (savedSettings.commission_rate != null) setCommRate(String(savedSettings.commission_rate));
+      if (savedSettings.commission_split != null) setCommSplit(String(savedSettings.commission_split));
+      if (savedSettings.notifications) {
+        setNotifToggles((prev) => ({ ...prev, ...savedSettings.notifications }));
+      }
+    }
+  }, [savedSettings]);
 
 
 
@@ -437,21 +449,26 @@ function SettingsContent() {
                 </div>
               </div>
               {commStatus === "success" && (
-                <div className="flex items-center gap-2 mt-4">
-                  <Info size={13} className="text-amber-500" />
-                  <p className="text-sm text-amber-600 font-medium">Saved locally to this browser only.</p>
-                </div>
+                <p className="text-sm text-green-600 font-medium mt-4">Settings saved.</p>
               )}
               <button
-                className="mt-5 px-5 py-2.5 rounded-xl text-white text-sm font-semibold"
+                className="mt-5 px-5 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-60"
                 style={{ backgroundColor: "#0EA5E9" }}
-                onClick={() => {
-                  localStorage.setItem("clo_commission", JSON.stringify({ rate: commRate, split: commSplit }));
+                disabled={commStatus === "saving"}
+                onClick={async () => {
+                  setCommStatus("saving");
+                  const token = await getToken();
+                  if (token) {
+                    await updateSettings(token, {
+                      commission_rate: parseFloat(commRate) || 0,
+                      commission_split: parseFloat(commSplit.split("/")[0]) || 70,
+                    });
+                  }
                   setCommStatus("success");
                   setTimeout(() => setCommStatus("idle"), 2500);
                 }}
               >
-                Save Changes
+                {commStatus === "saving" ? "Saving…" : "Save Changes"}
               </button>
             </div>
           )}
@@ -505,34 +522,30 @@ function SettingsContent() {
           {activeSection === "notifications" && (
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
               <h3 className="font-bold mb-4" style={{ color: "#1E3A5F" }}>Notifications</h3>
-              <div className="flex items-center gap-3 px-5 py-3.5 rounded-2xl border border-amber-200 bg-amber-50 mb-5">
-                <AlertTriangle size={16} className="text-amber-500 shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold text-amber-800">Coming Soon</p>
-                  <p className="text-xs text-amber-600 mt-0.5">Notification preferences will be available once the notification system is built. Below is a preview of what&apos;s planned.</p>
-                </div>
-              </div>
-              <div className="flex flex-col gap-1 opacity-60 pointer-events-none">
-                {notifs.map((n) => (
-                  <div key={n.id} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
+              <p className="text-sm text-gray-500 mb-5">Choose which notifications you want to receive. Preferences are saved to your account.</p>
+              <div className="flex flex-col gap-1">
+                {([
+                  { key: "new_leads", label: "New lead notifications" },
+                  { key: "deal_updates", label: "Deal stage changes" },
+                  { key: "task_reminders", label: "Task reminders" },
+                  { key: "weekly_report", label: "Weekly summary report" },
+                ] as const).map((n) => (
+                  <div key={n.key} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
                     <div className="flex items-center gap-3">
-                      <div
-                        className={`relative w-10 h-5 rounded-full transition-colors ${n.enabled ? "bg-[#0EA5E9]" : "bg-gray-200"}`}
+                      <button
+                        onClick={async () => {
+                          const newVal = !notifToggles[n.key];
+                          setNotifToggles((prev) => ({ ...prev, [n.key]: newVal }));
+                          const token = await getToken();
+                          if (token) {
+                            await updateSettings(token, { notifications: { ...notifToggles, [n.key]: newVal } });
+                          }
+                        }}
+                        className={`relative w-10 h-5 rounded-full transition-colors ${notifToggles[n.key] ? "bg-[#0EA5E9]" : "bg-gray-200"}`}
                       >
-                        <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${n.enabled ? "translate-x-5" : "translate-x-0.5"}`} />
-                      </div>
+                        <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${notifToggles[n.key] ? "translate-x-5" : "translate-x-0.5"}`} />
+                      </button>
                       <span className="text-sm text-gray-700">{n.label}</span>
-                    </div>
-                    <div className="flex rounded-xl overflow-hidden border border-gray-200">
-                      {frequencies.map((f) => (
-                        <span
-                          key={f}
-                          className={`px-2.5 py-1 text-xs font-semibold ${notifFreqs[n.id] === f ? "text-white" : "bg-white text-gray-400"}`}
-                          style={notifFreqs[n.id] === f ? { backgroundColor: "#1E3A5F" } : {}}
-                        >
-                          {f}
-                        </span>
-                      ))}
                     </div>
                   </div>
                 ))}

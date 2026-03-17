@@ -138,6 +138,22 @@ func run() error {
 		r.Post("/api/ai/conversations/{id}/messages", handlers.SendMessage(pool, cfg))
 		r.Post("/api/ai/conversations/{id}/confirm", handlers.ConfirmToolAction(cfg))
 
+		// Settings
+		r.Get("/api/settings", handlers.GetSettings(pool))
+		r.Patch("/api/settings", handlers.UpdateSettings(pool))
+
+		// Search
+		r.Post("/api/search", handlers.SemanticSearch(cfg))
+
+		// Workflows
+		r.Get("/api/workflows", handlers.ListWorkflows(pool))
+		r.Post("/api/workflows", handlers.CreateWorkflow(pool))
+		r.Get("/api/workflows/{id}", handlers.GetWorkflow(pool))
+		r.Patch("/api/workflows/{id}", handlers.UpdateWorkflow(pool))
+		r.Delete("/api/workflows/{id}", handlers.DeleteWorkflow(pool))
+		r.Post("/api/workflows/{id}/toggle", handlers.ToggleWorkflow(pool))
+		r.Get("/api/workflows/{id}/runs", handlers.ListWorkflowRuns(pool))
+
 		// Analytics
 		r.Get("/api/analytics/pipeline", handlers.GetPipelineAnalytics(pool))
 		r.Get("/api/analytics/activities", handlers.GetActivityAnalytics(pool))

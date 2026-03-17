@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -90,11 +91,12 @@ function dueBadgeClasses(dueDate: string | null, completedAt: string | null): st
 const groupOrder = ["Overdue", "Today", "Tomorrow", "This Week", "Later", "No Due Date", "Completed"];
 
 export default function TasksPage() {
+  const searchParams = useSearchParams();
   const { getToken } = useAuth();
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<StatusFilter>("all");
 
-  const [showAdd, setShowAdd] = useState(false);
+  const [showAdd, setShowAdd] = useState(searchParams.get("action") === "new");
   const [showDetails, setShowDetails] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newContactId, setNewContactId] = useState("");

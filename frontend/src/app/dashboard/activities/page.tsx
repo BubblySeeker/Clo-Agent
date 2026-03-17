@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { listAllActivities, createActivity, createGeneralActivity } from "@/lib/api/activities";
@@ -53,13 +54,14 @@ const ACTIVITY_TYPES = [
 ];
 
 export default function ActivitiesPage() {
+  const searchParams = useSearchParams();
   const { getToken } = useAuth();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("All");
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
-  const [showAdd, setShowAdd] = useState(false);
+  const [showAdd, setShowAdd] = useState(searchParams.get("action") === "new");
   const [newType, setNewType] = useState<"call" | "email" | "note" | "showing" | "task">("call");
   const [newContactId, setNewContactId] = useState("");
   const [newBody, setNewBody] = useState("");

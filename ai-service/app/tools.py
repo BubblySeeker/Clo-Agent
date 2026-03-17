@@ -5,7 +5,9 @@ Read tools execute immediately.
 Write tools return a confirmation_required payload; the /ai/confirm endpoint
 executes them after the user approves via the frontend confirmation card.
 """
+import asyncio
 import json
+import logging
 import uuid
 from typing import Any
 
@@ -13,10 +15,11 @@ import psycopg2.extras
 
 from app.database import get_conn, run_query
 
+logger = logging.getLogger(__name__)
+
 # ---------------------------------------------------------------------------
-# In-memory pending actions store (MVP — not shared across workers)
+# Pending actions: persisted in PostgreSQL (survives restarts)
 # ---------------------------------------------------------------------------
-pending_actions: dict[str, dict] = {}
 
 # ---------------------------------------------------------------------------
 # Tool definitions (Anthropic tool schema format)
@@ -130,6 +133,18 @@ TOOL_DEFINITIONS = [
                 "limit": {"type": "integer", "description": "Max results (default 20)"},
             },
             "required": [],
+        },
+    },
+    {
+        "name": "semantic_search",
+        "description": "Search contacts, activities, and other CRM data by meaning rather than exact text match. Use when the user asks vague questions like 'who was looking for a pool?' or 'any leads from the open house?'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Natural language search query"},
+                "limit": {"type": "integer", "description": "Max results (default 10)"},
+            },
+            "required": ["query"],
         },
     },
     {
@@ -323,6 +338,7 @@ READ_TOOLS = {
     "get_deal_stages",
     "get_analytics",
     "get_overdue_tasks",
+    "semantic_search",
 }
 
 WRITE_TOOLS = {
@@ -367,6 +383,8 @@ async def execute_read_tool(tool_name: str, tool_input: dict, agent_id: str) -> 
         return await run_query(lambda: _get_analytics(agent_id))
     elif tool_name == "get_overdue_tasks":
         return await run_query(lambda: _get_overdue_tasks(agent_id, tool_input.get("limit", 20)))
+    elif tool_name == "semantic_search":
+        return await run_query(lambda: _semantic_search(agent_id, tool_input))
     else:
         return {"error": f"Unknown tool: {tool_name}"}
 
@@ -618,16 +636,81 @@ def _get_analytics(agent_id: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Embedding hooks (fire-and-forget in background)
+# ---------------------------------------------------------------------------
+
+def _schedule_embed(source_type: str, source_id: str, agent_id: str) -> None:
+    """Schedule embedding generation in a background task (non-blocking)."""
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            loop.create_task(_embed_async(source_type, source_id, agent_id))
+    except RuntimeError:
+        pass  # no event loop — skip silently (e.g. during tests)
+
+
+async def _embed_async(source_type: str, source_id: str, agent_id: str) -> None:
+    """Generate and store an embedding in a thread."""
+    try:
+        from app.services.embeddings import embed_contact, embed_activity
+        if source_type == "contact":
+            await run_query(lambda: embed_contact(source_id, agent_id))
+        elif source_type == "activity":
+            await run_query(lambda: embed_activity(source_id, agent_id))
+    except Exception as e:
+        logger.warning("Embedding generation failed for %s/%s: %s", source_type, source_id, e)
+
+
+# ---------------------------------------------------------------------------
+# Workflow trigger hooks (fire-and-forget)
+# ---------------------------------------------------------------------------
+
+_TOOL_TO_TRIGGER = {
+    "create_contact": "contact_created",
+    "log_activity": "activity_logged",
+    "update_deal": "deal_stage_changed",
+}
+
+
+def _schedule_workflow_trigger(
+    tool_name: str, agent_id: str, inp: dict, result: dict
+) -> None:
+    """Fire matching workflows in a background task after a write tool executes."""
+    trigger_type = _TOOL_TO_TRIGGER.get(tool_name)
+    if not trigger_type:
+        return
+    trigger_data = {**inp, **{k: v for k, v in result.items() if isinstance(v, (str, int, float, bool, type(None)))}}
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            loop.create_task(_trigger_workflows_async(trigger_type, agent_id, trigger_data))
+    except RuntimeError:
+        pass
+
+
+async def _trigger_workflows_async(
+    trigger_type: str, agent_id: str, trigger_data: dict
+) -> None:
+    try:
+        from app.services.workflow_engine import trigger_workflows
+        await run_query(lambda: trigger_workflows(trigger_type, agent_id, trigger_data))
+    except Exception as e:
+        logger.warning("Workflow trigger failed for %s: %s", trigger_type, e)
+
+
+# ---------------------------------------------------------------------------
 # Write tool: queue for confirmation
 # ---------------------------------------------------------------------------
 
 def queue_write_tool(tool_name: str, tool_input: dict, agent_id: str) -> dict:
     pending_id = str(uuid.uuid4())
-    pending_actions[pending_id] = {
-        "tool": tool_name,
-        "input": tool_input,
-        "agent_id": agent_id,
-    }
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            """INSERT INTO pending_actions (id, agent_id, tool, input)
+               VALUES (%s, %s, %s, %s)""",
+            (pending_id, agent_id, tool_name, json.dumps(tool_input)),
+        )
     return {
         "confirmation_required": True,
         "tool": tool_name,
@@ -636,45 +719,72 @@ def queue_write_tool(tool_name: str, tool_input: dict, agent_id: str) -> dict:
     }
 
 
+def cleanup_expired_actions() -> int:
+    """Delete expired pending actions. Returns count deleted."""
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM pending_actions WHERE expires_at < NOW()")
+        return cur.rowcount
+
+
 # ---------------------------------------------------------------------------
 # Write tool executor (called from /ai/confirm)
 # ---------------------------------------------------------------------------
 
 async def execute_write_tool(pending_id: str) -> dict:
-    action = pending_actions.pop(pending_id, None)
+    # Fetch and delete the pending action atomically
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            """DELETE FROM pending_actions WHERE id = %s AND expires_at >= NOW()
+               RETURNING tool, input, agent_id""",
+            (pending_id,),
+        )
+        action = cur.fetchone()
     if not action:
-        return {"error": "Pending action not found or already executed"}
+        return {"error": "Pending action not found, expired, or already executed"}
+    action = dict(action)
+    # input is stored as JSONB, psycopg2 returns it as dict already
+    if isinstance(action["input"], str):
+        action["input"] = json.loads(action["input"])
 
     tool_name = action["tool"]
     inp = action["input"]
     agent_id = action["agent_id"]
 
+    result: dict | None = None
     if tool_name == "create_contact":
-        return await run_query(lambda: _create_contact(agent_id, inp))
+        result = await run_query(lambda: _create_contact(agent_id, inp))
     elif tool_name == "update_contact":
-        return await run_query(lambda: _update_contact(agent_id, inp))
+        result = await run_query(lambda: _update_contact(agent_id, inp))
     elif tool_name == "delete_contact":
-        return await run_query(lambda: _delete_contact(agent_id, inp))
+        result = await run_query(lambda: _delete_contact(agent_id, inp))
     elif tool_name == "log_activity":
-        return await run_query(lambda: _log_activity(agent_id, inp))
+        result = await run_query(lambda: _log_activity(agent_id, inp))
     elif tool_name == "create_deal":
-        return await run_query(lambda: _create_deal(agent_id, inp))
+        result = await run_query(lambda: _create_deal(agent_id, inp))
     elif tool_name == "update_deal":
-        return await run_query(lambda: _update_deal(agent_id, inp))
+        result = await run_query(lambda: _update_deal(agent_id, inp))
     elif tool_name == "delete_deal":
-        return await run_query(lambda: _delete_deal(agent_id, inp))
+        result = await run_query(lambda: _delete_deal(agent_id, inp))
     elif tool_name == "create_buyer_profile":
-        return await run_query(lambda: _create_buyer_profile(agent_id, inp))
+        result = await run_query(lambda: _create_buyer_profile(agent_id, inp))
     elif tool_name == "update_buyer_profile":
-        return await run_query(lambda: _update_buyer_profile(agent_id, inp))
+        result = await run_query(lambda: _update_buyer_profile(agent_id, inp))
     elif tool_name == "create_task":
-        return await run_query(lambda: _create_task(agent_id, inp))
+        result = await run_query(lambda: _create_task(agent_id, inp))
     elif tool_name == "complete_task":
-        return await run_query(lambda: _complete_task(agent_id, inp))
+        result = await run_query(lambda: _complete_task(agent_id, inp))
     elif tool_name == "reschedule_task":
-        return await run_query(lambda: _reschedule_task(agent_id, inp))
+        result = await run_query(lambda: _reschedule_task(agent_id, inp))
     else:
         return {"error": f"Unknown write tool: {tool_name}"}
+
+    # Fire workflow triggers (fire-and-forget)
+    if result and "error" not in result:
+        _schedule_workflow_trigger(tool_name, agent_id, inp, result)
+
+    return result
 
 
 def _create_contact(agent_id: str, inp: dict) -> dict:
@@ -703,6 +813,7 @@ def _create_contact(agent_id: str, inp: dict) -> dict:
             contact["deal_id"] = deal_row["id"]
             contact["pipeline_stage"] = "Lead"
 
+        _schedule_embed("contact", str(contact["id"]), agent_id)
         return contact
 
 
@@ -724,6 +835,8 @@ def _update_contact(agent_id: str, inp: dict) -> dict:
             vals,
         )
         row = cur.fetchone()
+        if row:
+            _schedule_embed("contact", contact_id, agent_id)
         return {"updated": bool(row), "contact_id": contact_id}
 
 
@@ -736,7 +849,9 @@ def _log_activity(agent_id: str, inp: dict) -> dict:
                RETURNING id, type, body, created_at""",
             (agent_id, inp["contact_id"], inp["type"], inp["body"]),
         )
-        return dict(cur.fetchone())
+        result = dict(cur.fetchone())
+        _schedule_embed("activity", str(result["id"]), agent_id)
+        return result
 
 
 def _create_deal(agent_id: str, inp: dict) -> dict:
@@ -884,6 +999,14 @@ def _update_buyer_profile(agent_id: str, inp: dict) -> dict:
         if not row:
             return {"error": "No buyer profile exists for this contact. Use create_buyer_profile first."}
         return {"updated": True, "contact_id": contact_id}
+
+
+def _semantic_search(agent_id: str, inp: dict) -> list:
+    try:
+        from app.services.embeddings import semantic_search
+        return semantic_search(inp["query"], agent_id, inp.get("limit", 10))
+    except Exception as e:
+        return [{"error": str(e)}]
 
 
 def _get_overdue_tasks(agent_id: str, limit: int) -> list:

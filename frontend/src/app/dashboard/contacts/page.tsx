@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { listContacts, createContact, type ContactFilters } from "@/lib/api/contacts";
@@ -66,6 +66,7 @@ function initials(firstName: string, lastName: string) {
 
 export default function ContactsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { getToken } = useAuth();
   const queryClient = useQueryClient();
 
@@ -75,7 +76,7 @@ export default function ContactsPage() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [view, setView] = useState<ViewMode>("table");
   const [page, setPage] = useState(1);
-  const [showAdd, setShowAdd] = useState(false);
+  const [showAdd, setShowAdd] = useState(searchParams.get("action") === "new");
   const [newFirst, setNewFirst] = useState("");
   const [newLast, setNewLast] = useState("");
   const [newEmail, setNewEmail] = useState("");

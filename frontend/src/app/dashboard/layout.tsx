@@ -21,6 +21,7 @@ import {
   Home,
   Mail,
   StickyNote,
+  Plus,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -34,6 +35,7 @@ const navItems = [
   { icon: Users,           label: "Contacts",  href: "/dashboard/contacts" },
   { icon: GitBranch,       label: "Pipeline",  href: "/dashboard/pipeline" },
   { icon: Bot,             label: "AI Chat",   href: "/dashboard/chat" },
+  { icon: Phone,            label: "Comms",     href: "/dashboard/communication" },
   { icon: ActivityIcon,     label: "Activities",href: "/dashboard/activities" },
   { icon: CheckSquare,     label: "Tasks",     href: "/dashboard/tasks" },
   { icon: BarChart2,       label: "Reports",   href: "/dashboard/analytics" },
@@ -83,6 +85,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const userMenuRef = useRef<HTMLDivElement>(null);
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
+  const [newMenuOpen, setNewMenuOpen] = useState(false);
+  const newMenuRef = useRef<HTMLDivElement>(null);
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
   const { getToken } = useAuth();
 
@@ -112,6 +116,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       }
       if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
         setNotifOpen(false);
+      }
+      if (newMenuRef.current && !newMenuRef.current.contains(e.target as Node)) {
+        setNewMenuOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClick);
@@ -228,6 +235,46 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           >
             <Menu size={18} />
           </button>
+
+          {/* +New quick action */}
+          <div className="relative" ref={newMenuRef}>
+            <button
+              onClick={() => {
+                setNewMenuOpen((o) => !o);
+                setNotifOpen(false);
+                setUserMenuOpen(false);
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                newMenuOpen
+                  ? "bg-[#0EA5E9] text-white"
+                  : "bg-[#0EA5E9]/10 text-[#0EA5E9] hover:bg-[#0EA5E9]/20"
+              }`}
+            >
+              <Plus size={16} />
+              <span className="hidden sm:inline">New</span>
+            </button>
+
+            {newMenuOpen && (
+              <div className="absolute left-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 py-1.5 z-50 overflow-hidden">
+                {[
+                  { icon: Users, label: "New Contact", href: "/dashboard/contacts?action=new" },
+                  { icon: GitBranch, label: "New Deal", href: "/dashboard/pipeline?action=new" },
+                  { icon: ActivityIcon, label: "Log Activity", href: "/dashboard/activities?action=new" },
+                  { icon: CheckSquare, label: "New Task", href: "/dashboard/tasks?action=new" },
+                ].map((item) => (
+                  <Link
+                    key={item.label}
+                    href={item.href}
+                    onClick={() => setNewMenuOpen(false)}
+                    className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition-colors"
+                  >
+                    <item.icon size={15} className="text-gray-400" />
+                    <span className="text-sm text-gray-700">{item.label}</span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
 
           <div className="flex-1" />
 

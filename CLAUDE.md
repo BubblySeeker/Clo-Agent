@@ -34,20 +34,20 @@ The Go backend is the single entry point for the frontend. AI requests are proxi
 | Dashboard (metrics, charts, activity feed) | **DONE** | Widgets render with real data; customization mode with layout save/load via API |
 | AI Chat Bubble (floating, global) | **DONE** | SSE streaming, tool call indicators, confirmation cards, contact-scoped |
 | AI Chat Full Page (`/dashboard/chat`) | **DONE** | Conversation list, delete, rename, streaming |
-| AI Tools (23 total: 11 read, 12 write) | **DONE** | All execute against real DB |
+| AI Tools (24 total: 12 read, 12 write) | **DONE** | All execute against real DB |
 | AI Profile Generation | **DONE** | Backend endpoint + frontend tab on contact detail |
 | Analytics | **DONE** | KPI cards, pipeline/activities/contacts charts, stage detail table |
 | Tasks Page | **DONE** | Full-stack with DB columns (due_date, priority, completed_at), API endpoints, and AI tools |
-| Workflows Page | **STUB** | Honest "Coming Soon" page with template previews, no backend support |
-| Settings Page | **PARTIAL** | Pipeline stages from real API (read-only), commission saves to localStorage, integrations/notifications labeled "Coming Soon" |
+| Workflows Page | **DONE** | Full CRUD + toggle + runs, workflow engine with trigger hooks, template pre-fills |
+| Settings Page | **DONE** | Commission + notifications persist to API, pipeline stages from API (read-only), integrations "Coming Soon" |
 | Notifications | **DONE** | Real recent activities from API (replaces former hardcoded array) |
 | Marketing Pages | **DONE** | Home, about, features, pricing, team, mission |
 | Buyer Profile Backend | **DONE** | GET/POST/PATCH endpoints exist, AI tools exist |
 | Buyer Profile Frontend | **DONE** | Tab on contact detail page with create/edit forms |
 | AI Profile Frontend | **DONE** | Tab on contact detail page with summary + regenerate |
-| Semantic Search / Embeddings | **MISSING** | Table + index exist, no embedding generation or search endpoint |
-| Communication Page | **MISSING** | Route doesn't exist |
-| +New Quick Action | **MISSING** | Button not in top bar |
+| Semantic Search / Embeddings | **DONE** | OpenAI text-embedding-3-small, auto-embeds contacts/activities, semantic_search AI tool |
+| Communication Page | **DONE** | Unified call/email inbox grouped by contact, log call/email modal |
+| +New Quick Action | **DONE** | Dropdown in top bar: New Contact, New Deal, Log Activity, New Task |
 
 ## Database Schema
 
@@ -60,6 +60,10 @@ The Go backend is the single entry point for the frontend. AI requests are proxi
 | `003_tool_calls.sql` | `messages.tool_calls JSONB` |
 | `004_conversation_title.sql` | `conversations.title TEXT` |
 | `005_task_fields.sql` | `activities.due_date DATE`, `activities.priority TEXT`, `activities.completed_at TIMESTAMPTZ` |
+| `006_pending_actions.sql` | `pending_actions` table for persisting AI write tool confirmations |
+| `007_agent_settings.sql` | `users.settings JSONB` for commission, notification preferences |
+| `008_embeddings_unique.sql` | Unique index on `embeddings(source_type, source_id)` for upsert |
+| `009_workflows.sql` | `workflows` and `workflow_runs` tables with RLS for automation engine |
 
 | Table | Purpose | Key columns |
 |-------|---------|-------------|
@@ -72,7 +76,10 @@ The Go backend is the single entry point for the frontend. AI requests are proxi
 | `conversations` | AI chat threads | contact_id (nullable), agent_id, title |
 | `messages` | Messages in conversations | conversation_id, role (user/assistant/system), content, tool_calls (JSONB) |
 | `ai_profiles` | AI-generated contact summaries | contact_id (UNIQUE), summary |
-| `embeddings` | pgvector semantic search (**unused**) | source_type, source_id, agent_id, content, embedding(1536) |
+| `embeddings` | pgvector semantic search | source_type, source_id, agent_id, content, embedding(1536) |
+| `pending_actions` | AI write tool confirmations (10min TTL) | agent_id, tool, input (JSONB), expires_at |
+| `workflows` | Automation definitions | agent_id, name, trigger_type, trigger_config (JSONB), steps (JSONB), enabled |
+| `workflow_runs` | Execution history | workflow_id, agent_id, status, current_step, step_results (JSONB) |
 
 **RLS**: All agent-scoped tables have row-level security. Every query runs `SET LOCAL app.current_agent_id = '<uuid>'` in a transaction. RLS policies auto-filter to the authenticated agent.
 
@@ -146,15 +153,31 @@ GET /api/analytics/activities       — activity counts by type
 GET /api/analytics/contacts         — source breakdown, new this month
 ```
 
+### Search
+```
+POST /api/search                     — semantic vector search ({query, limit?})
+```
+
+### Workflows
+```
+GET    /api/workflows                — list all workflows
+POST   /api/workflows                — create workflow
+GET    /api/workflows/{id}           — get single workflow
+PATCH  /api/workflows/{id}           — update workflow
+DELETE /api/workflows/{id}           — delete workflow
+POST   /api/workflows/{id}/toggle    — toggle enabled/disabled
+GET    /api/workflows/{id}/runs      — list execution history
+```
+
 ### Error & Pagination
 - Errors: `{"error": "message"}` with status 400/401/403/404/500
 - Pagination: `?page=1&limit=25`, response includes `"total"` count
 
 ## AI Agent Tools
 
-23 tools total. All execute directly against the database (not through Go backend).
+24 tools total. All execute directly against the database (not through Go backend).
 
-### Read Tools (11 — execute immediately)
+### Read Tools (12 — execute immediately)
 | Tool | Inputs | Returns |
 |------|--------|---------|
 | `get_dashboard_summary` | none | total_contacts, active_deals, pipeline_value, recent_activities_7d, closed_this_month |
@@ -168,6 +191,7 @@ GET /api/analytics/contacts         — source breakdown, new this month
 | `get_all_activities` | type?, limit? | activities across all contacts |
 | `get_analytics` | none | pipeline_by_stage, activity_counts, contact_sources |
 | `get_overdue_tasks` | limit? | tasks past due date and not completed |
+| `semantic_search` | query, limit? | vector similarity search across contacts and activities |
 
 ### Write Tools (12 — require user confirmation)
 | Tool | Required Inputs | Notes |
@@ -186,14 +210,17 @@ GET /api/analytics/contacts         — source breakdown, new this month
 | `reschedule_task` | task_id, new_due_date | updates due_date |
 
 ### Pending Actions
-Write tools use an **in-memory dict** (`pending_actions` in `tools.py`). When a write tool is called, it queues a confirmation and sends a `confirmation` SSE event to the frontend. User clicks Confirm → `POST /ai/confirm` → action executes.
+Write tools persist a pending action row in `pending_actions` table. When a write tool is called, it queues a confirmation and sends a `confirmation` SSE event to the frontend. User clicks Confirm → `POST /ai/confirm` → action executes.
 
-**Limitation:** Not persistent. Lost on service restart. Single-process only. No TTL/expiration.
+Pending actions are persisted in PostgreSQL (`pending_actions` table) with a 10-minute TTL. Expired actions are cleaned up on service startup.
 
 ### Agent Loop
 - Max 5 tool rounds per message (safety limit in `agent.py`)
 - Last 20 messages loaded as conversation context
 - Contact-scoped conversations pre-load contact details + buyer profile + recent activities into system prompt
+
+### Workflow Automation
+Workflows are event-driven automations: trigger → steps → done. Supported triggers: `contact_created`, `deal_stage_changed`, `activity_logged`, `manual`. Step types: `create_task`, `log_activity`, `wait` (delay), `update_deal`, `ai_message`. After write tool confirmation, matching workflows fire in the background via `asyncio.create_task`. The engine lives in `ai-service/app/services/workflow_engine.py`.
 
 ## Project Structure
 
@@ -229,6 +256,8 @@ Write tools use an **in-memory dict** (`pending_actions` in `tools.py`). When a 
 │   │   │   ├── api/activities.ts                 # Activity API functions
 │   │   │   ├── api/conversations.ts              # AI chat + SSE streaming
 │   │   │   ├── api/dashboard.ts                  # Dashboard summary + layout
+│   │   │   ├── api/settings.ts                   # Settings API functions
+│   │   │   ├── api/workflows.ts                  # Workflow CRUD API functions
 │   │   │   ├── ai-chat-helpers.ts                # Shared tool labels, confirm labels, formatPreview
 │   │   │   └── utils.ts
 │   │   ├── store/ui-store.ts                     # Zustand (sidebar, chat state)
@@ -241,9 +270,9 @@ Write tools use an **in-memory dict** (`pending_actions` in `tools.py`). When a 
 │   │   ├── config/config.go                      # Env var loading
 │   │   ├── database/postgres.go                  # Connection pool
 │   │   ├── database/rls.go                       # BeginWithRLS helper
-│   │   ├── handlers/                             # 12 handler files (contacts, deals, etc.)
+│   │   ├── handlers/                             # 14 handler files (contacts, deals, workflows, etc.)
 │   │   └── middleware/                            # auth.go, cors.go, user_sync.go
-│   ├── migrations/                               # 001-005 SQL files
+│   ├── migrations/                               # 001-009 SQL files
 │   └── go.mod
 │
 ├── ai-service/
@@ -251,11 +280,15 @@ Write tools use an **in-memory dict** (`pending_actions` in `tools.py`). When a 
 │   │   ├── main.py                               # FastAPI app
 │   │   ├── config.py                             # Env vars
 │   │   ├── database.py                           # psycopg2 pool + async wrapper
-│   │   ├── tools.py                              # 23 tools + pending_actions
+│   │   ├── tools.py                              # 24 tools + pending_actions + workflow triggers
 │   │   ├── routes/chat.py                        # POST /ai/messages, /ai/confirm
 │   │   ├── routes/profiles.py                    # POST /ai/profiles/generate
+│   │   ├── routes/search.py                      # POST /ai/search (semantic)
+│   │   ├── routes/workflows.py                   # POST /ai/workflows/trigger
 │   │   ├── routes/health.py                      # GET /health
-│   │   └── services/agent.py                     # Agentic loop, Claude integration
+│   │   ├── services/agent.py                     # Agentic loop, Claude integration
+│   │   ├── services/embeddings.py                # OpenAI embedding generation + pgvector search
+│   │   └── services/workflow_engine.py            # Trigger matching + step execution
 │   └── requirements.txt
 │
 ├── docker-compose.yml
@@ -285,7 +318,7 @@ No new backend code needed — these endpoints already exist.
 3. **+New quick action** button in top bar
 
 ### Phase D: Robustness
-1. Persist `pending_actions` to DB instead of in-memory dict
+1. ~~Persist `pending_actions` to DB instead of in-memory dict~~ — **DONE** (migration `006_pending_actions.sql`)
 2. Add error handling where currently silently swallowed
 3. Add Zod validation schemas (package installed but unused beyond forms)
 

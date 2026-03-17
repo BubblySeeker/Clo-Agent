@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { listDeals, listDealStages, updateDeal, createDeal, type Deal } from "@/lib/api/deals";
@@ -28,13 +28,14 @@ function daysSince(dateStr: string) {
 
 export default function PipelinePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { getToken } = useAuth();
   const queryClient = useQueryClient();
 
   const [search, setSearch] = useState("");
   const [dragOver, setDragOver] = useState<string | null>(null);
   const [draggingDealId, setDraggingDealId] = useState<string | null>(null);
-  const [showAdd, setShowAdd] = useState(false);
+  const [showAdd, setShowAdd] = useState(searchParams.get("action") === "new");
   const [newTitle, setNewTitle] = useState("");
   const [newContactId, setNewContactId] = useState("");
   const [newStageId, setNewStageId] = useState("");
