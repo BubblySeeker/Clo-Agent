@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { listAllActivities, createActivity, type Activity } from "@/lib/api/activities";
 import { listContacts } from "@/lib/api/contacts";
 import { getGmailStatus, syncGmail, listEmails, getEmail, sendEmail, markEmailRead, type Email } from "@/lib/api/gmail";
-import { Phone, Mail, Search, Plus, X, User, ChevronDown, ChevronUp, RefreshCw, Send, Reply } from "lucide-react";
+import { Phone, Mail, Search, Plus, X, User, ChevronDown, ChevronUp, ChevronRight, RefreshCw, Send, Reply, Star, Paperclip } from "lucide-react";
 
 const typeColors: Record<string, { bg: string; color: string }> = {
   call: { bg: "#EFF6FF", color: "#0EA5E9" },
@@ -49,6 +49,28 @@ function formatDate(dateStr: string) {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+// Internal Gmail labels that should not be shown as user-facing label pills
+const INTERNAL_LABELS = new Set([
+  "INBOX", "UNREAD", "SENT", "DRAFT", "SPAM", "TRASH", "IMPORTANT", "STARRED",
+  "CATEGORY_PERSONAL", "CATEGORY_SOCIAL", "CATEGORY_PROMOTIONS",
+  "CATEGORY_UPDATES", "CATEGORY_FORUMS", "HAS_ATTACHMENT",
+]);
+
+/** Return only user-created labels (filter out Gmail system labels). */
+function getUserLabels(labels: string[]): string[] {
+  return labels.filter((l) => !INTERNAL_LABELS.has(l));
+}
+
+/** Check if the labels list indicates the email has attachments. */
+function emailHasAttachment(labels: string[]): boolean {
+  return labels.includes("HAS_ATTACHMENT");
+}
+
+/** Check if the labels list contains IMPORTANT or STARRED. */
+function emailIsStarred(labels: string[]): boolean {
+  return labels.includes("STARRED") || labels.includes("IMPORTANT");
 }
 
 function EmailHtmlFrame({ html }: { html: string }) {
@@ -139,6 +161,9 @@ export default function CommunicationPage() {
   // CC fields
   const [replyCc, setReplyCc] = useState("");
   const [composeCc, setComposeCc] = useState("");
+
+  // Track which thread items are expanded (by item id); most recent is expanded by default
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
 
   // Cache of loaded full email bodies: emailId -> Email
   const emailCacheRef = useRef<Record<string, Email>>({});
@@ -280,7 +305,16 @@ export default function CommunicationPage() {
         const sorted = items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         return { groupKey: key, groupName: sorted[0]?.groupName || "Unknown", contactId: sorted[0]?.contact_id, items: sorted, lastDate: sorted[0]?.date ?? "" };
       })
-      .filter((t) => !search || t.groupName.toLowerCase().includes(search.toLowerCase()))
+      .filter((t) => {
+        if (!search) return true;
+        const q = search.toLowerCase();
+        if (t.groupName.toLowerCase().includes(q)) return true;
+        return t.items.some(
+          (item) =>
+            (item.subject && item.subject.toLowerCase().includes(q)) ||
+            item.body.toLowerCase().includes(q)
+        );
+      })
       .sort((a, b) => new Date(b.lastDate).getTime() - new Date(a.lastDate).getTime());
   }, [filteredItems, search]);
 
@@ -289,29 +323,37 @@ export default function CommunicationPage() {
   const currentItem = selectedThread?.items[currentIndex] ?? null;
   const totalItems = selectedThread?.items.length ?? 0;
 
-  // Load full email body when currentItem changes
+  // Load full email bodies for ALL gmail items in the selected thread
   useEffect(() => {
     setShowReply(false);
     setReplyBody("");
     setReplyCc("");
 
-    if (!currentItem?.email_data) return;
-    const emailId = currentItem.email_data.id;
+    if (!selectedThread) return;
 
-    // Mark as read (fire-and-forget)
-    if (!currentItem.email_data.is_read) {
-      (async () => {
-        try {
-          const token = await getToken();
-          if (token) {
-            markEmailRead(token, emailId);
-            queryClient.invalidateQueries({ queryKey: ["gmail-emails"] });
+    // Expand the most recent item (index 0) by default, collapse others
+    setExpandedItems(new Set(selectedThread.items.length > 0 ? [selectedThread.items[0].id] : []));
+
+    const gmailItems = selectedThread.items.filter((item) => item.email_data);
+    if (gmailItems.length === 0) return;
+
+    // Mark unread items as read (fire-and-forget)
+    (async () => {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        for (const item of gmailItems) {
+          if (item.email_data && !item.email_data.is_read) {
+            markEmailRead(token, item.email_data.id);
           }
-        } catch { /* ignore */ }
-      })();
-    }
+        }
+        queryClient.invalidateQueries({ queryKey: ["gmail-emails"] });
+      } catch { /* ignore */ }
+    })();
 
-    if (emailCacheRef.current[emailId]) return; // already cached
+    // Load full bodies for uncached emails
+    const uncached = gmailItems.filter((item) => item.email_data && !emailCacheRef.current[item.email_data.id]);
+    if (uncached.length === 0) return;
 
     let cancelled = false;
     setLoadingEmail(true);
@@ -319,10 +361,14 @@ export default function CommunicationPage() {
       try {
         const token = await getToken();
         if (token && !cancelled) {
-          const full = await getEmail(token, emailId);
-          if (!cancelled) {
-            emailCacheRef.current[emailId] = full;
-            setCacheVersion((v) => v + 1);
+          for (const item of uncached) {
+            if (cancelled) break;
+            if (!item.email_data) continue;
+            const full = await getEmail(token, item.email_data.id);
+            if (!cancelled) {
+              emailCacheRef.current[item.email_data.id] = full;
+              setCacheVersion((v) => v + 1);
+            }
           }
         }
       } catch { /* ignore */ }
@@ -330,7 +376,7 @@ export default function CommunicationPage() {
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentItem?.id]);
+  }, [selectedGroupKey]);
 
   function selectThread(groupKey: string) {
     setSelectedGroupKey(groupKey);
@@ -413,39 +459,43 @@ export default function CommunicationPage() {
     return "Email";
   }
 
-  // Get the cached full body for current item
-  void cacheVersion; // used to trigger re-render
-  const fullBody = currentItem?.email_data ? emailCacheRef.current[currentItem.email_data.id] : null;
-  const isGmail = currentItem?.type === "gmail_in" || currentItem?.type === "gmail_out";
+  // Force re-render when email cache updates
+  void cacheVersion;
 
-  // Flat list of all items across all threads for arrow navigation
+  // Thread-level navigation: one entry per thread
   const flatItems = useMemo(() => {
-    const items: { groupKey: string; index: number }[] = [];
-    for (const thread of threads) {
-      for (let i = 0; i < thread.items.length; i++) {
-        items.push({ groupKey: thread.groupKey, index: i });
-      }
-    }
-    return items;
+    return threads.map((t) => ({ groupKey: t.groupKey, index: 0 }));
   }, [threads]);
 
   const currentFlatIndex = useMemo(() => {
     if (!selectedGroupKey) return -1;
-    return flatItems.findIndex((f) => f.groupKey === selectedGroupKey && f.index === currentIndex);
-  }, [flatItems, selectedGroupKey, currentIndex]);
+    return flatItems.findIndex((f) => f.groupKey === selectedGroupKey);
+  }, [flatItems, selectedGroupKey]);
 
   function goNewer() {
     if (currentFlatIndex <= 0) return;
     const prev = flatItems[currentFlatIndex - 1];
     setSelectedGroupKey(prev.groupKey);
-    setCurrentIndex(prev.index);
+    setCurrentIndex(0);
   }
 
   function goOlder() {
     if (currentFlatIndex < 0 || currentFlatIndex >= flatItems.length - 1) return;
     const next = flatItems[currentFlatIndex + 1];
     setSelectedGroupKey(next.groupKey);
-    setCurrentIndex(next.index);
+    setCurrentIndex(0);
+  }
+
+  function toggleExpanded(itemId: string) {
+    setExpandedItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(itemId)) {
+        next.delete(itemId);
+      } else {
+        next.add(itemId);
+      }
+      return next;
+    });
   }
 
   // Keyboard shortcuts
@@ -573,7 +623,15 @@ export default function CommunicationPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
                       <p className={`text-sm text-gray-800 truncate ${hasUnread ? "font-bold" : "font-medium"}`}>{thread.groupName}</p>
-                      <span className="text-[10px] text-gray-400 shrink-0">{timeAgo(thread.lastDate)}</span>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {lastItem.email_data?.labels && emailIsStarred(lastItem.email_data.labels) && (
+                          <Star size={11} className="text-amber-400 fill-amber-400" />
+                        )}
+                        {lastItem.email_data?.labels && emailHasAttachment(lastItem.email_data.labels) && (
+                          <Paperclip size={11} className="text-gray-400" />
+                        )}
+                        <span className="text-[10px] text-gray-400">{timeAgo(thread.lastDate)}</span>
+                      </div>
                     </div>
                     <div className="flex items-center gap-1.5 mt-0.5">
                       <Icon size={11} style={{ color: colors.color }} className="shrink-0" />
@@ -595,8 +653,9 @@ export default function CommunicationPage() {
             {/* Header bar with nav arrows */}
             <div className="px-6 py-3 bg-white border-b border-gray-100 flex items-center justify-between">
               <div className="flex-1 min-w-0">
-                <h3 className="text-sm font-bold text-gray-800 truncate">{selectedThread.groupName}</h3>
-                <p className="text-xs text-gray-400">{currentIndex + 1} of {totalItems}</p>
+                <h3 className="text-sm font-bold text-gray-800 truncate">
+                  {selectedThread.groupName}{totalItems > 1 ? ` — ${totalItems} ${totalItems === 1 ? "item" : "items"}` : ""}
+                </h3>
               </div>
               <div className="flex items-center gap-1">
                 {/* Nav arrows */}
@@ -635,56 +694,112 @@ export default function CommunicationPage() {
               </div>
             </div>
 
-            {/* Email / item content */}
+            {/* Thread conversation view — all items inline */}
             <div className="flex-1 overflow-y-auto p-6">
-              <div className="max-w-2xl mx-auto">
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-                  {/* Item header */}
-                  <div className="px-6 pt-5 pb-4 border-b border-gray-100">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
-                        style={{ backgroundColor: getItemColors(currentItem.type).bg, color: getItemColors(currentItem.type).color }}>
-                        {getItemLabel(currentItem.type)}
-                      </span>
-                      <span className="text-xs text-gray-400">{formatDate(currentItem.date)}</span>
+              <div className="max-w-2xl mx-auto flex flex-col gap-3">
+                {selectedThread.items.map((item) => {
+                  const isExpanded = expandedItems.has(item.id);
+                  const itemIsGmail = item.type === "gmail_in" || item.type === "gmail_out";
+                  const itemFullBody = item.email_data ? emailCacheRef.current[item.email_data.id] : null;
+
+                  return (
+                    <div key={item.id} className="bg-white rounded-xl shadow-sm border border-gray-100">
+                      {/* Clickable header — always visible */}
+                      <button
+                        onClick={() => toggleExpanded(item.id)}
+                        className={`w-full px-6 pt-5 pb-4 text-left flex items-start gap-3 hover:bg-gray-50/50 transition-colors ${isExpanded ? "rounded-t-xl" : "rounded-xl"}`}
+                      >
+                        <div className="mt-0.5 shrink-0 text-gray-400 transition-transform duration-150" style={{ transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)" }}>
+                          <ChevronRight size={14} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-xs font-semibold px-2 py-0.5 rounded-full shrink-0"
+                                style={{ backgroundColor: getItemColors(item.type).bg, color: getItemColors(item.type).color }}>
+                                {getItemLabel(item.type)}
+                              </span>
+                              {itemIsGmail && (
+                                <span className="text-xs text-gray-500 truncate">
+                                  {item.type === "gmail_out"
+                                    ? `To: ${item.to_addresses?.join(", ") ?? ""}`
+                                    : `From: ${item.from_name || item.from_address || ""}`}
+                                </span>
+                              )}
+                              {itemIsGmail && item.email_data?.labels && emailIsStarred(item.email_data.labels) && (
+                                <Star size={12} className="text-yellow-400 fill-yellow-400 shrink-0" />
+                              )}
+                              {itemIsGmail && item.email_data?.labels && emailHasAttachment(item.email_data.labels) && (
+                                <Paperclip size={12} className="text-gray-400 shrink-0" />
+                              )}
+                            </div>
+                            <span className="text-xs text-gray-400 shrink-0 ml-2">{formatDate(item.date)}</span>
+                          </div>
+                          {item.subject && (
+                            <h4 className="text-sm font-semibold text-gray-800 truncate">{item.subject}</h4>
+                          )}
+                          {!isExpanded && (
+                            <p className="text-xs text-gray-400 mt-0.5 truncate">{item.body}</p>
+                          )}
+                          {!isExpanded && itemIsGmail && item.email_data?.labels && getUserLabels(item.email_data.labels).length > 0 && (
+                            <div className="flex items-center gap-1 mt-1 flex-wrap">
+                              {getUserLabels(item.email_data.labels).map((label) => (
+                                <span key={label} className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">
+                                  {label}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </button>
+
+                      {/* Collapsible body */}
+                      {isExpanded && (
+                        <div className="px-6 py-5 border-t border-gray-100">
+                          {itemIsGmail && item.email_data?.labels && (
+                            <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+                              {emailHasAttachment(item.email_data.labels) && (
+                                <span className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium">
+                                  <Paperclip size={10} /> Attachment
+                                </span>
+                              )}
+                              {getUserLabels(item.email_data.labels).map((label) => (
+                                <span key={label} className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">
+                                  {label}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          {itemIsGmail && loadingEmail && !itemFullBody ? (
+                            <p className="text-sm text-gray-400">Loading...</p>
+                          ) : itemIsGmail && itemFullBody?.body_html ? (
+                            <EmailHtmlFrame html={itemFullBody.body_html} />
+                          ) : itemIsGmail && itemFullBody?.body_text ? (
+                            <pre className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap font-sans">
+                              {itemFullBody.body_text}
+                            </pre>
+                          ) : (
+                            <p className="text-sm text-gray-700 leading-relaxed">{item.body}</p>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    {currentItem.subject && (
-                      <h4 className="text-base font-semibold text-gray-800 mt-1">{currentItem.subject}</h4>
-                    )}
-                    {isGmail && (
-                      <p className="text-xs text-gray-400 mt-1">
-                        {currentItem.type === "gmail_out"
-                          ? `To: ${currentItem.to_addresses?.join(", ")}`
-                          : `From: ${currentItem.from_name || ""} ${currentItem.from_address ? `<${currentItem.from_address}>` : ""}`}
-                      </p>
-                    )}
-                  </div>
+                  );
+                })}
 
-                  {/* Body */}
-                  <div className="px-6 py-5">
-                    {isGmail && loadingEmail && !fullBody ? (
-                      <p className="text-sm text-gray-400">Loading...</p>
-                    ) : isGmail && fullBody?.body_html ? (
-                      <EmailHtmlFrame html={fullBody.body_html} />
-                    ) : isGmail && fullBody?.body_text ? (
-                      <pre className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap font-sans">
-                        {fullBody.body_text}
-                      </pre>
-                    ) : (
-                      <p className="text-sm text-gray-700 leading-relaxed">{currentItem.body}</p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Inline reply for gmail items */}
-                {isGmail && (
-                  <div className="mt-4">
+                {/* Inline reply for threads with gmail items */}
+                {selectedThread.items.some((i) => i.type === "gmail_in" || i.type === "gmail_out") && (
+                  <div>
                     {showReply ? (
                       <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
                         <p className="text-xs text-gray-400 mb-2">
-                          Replying to {currentItem.type === "gmail_out"
-                            ? currentItem.to_addresses?.[0]
-                            : (currentItem.from_name || currentItem.from_address)}
+                          Replying to {(() => {
+                            const lastGmail = selectedThread.items.find((i) => i.email_data);
+                            if (!lastGmail) return "...";
+                            return lastGmail.type === "gmail_out"
+                              ? lastGmail.to_addresses?.[0]
+                              : (lastGmail.from_name || lastGmail.from_address);
+                          })()}
                         </p>
                         <input value={replyCc} onChange={(e) => setReplyCc(e.target.value)} placeholder="Cc (optional)"
                           className="w-full px-3 py-2 rounded-lg border border-gray-200 text-xs outline-none focus:border-[#0EA5E9] bg-gray-50 mb-2" />

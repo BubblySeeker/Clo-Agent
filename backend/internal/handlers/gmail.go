@@ -402,9 +402,15 @@ func GmailSync(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 
 			gmailDate := time.Unix(0, msg.InternalDate*int64(time.Millisecond))
 
+			// Detect attachments and add a synthetic label
+			labelIds := msg.LabelIds
+			if hasAttachments(msg.Payload) {
+				labelIds = append(labelIds, "HAS_ATTACHMENT")
+			}
+
 			toJSON, _ := json.Marshal(to)
 			ccJSON, _ := json.Marshal(cc)
-			labelsJSON, _ := json.Marshal(msg.LabelIds)
+			labelsJSON, _ := json.Marshal(labelIds)
 
 			_, err = pool.Exec(r.Context(),
 				`INSERT INTO emails (agent_id, gmail_message_id, thread_id, contact_id, from_address, from_name,
@@ -472,7 +478,7 @@ func ListEmails(pool *pgxpool.Pool) http.HandlerFunc {
 		if search != "" {
 			args = append(args, "%"+search+"%")
 			n := len(args)
-			whereExpr += fmt.Sprintf(" AND (subject ILIKE $%d OR snippet ILIKE $%d OR from_address ILIKE $%d)", n, n, n)
+			whereExpr += fmt.Sprintf(" AND (subject ILIKE $%d OR snippet ILIKE $%d OR from_address ILIKE $%d OR from_name ILIKE $%d)", n, n, n, n)
 		}
 
 		var total int
@@ -829,6 +835,22 @@ func parseEmailAddress(raw string) (email string, name string) {
 	// Clean up name — remove surrounding quotes
 	name = strings.Trim(name, `"'`)
 	return email, name
+}
+
+// hasAttachments checks if any part in the message payload has a non-empty Filename (i.e., an attachment).
+func hasAttachments(payload *gmail.MessagePart) bool {
+	if payload == nil {
+		return false
+	}
+	if payload.Filename != "" {
+		return true
+	}
+	for _, part := range payload.Parts {
+		if hasAttachments(part) {
+			return true
+		}
+	}
+	return false
 }
 
 // extractBody extracts text and HTML body from a Gmail message payload
