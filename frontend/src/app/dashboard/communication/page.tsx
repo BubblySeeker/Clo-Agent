@@ -264,13 +264,6 @@ export default function CommunicationPage() {
     setReplyBody("");
   }
 
-  function goUp() {
-    if (currentIndex > 0) setCurrentIndex((i) => i - 1);
-  }
-
-  function goDown() {
-    if (currentIndex < totalItems - 1) setCurrentIndex((i) => i + 1);
-  }
 
   const logMutation = useMutation({
     mutationFn: async () => {
@@ -350,8 +343,38 @@ export default function CommunicationPage() {
   const fullBody = currentItem?.email_data ? emailCacheRef.current[currentItem.email_data.id] : null;
   const isGmail = currentItem?.type === "gmail_in" || currentItem?.type === "gmail_out";
 
+  // Flat list of all items across all threads for arrow navigation
+  const flatItems = useMemo(() => {
+    const items: { groupKey: string; index: number }[] = [];
+    for (const thread of threads) {
+      for (let i = 0; i < thread.items.length; i++) {
+        items.push({ groupKey: thread.groupKey, index: i });
+      }
+    }
+    return items;
+  }, [threads]);
+
+  const currentFlatIndex = useMemo(() => {
+    if (!selectedGroupKey) return -1;
+    return flatItems.findIndex((f) => f.groupKey === selectedGroupKey && f.index === currentIndex);
+  }, [flatItems, selectedGroupKey, currentIndex]);
+
+  function goNewer() {
+    if (currentFlatIndex <= 0) return;
+    const prev = flatItems[currentFlatIndex - 1];
+    setSelectedGroupKey(prev.groupKey);
+    setCurrentIndex(prev.index);
+  }
+
+  function goOlder() {
+    if (currentFlatIndex < 0 || currentFlatIndex >= flatItems.length - 1) return;
+    const next = flatItems[currentFlatIndex + 1];
+    setSelectedGroupKey(next.groupKey);
+    setCurrentIndex(next.index);
+  }
+
   return (
-    <div className="flex h-full">
+    <div className="flex h-[calc(100vh-4rem)]">
       {/* Left sidebar */}
       <div className="w-80 border-r border-gray-100 bg-white flex flex-col shrink-0">
         <div className="p-4 border-b border-gray-100">
@@ -454,12 +477,12 @@ export default function CommunicationPage() {
               </div>
               <div className="flex items-center gap-1">
                 {/* Nav arrows */}
-                <button onClick={goUp} disabled={currentIndex === 0}
+                <button onClick={goNewer} disabled={currentFlatIndex <= 0}
                   className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-gray-100 transition-colors disabled:opacity-30 disabled:cursor-default"
                   title="Newer">
                   <ChevronUp size={16} className="text-gray-500" />
                 </button>
-                <button onClick={goDown} disabled={currentIndex >= totalItems - 1}
+                <button onClick={goOlder} disabled={currentFlatIndex < 0 || currentFlatIndex >= flatItems.length - 1}
                   className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-gray-100 transition-colors disabled:opacity-30 disabled:cursor-default"
                   title="Older">
                   <ChevronDown size={16} className="text-gray-500" />
@@ -519,7 +542,7 @@ export default function CommunicationPage() {
                     {isGmail && loadingEmail && !fullBody ? (
                       <p className="text-sm text-gray-400">Loading...</p>
                     ) : isGmail && fullBody?.body_html ? (
-                      <div className="text-sm text-gray-700 leading-relaxed prose prose-sm max-w-none"
+                      <div className="text-sm text-gray-700 leading-relaxed prose prose-sm max-w-none overflow-hidden [&_img]:max-w-full [&_img]:h-auto [&_table]:max-w-full [&_table]:table-fixed [&_*]:max-w-full"
                         dangerouslySetInnerHTML={{ __html: fullBody.body_html }} />
                     ) : isGmail && fullBody?.body_text ? (
                       <pre className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap font-sans">
