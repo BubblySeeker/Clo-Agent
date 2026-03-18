@@ -721,6 +721,79 @@ func SendEmail(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 	}
 }
 
+// MarkEmailRead marks an email as read in the local DB and removes the UNREAD label in Gmail.
+// PATCH /api/gmail/emails/{id}/read
+func MarkEmailRead(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		agentID := middleware.AgentUUIDFromContext(r.Context())
+		if agentID == "" {
+			respondError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+
+		emailID := chi.URLParam(r, "id")
+
+		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "database error")
+			return
+		}
+		defer tx.Rollback(r.Context())
+
+		// Fetch the gmail_message_id and current is_read status
+		var gmailMessageID string
+		var isRead bool
+		err = tx.QueryRow(r.Context(),
+			`SELECT gmail_message_id, is_read FROM emails WHERE id = $1`,
+			emailID,
+		).Scan(&gmailMessageID, &isRead)
+		if err != nil {
+			respondError(w, http.StatusNotFound, "email not found")
+			return
+		}
+
+		// If already read, return success immediately
+		if isRead {
+			tx.Commit(r.Context())
+			respondJSON(w, http.StatusOK, map[string]bool{"success": true})
+			return
+		}
+
+		// Mark as read in Gmail (remove UNREAD label)
+		svc, err := getGmailService(r.Context(), pool, cfg, agentID)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		_, err = svc.Users.Messages.Modify("me", gmailMessageID, &gmail.ModifyMessageRequest{
+			RemoveLabelIds: []string{"UNREAD"},
+		}).Do()
+		if err != nil {
+			slog.Error("gmail mark read failed", "gmail_message_id", gmailMessageID, "error", err)
+			respondError(w, http.StatusInternalServerError, "failed to mark email as read in Gmail")
+			return
+		}
+
+		// Update local DB
+		_, err = tx.Exec(r.Context(),
+			`UPDATE emails SET is_read = true WHERE id = $1`,
+			emailID,
+		)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "failed to update email")
+			return
+		}
+
+		if err := tx.Commit(r.Context()); err != nil {
+			respondError(w, http.StatusInternalServerError, "failed to commit")
+			return
+		}
+
+		respondJSON(w, http.StatusOK, map[string]bool{"success": true})
+	}
+}
+
 // --- Helper functions ---
 
 // parseAddressList splits a comma-separated list of email addresses

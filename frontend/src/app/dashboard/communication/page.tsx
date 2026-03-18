@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { listAllActivities, createActivity, type Activity } from "@/lib/api/activities";
 import { listContacts } from "@/lib/api/contacts";
-import { getGmailStatus, syncGmail, listEmails, getEmail, sendEmail, type Email } from "@/lib/api/gmail";
+import { getGmailStatus, syncGmail, listEmails, getEmail, sendEmail, markEmailRead, type Email } from "@/lib/api/gmail";
 import { Phone, Mail, Search, Plus, X, User, ChevronDown, ChevronUp, RefreshCw, Send, Reply } from "lucide-react";
 
 const typeColors: Record<string, { bg: string; color: string }> = {
@@ -51,6 +51,66 @@ function formatDate(dateStr: string) {
   });
 }
 
+function EmailHtmlFrame({ html }: { html: string }) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [height, setHeight] = useState(200);
+
+  const baseStyles = `
+    <style>
+      body { font-family: sans-serif; font-size: 14px; color: #374151; margin: 0; padding: 0; overflow-x: hidden; }
+      img { max-width: 100%; height: auto; }
+      * { max-width: 100%; box-sizing: border-box; }
+    </style>
+  `;
+
+  const fullHtml = baseStyles + html;
+
+  const adjustHeight = useCallback(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+    try {
+      const doc = iframe.contentDocument;
+      if (doc?.body) {
+        const newHeight = doc.body.scrollHeight;
+        if (newHeight > 0) setHeight(newHeight);
+      }
+    } catch {
+      // cross-origin fallback — keep current height
+    }
+  }, []);
+
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+
+    try {
+      const doc = iframe.contentDocument;
+      if (doc) {
+        doc.open();
+        doc.write(fullHtml);
+        doc.close();
+        // Adjust after content loads (images etc.)
+        adjustHeight();
+        const timer = setTimeout(adjustHeight, 500);
+        return () => clearTimeout(timer);
+      }
+    } catch {
+      // If contentDocument.write fails, srcdoc fallback handles it
+    }
+  }, [fullHtml, adjustHeight]);
+
+  return (
+    <iframe
+      ref={iframeRef}
+      sandbox="allow-same-origin"
+      srcDoc={fullHtml}
+      onLoad={adjustHeight}
+      style={{ width: "100%", height: `${height}px`, border: "none", display: "block" }}
+      title="Email content"
+    />
+  );
+}
+
 export default function CommunicationPage() {
   const { getToken } = useAuth();
   const queryClient = useQueryClient();
@@ -69,6 +129,7 @@ export default function CommunicationPage() {
   const [showReply, setShowReply] = useState(false);
   const [replyBody, setReplyBody] = useState("");
   const replyRef = useRef<HTMLTextAreaElement>(null);
+  const sidebarRef = useRef<HTMLDivElement>(null);
 
   // Compose state
   const [composeTo, setComposeTo] = useState("");
@@ -236,6 +297,20 @@ export default function CommunicationPage() {
 
     if (!currentItem?.email_data) return;
     const emailId = currentItem.email_data.id;
+
+    // Mark as read (fire-and-forget)
+    if (!currentItem.email_data.is_read) {
+      (async () => {
+        try {
+          const token = await getToken();
+          if (token) {
+            markEmailRead(token, emailId);
+            queryClient.invalidateQueries({ queryKey: ["gmail-emails"] });
+          }
+        } catch { /* ignore */ }
+      })();
+    }
+
     if (emailCacheRef.current[emailId]) return; // already cached
 
     let cancelled = false;
@@ -373,6 +448,52 @@ export default function CommunicationPage() {
     setCurrentIndex(next.index);
   }
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      const tag = (document.activeElement?.tagName ?? "").toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select") return;
+
+      switch (e.key) {
+        case "j":
+        case "ArrowDown":
+          e.preventDefault();
+          goOlder();
+          break;
+        case "k":
+        case "ArrowUp":
+          e.preventDefault();
+          goNewer();
+          break;
+        case "r":
+          e.preventDefault();
+          setShowReply(true);
+          break;
+        case "c":
+          e.preventDefault();
+          setShowCompose(true);
+          break;
+        case "Escape":
+          setShowReply(false);
+          setShowCompose(false);
+          setShowLog(false);
+          break;
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentFlatIndex, flatItems]);
+
+  // Auto-scroll selected thread into view
+  useEffect(() => {
+    if (!selectedGroupKey || !sidebarRef.current) return;
+    const el = sidebarRef.current.querySelector(`[data-group-key="${CSS.escape(selectedGroupKey)}"]`);
+    if (el) {
+      el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  }, [selectedGroupKey]);
+
   return (
     <div className="flex h-[calc(100vh-4rem)]">
       {/* Left sidebar */}
@@ -423,7 +544,7 @@ export default function CommunicationPage() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
+        <div ref={sidebarRef} className="flex-1 overflow-y-auto">
           {threads.length === 0 ? (
             <div className="p-8 text-center">
               <Mail size={24} className="mx-auto text-gray-300 mb-2" />
@@ -435,21 +556,23 @@ export default function CommunicationPage() {
               const isSelected = thread.groupKey === selectedGroupKey;
               const lastItem = thread.items[0];
               const isEmailGroup = thread.groupKey.startsWith("email-");
+              const hasUnread = thread.items.some((item) => item.email_data && !item.email_data.is_read);
               const initials = isEmailGroup
                 ? (thread.groupName[0] ?? "?").toUpperCase()
                 : thread.groupName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
               const colors = getItemColors(lastItem.type);
               const Icon = lastItem.type === "call" ? Phone : Mail;
               return (
-                <button key={thread.groupKey} onClick={() => selectThread(thread.groupKey)}
+                <button key={thread.groupKey} data-group-key={thread.groupKey} onClick={() => selectThread(thread.groupKey)}
                   className={`w-full flex items-start gap-3 px-4 py-3.5 text-left transition-colors border-b border-gray-50 ${isSelected ? "bg-blue-50" : "hover:bg-gray-50"}`}>
+                  {hasUnread && <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0 mt-4" />}
                   <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 mt-0.5"
                     style={{ backgroundColor: isEmailGroup ? "#6B7280" : "#1E3A5F" }}>
                     {initials || "?"}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-semibold text-gray-800 truncate">{thread.groupName}</p>
+                      <p className={`text-sm text-gray-800 truncate ${hasUnread ? "font-bold" : "font-medium"}`}>{thread.groupName}</p>
                       <span className="text-[10px] text-gray-400 shrink-0">{timeAgo(thread.lastDate)}</span>
                     </div>
                     <div className="flex items-center gap-1.5 mt-0.5">
@@ -542,8 +665,7 @@ export default function CommunicationPage() {
                     {isGmail && loadingEmail && !fullBody ? (
                       <p className="text-sm text-gray-400">Loading...</p>
                     ) : isGmail && fullBody?.body_html ? (
-                      <div className="text-sm text-gray-700 leading-relaxed prose prose-sm max-w-none overflow-hidden [&_img]:max-w-full [&_img]:h-auto [&_table]:max-w-full [&_table]:table-fixed [&_*]:max-w-full"
-                        dangerouslySetInnerHTML={{ __html: fullBody.body_html }} />
+                      <EmailHtmlFrame html={fullBody.body_html} />
                     ) : isGmail && fullBody?.body_text ? (
                       <pre className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap font-sans">
                         {fullBody.body_text}

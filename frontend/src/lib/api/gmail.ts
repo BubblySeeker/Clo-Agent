@@ -74,6 +74,10 @@ export function getEmail(token: string, id: string): Promise<Email> {
   return apiRequest(`/gmail/emails/${id}`, token);
 }
 
+export function markEmailRead(token: string, id: string): Promise<{ success: boolean }> {
+  return apiRequest(`/gmail/emails/${id}/read`, token, { method: "PATCH" });
+}
+
 export function sendEmail(token: string, body: SendEmailBody): Promise<{ id: string; thread_id: string; message: string }> {
   return apiRequest("/gmail/send", token, {
     method: "POST",
