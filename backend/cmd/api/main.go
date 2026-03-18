@@ -82,6 +82,7 @@ func run() error {
 
 	// Public
 	r.Get("/health", handlers.Health)
+	r.Get("/api/auth/google/callback", handlers.GmailAuthCallback(pool, cfg))
 
 	// Protected — Clerk JWT + user sync required
 	r.Group(func(r chi.Router) {
@@ -166,6 +167,15 @@ func run() error {
 		r.Get("/api/analytics/pipeline", handlers.GetPipelineAnalytics(pool))
 		r.Get("/api/analytics/activities", handlers.GetActivityAnalytics(pool))
 		r.Get("/api/analytics/contacts", handlers.GetContactAnalytics(pool))
+
+		// Gmail
+		r.Post("/api/gmail/auth/init", handlers.GmailAuthInit(cfg))
+		r.Get("/api/gmail/status", handlers.GmailStatus(pool))
+		r.Delete("/api/gmail/disconnect", handlers.GmailDisconnect(pool))
+		r.Post("/api/gmail/sync", handlers.GmailSync(pool, cfg))
+		r.Get("/api/gmail/emails", handlers.ListEmails(pool))
+		r.Get("/api/gmail/emails/{id}", handlers.GetEmail(pool))
+		r.Post("/api/gmail/send", handlers.SendEmail(pool, cfg))
 	})
 
 	// -------------------------------------------------------------------------
