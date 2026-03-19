@@ -11,8 +11,10 @@ import logging
 import uuid
 from typing import Any
 
+import httpx
 import psycopg2.extras
 
+from app.config import BACKEND_URL, AI_SERVICE_SECRET
 from app.database import get_conn, run_query
 
 logger = logging.getLogger(__name__)
@@ -425,6 +427,60 @@ TOOL_DEFINITIONS = [
             "required": ["property_id"],
         },
     },
+    # ----- Gmail / Email tools -----
+    {
+        "name": "search_emails",
+        "description": "Search synced Gmail emails by subject, sender name, or snippet text. Optionally filter by contact. Requires Gmail to be connected.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search term to match against subject, sender name, or snippet"},
+                "contact_id": {"type": "string", "description": "Filter to emails linked to this contact UUID"},
+                "limit": {"type": "integer", "description": "Max results (default 10)"},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "get_email_thread",
+        "description": "Get all emails in a thread (conversation) by thread ID. Returns emails in chronological order. Use search_emails first to find the thread_id.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "thread_id": {"type": "string", "description": "Gmail thread ID"},
+                "limit": {"type": "integer", "description": "Max emails to return (default 20)"},
+            },
+            "required": ["thread_id"],
+        },
+    },
+    {
+        "name": "draft_email",
+        "description": "Generate an email draft for the agent to review and edit before sending. Returns structured {to, subject, body} fields. Does NOT send the email.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "to": {"type": "string", "description": "Recipient email address"},
+                "subject": {"type": "string", "description": "Email subject line"},
+                "context": {"type": "string", "description": "What the email should be about — the AI will write the body"},
+                "contact_id": {"type": "string", "description": "Optional contact UUID for context about the recipient"},
+            },
+            "required": ["to", "context"],
+        },
+    },
+    {
+        "name": "send_email",
+        "description": "Send an email via the agent's connected Gmail account. Requires Gmail to be connected and user confirmation before sending.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "to": {"type": "string", "description": "Recipient email address"},
+                "subject": {"type": "string", "description": "Email subject line"},
+                "body": {"type": "string", "description": "Email body (plain text)"},
+                "cc": {"type": "string", "description": "CC recipient email address (optional)"},
+            },
+            "required": ["to", "subject", "body"],
+        },
+    },
 ]
 
 READ_TOOLS = {
@@ -443,6 +499,9 @@ READ_TOOLS = {
     "search_properties",
     "get_property",
     "match_buyer_to_properties",
+    "search_emails",
+    "get_email_thread",
+    "draft_email",
 }
 
 WRITE_TOOLS = {
@@ -461,6 +520,7 @@ WRITE_TOOLS = {
     "create_property",
     "update_property",
     "delete_property",
+    "send_email",
 }
 
 # ---------------------------------------------------------------------------
@@ -498,6 +558,12 @@ async def execute_read_tool(tool_name: str, tool_input: dict, agent_id: str) -> 
         return await run_query(lambda: _get_property(agent_id, tool_input["property_id"]))
     elif tool_name == "match_buyer_to_properties":
         return await run_query(lambda: _match_buyer_to_properties(agent_id, tool_input["contact_id"]))
+    elif tool_name == "search_emails":
+        return await run_query(lambda: _search_emails(agent_id, tool_input))
+    elif tool_name == "get_email_thread":
+        return await run_query(lambda: _get_email_thread(agent_id, tool_input["thread_id"], tool_input.get("limit", 20)))
+    elif tool_name == "draft_email":
+        return await _draft_email(agent_id, tool_input)
     else:
         return {"error": f"Unknown tool: {tool_name}"}
 
@@ -782,6 +848,7 @@ _TOOL_TO_TRIGGER = {
     "create_contact": "contact_created",
     "log_activity": "activity_logged",
     "update_deal": "deal_stage_changed",
+    "send_email": "email_sent",
 }
 
 
@@ -896,6 +963,11 @@ async def execute_write_tool(pending_id: str) -> dict:
         result = await run_query(lambda: _update_property(agent_id, inp))
     elif tool_name == "delete_property":
         result = await run_query(lambda: _delete_property(agent_id, inp))
+    elif tool_name == "send_email":
+        # Proxy to Go backend — this is an HTTP call, not a DB query.
+        # Flow: AI Service → Go Backend → Gmail API (two-hop proxy,
+        # avoids duplicating OAuth/token-refresh logic in Python).
+        result = await _proxy_to_backend("POST", "/api/gmail/send", agent_id, inp)
     else:
         return {"error": f"Unknown write tool: {tool_name}"}
 
@@ -1373,3 +1445,195 @@ def _delete_property(agent_id: str, inp: dict) -> dict:
             return {"error": "Property not found"}
         cur.execute("DELETE FROM properties WHERE id = %s AND agent_id = %s", (property_id, agent_id))
         return {"deleted": True, "property": prop["address"]}
+
+
+# ---------------------------------------------------------------------------
+# Proxy helper: AI Service → Go Backend (for tools that need Go's APIs)
+# ---------------------------------------------------------------------------
+
+async def _proxy_to_backend(method: str, path: str, agent_id: str, payload: dict) -> dict:
+    """Call the Go backend on behalf of an agent. Used by send_email to
+    proxy through Go's Gmail API integration (avoids duplicating OAuth logic)."""
+    url = f"{BACKEND_URL}{path}"
+    headers = {
+        "X-AI-Service-Secret": AI_SERVICE_SECRET,
+        "X-Agent-ID": agent_id,
+        "Content-Type": "application/json",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.request(method, url, json=payload, headers=headers)
+        if resp.status_code == 200 or resp.status_code == 201:
+            return resp.json()
+        # Surface Go backend errors as structured tool results
+        try:
+            body = resp.json()
+            error_msg = body.get("error", resp.text)
+        except Exception:
+            error_msg = resp.text
+        if resp.status_code == 429:
+            return {"error": f"Gmail rate limit — try again later. ({error_msg})"}
+        if resp.status_code == 401:
+            return {"error": "Email service authentication failed. Check AI_SERVICE_SECRET config."}
+        return {"error": f"Email service error ({resp.status_code}): {error_msg}"}
+    except httpx.ConnectError:
+        return {"error": "Email service unavailable — Go backend is not reachable."}
+    except httpx.TimeoutException:
+        return {"error": "Email service timed out — try again."}
+    except Exception as e:
+        logger.error("Proxy to backend failed: %s", e)
+        return {"error": f"Email service error: {str(e)}"}
+
+
+# ---------------------------------------------------------------------------
+# Gmail / Email tool handlers
+# ---------------------------------------------------------------------------
+
+def _search_emails(agent_id: str, inp: dict) -> list:
+    query = inp.get("query", "")
+    contact_id = inp.get("contact_id")
+    limit = inp.get("limit", 10)
+
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        params: list = [agent_id]
+        where_clauses = ["agent_id = %s"]
+
+        if query:
+            params.extend([f"%{query}%"] * 3)
+            where_clauses.append(
+                "(subject ILIKE %s OR from_name ILIKE %s OR snippet ILIKE %s)"
+            )
+        if contact_id:
+            params.append(contact_id)
+            where_clauses.append("contact_id = %s")
+
+        params.append(limit)
+        sql = f"""
+            SELECT id, thread_id, subject, snippet, from_name, from_address,
+                   to_addresses, is_read, is_outbound, labels, gmail_date
+            FROM emails
+            WHERE {' AND '.join(where_clauses)}
+            ORDER BY gmail_date DESC LIMIT %s
+        """
+        cur.execute(sql, params)
+        return [dict(r) for r in cur.fetchall()]
+
+
+def _get_email_thread(agent_id: str, thread_id: str, limit: int) -> list:
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            """SELECT id, subject, snippet, from_name, from_address,
+                      to_addresses, cc_addresses, body_text, is_read,
+                      is_outbound, gmail_date
+               FROM emails
+               WHERE agent_id = %s AND thread_id = %s
+               ORDER BY gmail_date ASC LIMIT %s""",
+            (agent_id, thread_id, limit),
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+
+async def _draft_email(agent_id: str, inp: dict) -> dict:
+    """Generate an email draft using Claude. Returns structured fields for
+    the frontend compose modal — does NOT send anything."""
+    to = inp.get("to", "")
+    subject = inp.get("subject", "")
+    context = inp.get("context", "")
+    contact_id = inp.get("contact_id")
+
+    # Gather contact context if available
+    contact_info = ""
+    if contact_id:
+        contact_data = await run_query(lambda: _get_contact_details(agent_id, contact_id))
+        if isinstance(contact_data, dict) and "error" not in contact_data:
+            name = f"{contact_data.get('first_name', '')} {contact_data.get('last_name', '')}".strip()
+            contact_info = f"\nRecipient: {name} ({contact_data.get('email', to)})"
+
+    # Get agent name for signature
+    agent_name = "Agent"
+    try:
+        def _get_agent_name():
+            with get_conn() as conn:
+                cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+                cur.execute("SELECT name FROM users WHERE id = %s", (agent_id,))
+                row = cur.fetchone()
+                return row["name"] if row else "Agent"
+        agent_name = await run_query(_get_agent_name)
+    except Exception:
+        pass
+
+    import anthropic
+    from app.config import ANTHROPIC_API_KEY, ANTHROPIC_MODEL
+    client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+
+    prompt = (
+        f"Write a professional, friendly email for a real estate agent named {agent_name}.\n"
+        f"To: {to}{contact_info}\n"
+        f"Subject suggestion: {subject or '(generate an appropriate subject)'}\n"
+        f"Context: {context}\n\n"
+        "Return ONLY a JSON object with exactly these fields:\n"
+        '{"subject": "...", "body": "..."}\n'
+        "The body should be plain text, professional but warm. Include a sign-off with the agent's name. "
+        "Do NOT include any markdown, code fences, or explanation — just the JSON."
+    )
+
+    try:
+        response = await client.messages.create(
+            model=ANTHROPIC_MODEL,
+            max_tokens=1024,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = response.content[0].text.strip()
+        # Parse the JSON response
+        draft = json.loads(text)
+        return {
+            "draft": True,
+            "to": to,
+            "subject": draft.get("subject", subject or ""),
+            "body": draft.get("body", ""),
+        }
+    except json.JSONDecodeError:
+        # If Claude didn't return valid JSON, use the raw text as the body
+        return {
+            "draft": True,
+            "to": to,
+            "subject": subject or "",
+            "body": text if 'text' in dir() else "Failed to generate draft.",
+        }
+    except Exception as e:
+        logger.error("Draft email generation failed: %s", e)
+        return {"error": f"Failed to generate email draft: {str(e)}"}
+
+
+def check_gmail_status(agent_id: str) -> dict:
+    """Check if Gmail is connected for this agent. Used by agent.py for system prompt."""
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            "SELECT gmail_address, last_synced_at FROM gmail_tokens WHERE agent_id = %s",
+            (agent_id,),
+        )
+        row = cur.fetchone()
+        if row:
+            return {
+                "connected": True,
+                "gmail_address": row["gmail_address"],
+                "last_synced_at": row["last_synced_at"],
+            }
+        return {"connected": False}
+
+
+def get_recent_emails_for_contact(contact_id: str, agent_id: str, limit: int = 5) -> list:
+    """Get recent emails for a contact. Used by agent.py for contact-scoped context."""
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            """SELECT subject, snippet, from_name, is_outbound, gmail_date
+               FROM emails
+               WHERE contact_id = %s AND agent_id = %s
+               ORDER BY gmail_date DESC LIMIT %s""",
+            (contact_id, agent_id, limit),
+        )
+        return [dict(r) for r in cur.fetchall()]

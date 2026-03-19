@@ -86,7 +86,7 @@ func run() error {
 
 	// Protected — Clerk JWT + user sync required
 	r.Group(func(r chi.Router) {
-		r.Use(middleware.ClerkAuth(clerkClient))
+		r.Use(middleware.ClerkAuth(clerkClient, cfg.AIServiceSecret))
 		r.Use(middleware.UserSync(pool, clerkClient))
 
 		// Dashboard

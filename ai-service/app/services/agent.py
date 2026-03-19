@@ -19,7 +19,11 @@ import psycopg2.extras
 
 from app.config import ANTHROPIC_API_KEY, ANTHROPIC_MODEL
 from app.database import get_conn, run_query
-from app.tools import TOOL_DEFINITIONS, READ_TOOLS, WRITE_TOOLS, execute_read_tool, queue_write_tool
+from app.tools import (
+    TOOL_DEFINITIONS, READ_TOOLS, WRITE_TOOLS,
+    execute_read_tool, queue_write_tool,
+    check_gmail_status, get_recent_emails_for_contact,
+)
 
 MODEL = ANTHROPIC_MODEL
 MAX_TOOL_ROUNDS = 5  # safety limit
@@ -100,6 +104,15 @@ def _load_contact_context(contact_id: str, agent_id: str) -> str:
             for a in activities:
                 lines.append(f"  - [{a['type']}] {a['body']} ({a['created_at'].strftime('%b %d')})")
 
+        # Recent emails with this contact
+        emails = get_recent_emails_for_contact(contact_id, agent_id, limit=5)
+        if emails:
+            lines.append("Recent Emails:")
+            for e in emails:
+                direction = "Sent" if e.get("is_outbound") else "Received"
+                date_str = e["gmail_date"].strftime("%b %d") if e.get("gmail_date") else "?"
+                lines.append(f"  - [{direction}] {e.get('subject', '(no subject)')} ({date_str})")
+
         return "\n".join(lines)
 
 
@@ -118,7 +131,7 @@ def _save_assistant_message(conversation_id: str, agent_id: str, content: str, t
 # System prompts
 # ---------------------------------------------------------------------------
 
-def _build_system_prompt(agent_name: str, contact_context: str = "") -> str:
+def _build_system_prompt(agent_name: str, contact_context: str = "", gmail_status: dict | None = None) -> str:
     today = date.today()
     tomorrow = today + timedelta(days=1)
     day_name = today.strftime("%A")  # e.g. "Monday"
@@ -128,7 +141,8 @@ def _build_system_prompt(agent_name: str, contact_context: str = "") -> str:
         f"Today is {day_name}, {today.isoformat()}. Tomorrow is {tomorrow.isoformat()}. "
         "You have full access to their CRM data and can do everything they can do: "
         "search and view contacts, manage buyer profiles, create/edit/delete deals, "
-        "log activities, move deals through pipeline stages, and view analytics.\n\n"
+        "log activities, move deals through pipeline stages, view analytics, "
+        "and search/send emails via Gmail.\n\n"
         "IMPORTANT GUIDELINES:\n"
         "- Be action-oriented. When the user's intent is clear, use your tools immediately — "
         "do NOT ask clarifying questions you can answer yourself.\n"
@@ -143,8 +157,21 @@ def _build_system_prompt(agent_name: str, contact_context: str = "") -> str:
         "- Use your tools to answer questions with real data — never make up numbers.\n"
         "- For destructive actions (deleting contacts or deals), always confirm with the user first "
         "and warn them about what data will be lost.\n"
+        "- When asked to draft an email, use the draft_email tool to generate it. "
+        "The user can review and edit before sending.\n"
         "- Be concise. Skip preamble. Lead with action."
     )
+
+    # Gmail connection status
+    if gmail_status:
+        if gmail_status.get("connected"):
+            synced = gmail_status.get("last_synced_at")
+            sync_info = f", last synced {synced.strftime('%b %d %H:%M')}" if synced else ""
+            base += f"\n\nGmail: Connected ({gmail_status.get('gmail_address', 'unknown')}{sync_info}). "
+            base += "You can search emails, read threads, draft emails, and send emails."
+        else:
+            base += "\n\nGmail: Not connected. If the user asks about emails, tell them to connect Gmail in Settings first."
+
     return base + contact_context
 
 
@@ -176,7 +203,10 @@ async def run_agent(
             lambda: _load_contact_context(conversation_row["contact_id"], agent_id)
         )
 
-    system = _build_system_prompt(agent_name, contact_context)
+    # Check Gmail connection status for email tool awareness
+    gmail_status = await run_query(lambda: check_gmail_status(agent_id))
+
+    system = _build_system_prompt(agent_name, contact_context, gmail_status)
     messages = history + [{"role": "user", "content": user_message}]
 
     tool_calls_log: list = []

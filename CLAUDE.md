@@ -34,7 +34,7 @@ The Go backend is the single entry point for the frontend. AI requests are proxi
 | Dashboard (metrics, charts, activity feed) | **DONE** | Widgets render with real data; customization mode with layout save/load via API |
 | AI Chat Bubble (floating, global) | **DONE** | SSE streaming, tool call indicators, confirmation cards, contact-scoped |
 | AI Chat Full Page (`/dashboard/chat`) | **DONE** | Conversation list, delete, rename, streaming |
-| AI Tools (24 total: 12 read, 12 write) | **DONE** | All execute against real DB |
+| AI Tools (34 total: 18 read, 16 write) | **DONE** | All execute against real DB; Gmail tools proxy send via Go |
 | AI Profile Generation | **DONE** | Backend endpoint + frontend tab on contact detail |
 | Analytics | **DONE** | KPI cards, pipeline/activities/contacts charts, stage detail table |
 | Tasks Page | **DONE** | Full-stack with DB columns (due_date, priority, completed_at), API endpoints, and AI tools |
@@ -48,6 +48,7 @@ The Go backend is the single entry point for the frontend. AI requests are proxi
 | Semantic Search / Embeddings | **DONE** | OpenAI text-embedding-3-small, auto-embeds contacts/activities, semantic_search AI tool |
 | Communication Page | **DONE** | Unified call/email inbox grouped by contact, log call/email modal |
 | +New Quick Action | **DONE** | Dropdown in top bar: New Contact, New Deal, Log Activity, New Task |
+| Gmail AI Tools (Phase 3) | **DONE** | search_emails, get_email_thread, draft_email (read), send_email (write/proxy), email context + Gmail status in system prompt, email_sent workflow trigger |
 
 ## Database Schema
 
@@ -175,9 +176,9 @@ GET    /api/workflows/{id}/runs      — list execution history
 
 ## AI Agent Tools
 
-24 tools total. All execute directly against the database (not through Go backend).
+34 tools total. Most execute directly against the database; `send_email` proxies through Go backend.
 
-### Read Tools (12 — execute immediately)
+### Read Tools (18 — execute immediately)
 | Tool | Inputs | Returns |
 |------|--------|---------|
 | `get_dashboard_summary` | none | total_contacts, active_deals, pipeline_value, recent_activities_7d, closed_this_month |
@@ -192,8 +193,14 @@ GET    /api/workflows/{id}/runs      — list execution history
 | `get_analytics` | none | pipeline_by_stage, activity_counts, contact_sources |
 | `get_overdue_tasks` | limit? | tasks past due date and not completed |
 | `semantic_search` | query, limit? | vector similarity search across contacts and activities |
+| `search_properties` | query?, status?, property_type?, min_price?, max_price?, bedrooms?, limit? | property listings |
+| `get_property` | property_id | full property + linked deals |
+| `match_buyer_to_properties` | contact_id | buyer profile + ranked property matches |
+| `search_emails` | query?, contact_id?, limit? | emails matching subject/sender/snippet |
+| `get_email_thread` | thread_id, limit? | all emails in a Gmail thread |
+| `draft_email` | to, context, subject?, contact_id? | AI-generated email draft {to, subject, body} |
 
-### Write Tools (12 — require user confirmation)
+### Write Tools (16 — require user confirmation)
 | Tool | Required Inputs | Notes |
 |------|----------------|-------|
 | `create_contact` | first_name, last_name | optional: email, phone, source |
@@ -208,6 +215,10 @@ GET    /api/workflows/{id}/runs      — list execution history
 | `create_task` | body, due_date | optional: contact_id, priority |
 | `complete_task` | task_id | sets completed_at to NOW() |
 | `reschedule_task` | task_id, new_due_date | updates due_date |
+| `create_property` | address | optional: city, state, zip, price, bedrooms, etc. |
+| `update_property` | property_id | optional: any property field |
+| `delete_property` | property_id | unlinks deals (sets property_id NULL) |
+| `send_email` | to, subject, body | proxied via Go → Gmail API; optional: cc |
 
 ### Pending Actions
 Write tools persist a pending action row in `pending_actions` table. When a write tool is called, it queues a confirmation and sends a `confirmation` SSE event to the frontend. User clicks Confirm → `POST /ai/confirm` → action executes.
@@ -217,10 +228,11 @@ Pending actions are persisted in PostgreSQL (`pending_actions` table) with a 10-
 ### Agent Loop
 - Max 5 tool rounds per message (safety limit in `agent.py`)
 - Last 20 messages loaded as conversation context
-- Contact-scoped conversations pre-load contact details + buyer profile + recent activities into system prompt
+- Contact-scoped conversations pre-load contact details + buyer profile + recent activities + recent emails into system prompt
+- Gmail connection status injected into system prompt (connected/disconnected + last sync time)
 
 ### Workflow Automation
-Workflows are event-driven automations: trigger → steps → done. Supported triggers: `contact_created`, `deal_stage_changed`, `activity_logged`, `manual`. Step types: `create_task`, `log_activity`, `wait` (delay), `update_deal`, `ai_message`. After write tool confirmation, matching workflows fire in the background via `asyncio.create_task`. The engine lives in `ai-service/app/services/workflow_engine.py`.
+Workflows are event-driven automations: trigger → steps → done. Supported triggers: `contact_created`, `deal_stage_changed`, `activity_logged`, `email_sent`, `manual`. Step types: `create_task`, `log_activity`, `wait` (delay), `update_deal`, `ai_message`. After write tool confirmation, matching workflows fire in the background via `asyncio.create_task`. The engine lives in `ai-service/app/services/workflow_engine.py`.
 
 ## Project Structure
 

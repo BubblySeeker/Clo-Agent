@@ -33,6 +33,10 @@ export const toolLabel: Record<string, string> = {
   create_property: "Creating property",
   update_property: "Updating property",
   delete_property: "Deleting property",
+  search_emails: "Searching emails",
+  get_email_thread: "Loading email thread",
+  draft_email: "Drafting email",
+  send_email: "Sending email",
 };
 
 export const confirmLabel: Record<string, string> = {
@@ -51,6 +55,7 @@ export const confirmLabel: Record<string, string> = {
   create_property: "Add New Property",
   update_property: "Update Property",
   delete_property: "Delete Property",
+  send_email: "Send Email",
 };
 
 export function formatPreview(tool: string, preview: Record<string, unknown>): string {
@@ -98,6 +103,8 @@ export function formatPreview(tool: string, preview: Record<string, unknown>): s
       return `Property ${(preview.property_id as string)?.slice(0, 8)}… — ${Object.keys(preview).filter((k: string) => k !== "property_id").join(", ")}`;
     case "delete_property":
       return `Property ${(preview.property_id as string)?.slice(0, 8)}…`;
+    case "send_email":
+      return `Send email to ${preview.to}${preview.subject ? `: "${preview.subject}"` : ""}`;
     default:
       return Object.entries(preview).map(([k, v]) => `${k.replace(/_/g, " ")}: ${v}`).join(", ");
   }

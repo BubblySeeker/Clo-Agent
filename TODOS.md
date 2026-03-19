@@ -26,6 +26,18 @@
 **Priority:** P2
 **Depends on:** None
 
+### Refactor tool dispatchers to dict-based routing
+
+**What:** Convert the `execute_read_tool` and `execute_write_tool` if/elif chains in `ai-service/app/tools.py` to dict-based dispatchers (e.g., `READ_DISPATCHERS = {"search_contacts": _search_contacts, ...}`).
+
+**Why:** The chains are 15+ branches each and growing with every new tool. Adding a tool requires touching three places: TOOL_DEFINITIONS, WRITE_TOOLS set, and the if/elif chain. A dict dispatcher reduces this to two places and eliminates the risk of forgetting a branch.
+
+**Context:** Currently at ~18 read + ~16 write branches after Gmail Phase 3. The pattern is `if tool_name == "X": result = await run_query(lambda: _X(...))`. A dict maps tool_name → (handler_fn, required_args). The `send_email` tool is special (calls `_proxy_to_backend` instead of `run_query`) — the dispatcher needs to handle both sync-DB and async-HTTP tools.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** Gmail Phase 3 (adds the last 4 tools before refactor)
+
 ### API response validation with Zod
 
 **What:** Add Zod schemas to validate API responses at the frontend boundary for new endpoints (search, settings), and gradually extend to existing endpoints.
