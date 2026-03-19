@@ -48,6 +48,7 @@ The Go backend is the single entry point for the frontend. AI requests are proxi
 | Semantic Search / Embeddings | **DONE** | OpenAI text-embedding-3-small, auto-embeds contacts/activities, semantic_search AI tool |
 | Communication Page | **DONE** | Unified call/email inbox grouped by contact, log call/email modal |
 | +New Quick Action | **DONE** | Dropdown in top bar: New Contact, New Deal, Log Activity, New Task |
+| Client Portal | **DONE** | Magic-link auth, portal dashboard/deals/properties/timeline, agent portal settings, share modal on contact detail |
 
 ## Database Schema
 
@@ -64,6 +65,7 @@ The Go backend is the single entry point for the frontend. AI requests are proxi
 | `007_agent_settings.sql` | `users.settings JSONB` for commission, notification preferences |
 | `008_embeddings_unique.sql` | Unique index on `embeddings(source_type, source_id)` for upsert |
 | `009_workflows.sql` | `workflows` and `workflow_runs` tables with RLS for automation engine |
+| `015_client_portal.sql` | `portal_tokens` and `portal_settings` tables for client portal magic-link auth |
 
 | Table | Purpose | Key columns |
 |-------|---------|-------------|
@@ -80,6 +82,8 @@ The Go backend is the single entry point for the frontend. AI requests are proxi
 | `pending_actions` | AI write tool confirmations (10min TTL) | agent_id, tool, input (JSONB), expires_at |
 | `workflows` | Automation definitions | agent_id, name, trigger_type, trigger_config (JSONB), steps (JSONB), enabled |
 | `workflow_runs` | Execution history | workflow_id, agent_id, status, current_step, step_results (JSONB) |
+| `portal_tokens` | Client portal magic links | contact_id, agent_id, token (unique hex), expires_at (30 days), last_used_at |
+| `portal_settings` | Portal display settings per agent | agent_id (unique), show_deal_value, show_activities, show_properties, welcome_message, agent_phone, agent_email |
 
 **RLS**: All agent-scoped tables have row-level security. Every query runs `SET LOCAL app.current_agent_id = '<uuid>'` in a transaction. RLS policies auto-filter to the authenticated agent.
 
@@ -167,6 +171,24 @@ PATCH  /api/workflows/{id}           — update workflow
 DELETE /api/workflows/{id}           — delete workflow
 POST   /api/workflows/{id}/toggle    — toggle enabled/disabled
 GET    /api/workflows/{id}/runs      — list execution history
+```
+
+### Client Portal (Agent-Side, behind ClerkAuth)
+```
+POST   /api/portal/invite/{contact_id}     — generate magic link for a contact
+GET    /api/portal/invites                  — list all active portal invites
+DELETE /api/portal/invite/{token_id}        — revoke a portal link
+GET    /api/portal/settings                 — get portal display settings
+PATCH  /api/portal/settings                 — update portal settings
+```
+
+### Client Portal (Public, token-based auth)
+```
+GET    /api/portal/auth/{token}             — validate token, return contact + agent + settings
+GET    /api/portal/view/{token}/dashboard   — client dashboard (deals, activities, welcome)
+GET    /api/portal/view/{token}/deals       — deals with stage progress
+GET    /api/portal/view/{token}/properties  — properties linked to deals
+GET    /api/portal/view/{token}/timeline    — activity timeline
 ```
 
 ### Error & Pagination
