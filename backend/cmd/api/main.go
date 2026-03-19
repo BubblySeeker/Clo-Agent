@@ -168,6 +168,13 @@ func run() error {
 		r.Get("/api/analytics/activities", handlers.GetActivityAnalytics(pool))
 		r.Get("/api/analytics/contacts", handlers.GetContactAnalytics(pool))
 
+		// Enrichment
+		r.Post("/api/contacts/{id}/enrich", handlers.TriggerEnrichment(pool, cfg))
+		r.Get("/api/contacts/{id}/enrichments", handlers.ListEnrichments(pool))
+		r.Post("/api/contacts/{id}/enrichments/accept-all", handlers.AcceptAllEnrichments(pool))
+		r.Post("/api/enrichments/{id}/accept", handlers.AcceptEnrichment(pool))
+		r.Post("/api/enrichments/{id}/reject", handlers.RejectEnrichment(pool))
+
 		// Gmail
 		r.Post("/api/gmail/auth/init", handlers.GmailAuthInit(cfg))
 		r.Get("/api/gmail/status", handlers.GmailStatus(pool))

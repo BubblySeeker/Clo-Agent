@@ -48,6 +48,7 @@ The Go backend is the single entry point for the frontend. AI requests are proxi
 | Semantic Search / Embeddings | **DONE** | OpenAI text-embedding-3-small, auto-embeds contacts/activities, semantic_search AI tool |
 | Communication Page | **DONE** | Unified call/email inbox grouped by contact, log call/email modal |
 | +New Quick Action | **DONE** | Dropdown in top bar: New Contact, New Deal, Log Activity, New Task |
+| AI Contact Enrichment | **DONE** | Analyzes email history via Claude, extracts contact/buyer info, accept/reject UI on contact detail |
 
 ## Database Schema
 
@@ -64,6 +65,7 @@ The Go backend is the single entry point for the frontend. AI requests are proxi
 | `007_agent_settings.sql` | `users.settings JSONB` for commission, notification preferences |
 | `008_embeddings_unique.sql` | Unique index on `embeddings(source_type, source_id)` for upsert |
 | `009_workflows.sql` | `workflows` and `workflow_runs` tables with RLS for automation engine |
+| `013_enrichment.sql` | `contact_enrichments` table with RLS for AI email enrichment suggestions |
 
 | Table | Purpose | Key columns |
 |-------|---------|-------------|
@@ -80,6 +82,7 @@ The Go backend is the single entry point for the frontend. AI requests are proxi
 | `pending_actions` | AI write tool confirmations (10min TTL) | agent_id, tool, input (JSONB), expires_at |
 | `workflows` | Automation definitions | agent_id, name, trigger_type, trigger_config (JSONB), steps (JSONB), enabled |
 | `workflow_runs` | Execution history | workflow_id, agent_id, status, current_step, step_results (JSONB) |
+| `contact_enrichments` | AI-extracted contact info from emails | agent_id, contact_id, field_name, old_value, new_value, source, source_email_id, confidence, status (pending/accepted/rejected) |
 
 **RLS**: All agent-scoped tables have row-level security. Every query runs `SET LOCAL app.current_agent_id = '<uuid>'` in a transaction. RLS policies auto-filter to the authenticated agent.
 
@@ -167,6 +170,15 @@ PATCH  /api/workflows/{id}           — update workflow
 DELETE /api/workflows/{id}           — delete workflow
 POST   /api/workflows/{id}/toggle    — toggle enabled/disabled
 GET    /api/workflows/{id}/runs      — list execution history
+```
+
+### Enrichment
+```
+POST   /api/contacts/{id}/enrich              — trigger AI enrichment from email history (proxies to AI service)
+GET    /api/contacts/{id}/enrichments          — list enrichment suggestions (?status=pending|accepted|rejected)
+POST   /api/contacts/{id}/enrichments/accept-all — accept all pending enrichments for a contact
+POST   /api/enrichments/{id}/accept            — accept single enrichment (updates contact/buyer profile)
+POST   /api/enrichments/{id}/reject            — reject single enrichment
 ```
 
 ### Error & Pagination
@@ -283,6 +295,7 @@ Workflows are event-driven automations: trigger → steps → done. Supported tr
 │   │   ├── tools.py                              # 24 tools + pending_actions + workflow triggers
 │   │   ├── routes/chat.py                        # POST /ai/messages, /ai/confirm
 │   │   ├── routes/profiles.py                    # POST /ai/profiles/generate
+│   │   ├── routes/enrichment.py                   # POST /ai/enrich-contact (email analysis)
 │   │   ├── routes/search.py                      # POST /ai/search (semantic)
 │   │   ├── routes/workflows.py                   # POST /ai/workflows/trigger
 │   │   ├── routes/health.py                      # GET /health

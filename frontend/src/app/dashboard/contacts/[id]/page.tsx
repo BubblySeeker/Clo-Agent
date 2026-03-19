@@ -11,6 +11,14 @@ import { listDeals } from "@/lib/api/deals";
 import { getBuyerProfile, createBuyerProfile, updateBuyerProfile } from "@/lib/api/buyer-profiles";
 import type { CreateBuyerProfileBody } from "@/lib/api/buyer-profiles";
 import { getAIProfile, regenerateAIProfile } from "@/lib/api/ai-profiles";
+import {
+  triggerEnrichment,
+  listEnrichments,
+  acceptEnrichment,
+  rejectEnrichment,
+  acceptAllEnrichments,
+} from "@/lib/api/enrichment";
+import type { Enrichment } from "@/lib/api/enrichment";
 import { useUIStore } from "@/store/ui-store";
 import {
   Phone,
@@ -36,6 +44,10 @@ import {
   Plus,
   User,
   BedDouble,
+  Check,
+  Zap,
+  ChevronUp,
+  Loader2,
 } from "lucide-react";
 
 const typeIconColors: Record<string, { bg: string; color: string }> = {
@@ -113,6 +125,10 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
   // Delete confirmation modal
   const [showDelete, setShowDelete] = useState(false);
 
+  // Enrichment
+  const [showEnrichments, setShowEnrichments] = useState(false);
+  const [showEnrichHistory, setShowEnrichHistory] = useState(false);
+
   // Buyer profile editing
   const [editingBuyer, setEditingBuyer] = useState(false);
   const [buyerForm, setBuyerForm] = useState<{
@@ -189,6 +205,15 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
 
   const aiProfileNotFound = aiProfileError && (aiProfileError as Error).message?.includes("404");
 
+  const { data: enrichmentsData, refetch: refetchEnrichments } = useQuery({
+    queryKey: ["enrichments", id],
+    queryFn: async () => {
+      const token = await getToken();
+      return listEnrichments(token!, id);
+    },
+    enabled: showEnrichments,
+  });
+
   // --- Mutations ---
   const logMutation = useMutation({
     mutationFn: async () => {
@@ -261,6 +286,51 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["ai-profile", id] });
+    },
+  });
+
+  const enrichMutation = useMutation({
+    mutationFn: async () => {
+      const token = await getToken();
+      return triggerEnrichment(token!, id);
+    },
+    onSuccess: () => {
+      setShowEnrichments(true);
+      refetchEnrichments();
+    },
+  });
+
+  const acceptEnrichmentMutation = useMutation({
+    mutationFn: async (enrichmentId: string) => {
+      const token = await getToken();
+      return acceptEnrichment(token!, enrichmentId);
+    },
+    onSuccess: () => {
+      refetchEnrichments();
+      queryClient.invalidateQueries({ queryKey: ["contact", id] });
+      queryClient.invalidateQueries({ queryKey: ["buyer-profile", id] });
+    },
+  });
+
+  const rejectEnrichmentMutation = useMutation({
+    mutationFn: async (enrichmentId: string) => {
+      const token = await getToken();
+      return rejectEnrichment(token!, enrichmentId);
+    },
+    onSuccess: () => {
+      refetchEnrichments();
+    },
+  });
+
+  const acceptAllMutation = useMutation({
+    mutationFn: async () => {
+      const token = await getToken();
+      return acceptAllEnrichments(token!, id);
+    },
+    onSuccess: () => {
+      refetchEnrichments();
+      queryClient.invalidateQueries({ queryKey: ["contact", id] });
+      queryClient.invalidateQueries({ queryKey: ["buyer-profile", id] });
     },
   });
 
@@ -579,6 +649,128 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
               ))}
             </div>
           </div>
+
+          {/* AI Enrich Button */}
+          <button
+            onClick={() => {
+              if (!showEnrichments) {
+                setShowEnrichments(true);
+                enrichMutation.mutate();
+              } else {
+                setShowEnrichments(false);
+              }
+            }}
+            disabled={enrichMutation.isPending}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl text-white text-sm font-semibold disabled:opacity-60 transition-all shadow-sm"
+            style={{ background: "linear-gradient(135deg, #F59E0B, #D97706)" }}
+          >
+            {enrichMutation.isPending ? (
+              <Loader2 size={15} className="animate-spin" />
+            ) : (
+              <Sparkles size={15} />
+            )}
+            {enrichMutation.isPending ? "Analyzing Emails..." : showEnrichments ? "Hide Enrichments" : "AI Enrich from Emails"}
+          </button>
+
+          {/* Enrichment Results */}
+          {showEnrichments && enrichmentsData && (() => {
+            const pending = enrichmentsData.enrichments?.filter((e: Enrichment) => e.status === "pending") ?? [];
+            const processed = enrichmentsData.enrichments?.filter((e: Enrichment) => e.status !== "pending") ?? [];
+            return (
+              <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-bold flex items-center gap-2 text-sm" style={{ color: "#1E3A5F" }}>
+                    <Zap size={14} className="text-amber-500" />
+                    Suggestions ({pending.length})
+                  </h4>
+                  {pending.length > 1 && (
+                    <button
+                      onClick={() => acceptAllMutation.mutate()}
+                      disabled={acceptAllMutation.isPending}
+                      className="text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors text-white disabled:opacity-50"
+                      style={{ backgroundColor: "#22C55E" }}
+                    >
+                      {acceptAllMutation.isPending ? "Accepting..." : "Accept All"}
+                    </button>
+                  )}
+                </div>
+                {pending.length === 0 && (
+                  <p className="text-xs text-gray-400 text-center py-2">No pending suggestions.</p>
+                )}
+                <div className="flex flex-col gap-2">
+                  {pending.map((e: Enrichment) => (
+                    <div key={e.id} className="rounded-xl border border-gray-100 p-3 bg-gray-50/50">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-semibold text-gray-700 capitalize">
+                          {e.field_name.replace(/_/g, " ")}
+                        </span>
+                        <span
+                          className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                          style={{
+                            backgroundColor: e.confidence === "high" ? "#DCFCE7" : e.confidence === "medium" ? "#FEF3C7" : "#FED7AA",
+                            color: e.confidence === "high" ? "#16A34A" : e.confidence === "medium" ? "#D97706" : "#EA580C",
+                          }}
+                        >
+                          {e.confidence}
+                        </span>
+                      </div>
+                      <p className="text-sm font-medium text-gray-800 mb-1">{e.new_value}</p>
+                      {e.evidence && (
+                        <p className="text-[11px] text-gray-400 italic mb-2 line-clamp-2">&ldquo;{e.evidence}&rdquo;</p>
+                      )}
+                      <div className="flex gap-1.5">
+                        <button
+                          onClick={() => acceptEnrichmentMutation.mutate(e.id)}
+                          disabled={acceptEnrichmentMutation.isPending}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-white transition-colors"
+                          style={{ backgroundColor: "#22C55E" }}
+                        >
+                          <Check size={11} /> Accept
+                        </button>
+                        <button
+                          onClick={() => rejectEnrichmentMutation.mutate(e.id)}
+                          disabled={rejectEnrichmentMutation.isPending}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-gray-500 bg-gray-100 hover:bg-gray-200 transition-colors"
+                        >
+                          <X size={11} /> Reject
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* History */}
+                {processed.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <button
+                      onClick={() => setShowEnrichHistory(!showEnrichHistory)}
+                      className="flex items-center gap-1 text-xs font-semibold text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                      {showEnrichHistory ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                      Past enrichments ({processed.length})
+                    </button>
+                    {showEnrichHistory && (
+                      <div className="flex flex-col gap-1.5 mt-2">
+                        {processed.map((e: Enrichment) => (
+                          <div key={e.id} className="flex items-center justify-between py-1.5 px-2 rounded-lg bg-gray-50/50">
+                            <div className="flex items-center gap-2">
+                              {e.status === "accepted" ? (
+                                <CheckCircle2 size={12} className="text-green-500" />
+                              ) : (
+                                <XCircle size={12} className="text-red-400" />
+                              )}
+                              <span className="text-xs text-gray-600 capitalize">{e.field_name.replace(/_/g, " ")}</span>
+                            </div>
+                            <span className="text-xs text-gray-400">{e.new_value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Contact Info */}
           <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
