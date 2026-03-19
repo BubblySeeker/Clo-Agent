@@ -7,6 +7,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/api/client";
 import { getSettings, updateSettings, type AgentSettings } from "@/lib/api/settings";
 import { getGmailStatus, initGmailAuth, disconnectGmail, syncGmail } from "@/lib/api/gmail";
+import { getSMSStatus, configureSMS, disconnectSMS, syncSMS, type SMSStatus as SMSStatusType } from "@/lib/api/sms";
 import { Camera, Info, RefreshCw, CheckCircle, XCircle } from "lucide-react";
 
 const settingsSections = [
@@ -21,7 +22,6 @@ const settingsSections = [
 const otherIntegrations = [
   { id: "outlook", name: "Outlook", logo: "O", color: "#0078D4" },
   { id: "whatsapp", name: "WhatsApp", logo: "W", color: "#25D366" },
-  { id: "twilio", name: "Twilio", logo: "T", color: "#F22F46" },
   { id: "mls", name: "MLS Feed", logo: "M", color: "#6B7280" },
 ];
 
@@ -299,6 +299,63 @@ function IntegrationsSection() {
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
 
+  // Twilio SMS state
+  const [twilioSid, setTwilioSid] = useState("");
+  const [twilioToken, setTwilioToken] = useState("");
+  const [twilioPhone, setTwilioPhone] = useState("");
+  const [twilioToast, setTwilioToast] = useState<string | null>(null);
+
+  const { data: smsStatus, isLoading: smsLoading } = useQuery({
+    queryKey: ["sms-status"],
+    queryFn: async () => {
+      const token = await getToken();
+      if (!token) return { configured: false, phone_number: null, last_synced_at: null } as SMSStatusType;
+      return getSMSStatus(token);
+    },
+  });
+
+  const smsConfigured = smsStatus?.configured ?? false;
+
+  const smsConfigureMutation = useMutation({
+    mutationFn: async () => {
+      const token = await getToken();
+      if (!token) throw new Error("No token");
+      return configureSMS(token, { account_sid: twilioSid, auth_token: twilioToken, phone_number: twilioPhone });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sms-status"] });
+      setTwilioToast("Twilio SMS configured!");
+      setTwilioSid(""); setTwilioToken(""); setTwilioPhone("");
+      setTimeout(() => setTwilioToast(null), 4000);
+    },
+    onError: () => {
+      setTwilioToast("Failed to configure Twilio.");
+      setTimeout(() => setTwilioToast(null), 4000);
+    },
+  });
+
+  const smsSyncMutation = useMutation({
+    mutationFn: async () => {
+      const token = await getToken();
+      if (!token) throw new Error("No token");
+      return syncSMS(token);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sms-status"] });
+    },
+  });
+
+  const smsDisconnectMutation = useMutation({
+    mutationFn: async () => {
+      const token = await getToken();
+      if (!token) throw new Error("No token");
+      return disconnectSMS(token);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sms-status"] });
+    },
+  });
+
   const { data: gmailStatus, isLoading: gmailLoading } = useQuery({
     queryKey: ["gmail-status"],
     queryFn: async () => {
@@ -437,6 +494,93 @@ function IntegrationsSection() {
             )}
           </div>
         </div>
+
+        {/* Twilio SMS — dynamic */}
+        <div className="flex items-center justify-between p-4 rounded-2xl border border-gray-100 bg-gray-50">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm" style={{ backgroundColor: "#F22F46" }}>
+              T
+            </div>
+            <div>
+              <p className="text-sm font-bold text-gray-800">Twilio SMS</p>
+              {smsLoading ? (
+                <p className="text-xs text-gray-400">Checking status...</p>
+              ) : smsConfigured ? (
+                <div>
+                  <p className="text-xs text-green-600 font-medium">{smsStatus?.phone_number}</p>
+                  {smsStatus?.last_synced_at && <p className="text-[10px] text-gray-400">Last synced: {new Date(smsStatus.last_synced_at).toLocaleString()}</p>}
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400">Connect to send and receive SMS</p>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {smsConfigured ? (
+              <>
+                <button
+                  onClick={() => smsSyncMutation.mutate()}
+                  disabled={smsSyncMutation.isPending}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#F22F46]/10 text-[#F22F46] hover:bg-[#F22F46]/20 transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw size={12} className={smsSyncMutation.isPending ? "animate-spin" : ""} />
+                  {smsSyncMutation.isPending ? "Syncing..." : "Sync"}
+                </button>
+                <button
+                  onClick={() => {
+                    if (confirm("Disconnect Twilio? This will remove all SMS messages.")) {
+                      smsDisconnectMutation.mutate();
+                    }
+                  }}
+                  disabled={smsDisconnectMutation.isPending}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
+                >
+                  {smsDisconnectMutation.isPending ? "Disconnecting..." : "Disconnect"}
+                </button>
+              </>
+            ) : null}
+          </div>
+        </div>
+
+        {/* Twilio config form (when not configured) */}
+        {!smsConfigured && !smsLoading && (
+          <div className="p-4 rounded-2xl border border-dashed border-gray-200 bg-white">
+            <div className="flex flex-col gap-3">
+              <div>
+                <label className="text-xs font-semibold text-gray-500 block mb-1">Account SID</label>
+                <input value={twilioSid} onChange={(e) => setTwilioSid(e.target.value)} placeholder="AC..."
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm outline-none focus:border-[#F22F46] bg-gray-50" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-500 block mb-1">Auth Token</label>
+                <input value={twilioToken} onChange={(e) => setTwilioToken(e.target.value)} type="password" placeholder="Your auth token"
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm outline-none focus:border-[#F22F46] bg-gray-50" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-500 block mb-1">Twilio Phone Number</label>
+                <input value={twilioPhone} onChange={(e) => setTwilioPhone(e.target.value)} placeholder="+15551234567"
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm outline-none focus:border-[#F22F46] bg-gray-50" />
+              </div>
+              <button
+                onClick={() => smsConfigureMutation.mutate()}
+                disabled={!twilioSid || !twilioToken || !twilioPhone || smsConfigureMutation.isPending}
+                className="w-full py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-50 transition-opacity"
+                style={{ backgroundColor: "#F22F46" }}
+              >
+                {smsConfigureMutation.isPending ? "Connecting..." : "Connect Twilio"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {twilioToast && (
+          <div className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${
+            twilioToast.includes("configured") ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"
+          }`}>
+            {twilioToast.includes("configured") ? <CheckCircle size={14} /> : <XCircle size={14} />}
+            {twilioToast}
+          </div>
+        )}
 
         {/* Other integrations — Coming Soon */}
         {otherIntegrations.map((intg) => (

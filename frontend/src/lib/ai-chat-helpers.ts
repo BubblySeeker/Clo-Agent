@@ -33,6 +33,9 @@ export const toolLabel: Record<string, string> = {
   create_property: "Creating property",
   update_property: "Updating property",
   delete_property: "Deleting property",
+  search_sms: "Searching messages",
+  get_sms_conversation: "Loading conversation",
+  send_sms: "Sending text",
 };
 
 export const confirmLabel: Record<string, string> = {
@@ -51,6 +54,7 @@ export const confirmLabel: Record<string, string> = {
   create_property: "Add New Property",
   update_property: "Update Property",
   delete_property: "Delete Property",
+  send_sms: "Send Text Message",
 };
 
 export function formatPreview(tool: string, preview: Record<string, unknown>): string {
@@ -98,7 +102,13 @@ export function formatPreview(tool: string, preview: Record<string, unknown>): s
       return `Property ${(preview.property_id as string)?.slice(0, 8)}… — ${Object.keys(preview).filter((k: string) => k !== "property_id").join(", ")}`;
     case "delete_property":
       return `Property ${(preview.property_id as string)?.slice(0, 8)}…`;
+    case "send_sms":
+      return `Send SMS to ${preview.to}: "${truncateStr(String(preview.body || ""), 60)}"`;
     default:
       return Object.entries(preview).map(([k, v]) => `${k.replace(/_/g, " ")}: ${v}`).join(", ");
   }
+}
+
+function truncateStr(s: string, max: number): string {
+  return s.length <= max ? s : s.slice(0, max - 3) + "...";
 }

@@ -34,7 +34,7 @@ The Go backend is the single entry point for the frontend. AI requests are proxi
 | Dashboard (metrics, charts, activity feed) | **DONE** | Widgets render with real data; customization mode with layout save/load via API |
 | AI Chat Bubble (floating, global) | **DONE** | SSE streaming, tool call indicators, confirmation cards, contact-scoped |
 | AI Chat Full Page (`/dashboard/chat`) | **DONE** | Conversation list, delete, rename, streaming |
-| AI Tools (24 total: 12 read, 12 write) | **DONE** | All execute against real DB |
+| AI Tools (27 total: 14 read, 13 write) | **DONE** | All execute against real DB |
 | AI Profile Generation | **DONE** | Backend endpoint + frontend tab on contact detail |
 | Analytics | **DONE** | KPI cards, pipeline/activities/contacts charts, stage detail table |
 | Tasks Page | **DONE** | Full-stack with DB columns (due_date, priority, completed_at), API endpoints, and AI tools |
@@ -46,8 +46,9 @@ The Go backend is the single entry point for the frontend. AI requests are proxi
 | Buyer Profile Frontend | **DONE** | Tab on contact detail page with create/edit forms |
 | AI Profile Frontend | **DONE** | Tab on contact detail page with summary + regenerate |
 | Semantic Search / Embeddings | **DONE** | OpenAI text-embedding-3-small, auto-embeds contacts/activities, semantic_search AI tool |
-| Communication Page | **DONE** | Unified call/email inbox grouped by contact, log call/email modal |
+| Communication Page | **DONE** | Unified call/email/SMS inbox grouped by contact, log call/email modal, SMS compose |
 | +New Quick Action | **DONE** | Dropdown in top bar: New Contact, New Deal, Log Activity, New Task |
+| SMS Integration (Twilio) | **DONE** | Configure, send, receive, sync, contact matching, AI tools, webhook |
 
 ## Database Schema
 
@@ -64,6 +65,7 @@ The Go backend is the single entry point for the frontend. AI requests are proxi
 | `007_agent_settings.sql` | `users.settings JSONB` for commission, notification preferences |
 | `008_embeddings_unique.sql` | Unique index on `embeddings(source_type, source_id)` for upsert |
 | `009_workflows.sql` | `workflows` and `workflow_runs` tables with RLS for automation engine |
+| `014_sms.sql` | `twilio_config` and `sms_messages` tables with RLS for SMS integration |
 
 | Table | Purpose | Key columns |
 |-------|---------|-------------|
@@ -80,6 +82,8 @@ The Go backend is the single entry point for the frontend. AI requests are proxi
 | `pending_actions` | AI write tool confirmations (10min TTL) | agent_id, tool, input (JSONB), expires_at |
 | `workflows` | Automation definitions | agent_id, name, trigger_type, trigger_config (JSONB), steps (JSONB), enabled |
 | `workflow_runs` | Execution history | workflow_id, agent_id, status, current_step, step_results (JSONB) |
+| `twilio_config` | Twilio SMS credentials (1:1 with agent) | agent_id (UNIQUE), account_sid, auth_token, phone_number, last_synced_at |
+| `sms_messages` | SMS message history | agent_id, twilio_sid, contact_id (FK, nullable), from_number, to_number, body, status, direction, sent_at |
 
 **RLS**: All agent-scoped tables have row-level security. Every query runs `SET LOCAL app.current_agent_id = '<uuid>'` in a transaction. RLS policies auto-filter to the authenticated agent.
 
@@ -169,15 +173,28 @@ POST   /api/workflows/{id}/toggle    — toggle enabled/disabled
 GET    /api/workflows/{id}/runs      — list execution history
 ```
 
+### SMS / Twilio
+```
+POST   /api/sms/configure               — save Twilio credentials {account_sid, auth_token, phone_number}
+GET    /api/sms/status                   — check if SMS is configured
+DELETE /api/sms/disconnect               — remove Twilio config + messages
+POST   /api/sms/send                     — send SMS via Twilio {to, body, contact_id?}
+GET    /api/sms/messages                 — list SMS messages (?contact_id, ?search, ?page, ?limit)
+GET    /api/sms/messages/{id}            — get single message
+GET    /api/sms/conversations            — list SMS grouped by contact/phone number
+POST   /api/sms/sync                     — pull recent messages from Twilio API
+POST   /api/sms/webhook                  — Twilio inbound webhook (PUBLIC, validates X-Twilio-Signature)
+```
+
 ### Error & Pagination
 - Errors: `{"error": "message"}` with status 400/401/403/404/500
 - Pagination: `?page=1&limit=25`, response includes `"total"` count
 
 ## AI Agent Tools
 
-24 tools total. All execute directly against the database (not through Go backend).
+27 tools total. All execute directly against the database (not through Go backend), except `send_sms` which proxies through Go → Twilio.
 
-### Read Tools (12 — execute immediately)
+### Read Tools (14 — execute immediately)
 | Tool | Inputs | Returns |
 |------|--------|---------|
 | `get_dashboard_summary` | none | total_contacts, active_deals, pipeline_value, recent_activities_7d, closed_this_month |
@@ -192,8 +209,10 @@ GET    /api/workflows/{id}/runs      — list execution history
 | `get_analytics` | none | pipeline_by_stage, activity_counts, contact_sources |
 | `get_overdue_tasks` | limit? | tasks past due date and not completed |
 | `semantic_search` | query, limit? | vector similarity search across contacts and activities |
+| `search_sms` | query?, contact_id?, limit? | SMS messages matching body text or phone number |
+| `get_sms_conversation` | contact_id or phone_number, limit? | chronological SMS thread with contact/number |
 
-### Write Tools (12 — require user confirmation)
+### Write Tools (13 — require user confirmation)
 | Tool | Required Inputs | Notes |
 |------|----------------|-------|
 | `create_contact` | first_name, last_name | optional: email, phone, source |
@@ -208,6 +227,7 @@ GET    /api/workflows/{id}/runs      — list execution history
 | `create_task` | body, due_date | optional: contact_id, priority |
 | `complete_task` | task_id | sets completed_at to NOW() |
 | `reschedule_task` | task_id, new_due_date | updates due_date |
+| `send_sms` | to, body | optional: contact_id; proxies through Go backend → Twilio API |
 
 ### Pending Actions
 Write tools persist a pending action row in `pending_actions` table. When a write tool is called, it queues a confirmation and sends a `confirmation` SSE event to the frontend. User clicks Confirm → `POST /ai/confirm` → action executes.
@@ -258,6 +278,7 @@ Workflows are event-driven automations: trigger → steps → done. Supported tr
 │   │   │   ├── api/dashboard.ts                  # Dashboard summary + layout
 │   │   │   ├── api/settings.ts                   # Settings API functions
 │   │   │   ├── api/workflows.ts                  # Workflow CRUD API functions
+│   │   │   ├── api/sms.ts                        # SMS/Twilio API functions
 │   │   │   ├── ai-chat-helpers.ts                # Shared tool labels, confirm labels, formatPreview
 │   │   │   └── utils.ts
 │   │   ├── store/ui-store.ts                     # Zustand (sidebar, chat state)
@@ -270,7 +291,7 @@ Workflows are event-driven automations: trigger → steps → done. Supported tr
 │   │   ├── config/config.go                      # Env var loading
 │   │   ├── database/postgres.go                  # Connection pool
 │   │   ├── database/rls.go                       # BeginWithRLS helper
-│   │   ├── handlers/                             # 14 handler files (contacts, deals, workflows, etc.)
+│   │   ├── handlers/                             # 15 handler files (contacts, deals, workflows, sms, etc.)
 │   │   └── middleware/                            # auth.go, cors.go, user_sync.go
 │   ├── migrations/                               # 001-009 SQL files
 │   └── go.mod
@@ -280,7 +301,7 @@ Workflows are event-driven automations: trigger → steps → done. Supported tr
 │   │   ├── main.py                               # FastAPI app
 │   │   ├── config.py                             # Env vars
 │   │   ├── database.py                           # psycopg2 pool + async wrapper
-│   │   ├── tools.py                              # 24 tools + pending_actions + workflow triggers
+│   │   ├── tools.py                              # 27 tools + pending_actions + workflow triggers
 │   │   ├── routes/chat.py                        # POST /ai/messages, /ai/confirm
 │   │   ├── routes/profiles.py                    # POST /ai/profiles/generate
 │   │   ├── routes/search.py                      # POST /ai/search (semantic)

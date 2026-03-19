@@ -6,17 +6,19 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { listAllActivities, createActivity, type Activity } from "@/lib/api/activities";
 import { listContacts } from "@/lib/api/contacts";
 import { getGmailStatus, syncGmail, listEmails, getEmail, sendEmail, markEmailRead, type Email } from "@/lib/api/gmail";
-import { Phone, Mail, Search, Plus, X, User, ChevronDown, ChevronUp, ChevronRight, RefreshCw, Send, Reply, Star, Paperclip } from "lucide-react";
+import { getSMSStatus, syncSMS, listSMSMessages, sendSMS, type SMSMessage } from "@/lib/api/sms";
+import { Phone, Mail, Search, Plus, X, User, ChevronDown, ChevronUp, ChevronRight, RefreshCw, Send, Reply, Star, Paperclip, MessageSquare } from "lucide-react";
 
 const typeColors: Record<string, { bg: string; color: string }> = {
   call: { bg: "#EFF6FF", color: "#0EA5E9" },
   email: { bg: "#F0FDF4", color: "#22C55E" },
   gmail: { bg: "#FEF2F2", color: "#EA4335" },
+  sms: { bg: "#FFF7ED", color: "#F22F46" },
 };
 
 interface CommItem {
   id: string;
-  type: "call" | "email" | "gmail_in" | "gmail_out";
+  type: "call" | "email" | "gmail_in" | "gmail_out" | "sms_in" | "sms_out";
   contact_id: string | null;
   contact_name: string;
   body: string;
@@ -26,6 +28,7 @@ interface CommItem {
   from_name?: string;
   to_addresses?: string[];
   email_data?: Email;
+  sms_data?: SMSMessage;
   groupKey: string;
   groupName: string;
 }
@@ -137,7 +140,7 @@ export default function CommunicationPage() {
   const { getToken } = useAuth();
   const queryClient = useQueryClient();
 
-  const [filter, setFilter] = useState<"all" | "call" | "email" | "gmail">("all");
+  const [filter, setFilter] = useState<"all" | "call" | "email" | "gmail" | "sms">("all");
   const [search, setSearch] = useState("");
   const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -162,6 +165,11 @@ export default function CommunicationPage() {
   const [replyCc, setReplyCc] = useState("");
   const [composeCc, setComposeCc] = useState("");
 
+  // SMS compose
+  const [showSMSCompose, setShowSMSCompose] = useState(false);
+  const [smsTo, setSmsTo] = useState("");
+  const [smsBody, setSmsBody] = useState("");
+
   // Track which thread items are expanded (by item id); most recent is expanded by default
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
 
@@ -182,6 +190,36 @@ export default function CommunicationPage() {
   });
 
   const gmailConnected = gmailStatusData?.connected ?? false;
+
+  // SMS status
+  const { data: smsStatusData } = useQuery({
+    queryKey: ["sms-status"],
+    queryFn: async () => {
+      const token = await getToken();
+      if (!token) return { configured: false, phone_number: null, last_synced_at: null };
+      return getSMSStatus(token);
+    },
+  });
+
+  const smsConfigured = smsStatusData?.configured ?? false;
+
+  // Auto-sync SMS on mount if configured and last sync > 5 min ago
+  useEffect(() => {
+    if (!smsConfigured) return;
+    if (smsStatusData?.last_synced_at) {
+      const elapsed = Date.now() - new Date(smsStatusData.last_synced_at).getTime();
+      if (elapsed < 5 * 60 * 1000) return;
+    }
+    (async () => {
+      const token = await getToken();
+      if (token) {
+        await syncSMS(token);
+        queryClient.invalidateQueries({ queryKey: ["sms-messages"] });
+        queryClient.invalidateQueries({ queryKey: ["sms-status"] });
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [smsConfigured]);
 
   // Auto-sync on mount if connected and last sync > 5 min ago
   useEffect(() => {
@@ -220,6 +258,17 @@ export default function CommunicationPage() {
     },
     enabled: gmailConnected,
     refetchInterval: 60000,
+  });
+
+  const { data: smsData } = useQuery({
+    queryKey: ["sms-messages"],
+    queryFn: async () => {
+      const token = await getToken();
+      if (!token) return { messages: [], total: 0 };
+      return listSMSMessages(token, { limit: 100 });
+    },
+    enabled: smsConfigured,
+    refetchInterval: 30000,
   });
 
   const { data: contactsData } = useQuery({
@@ -282,14 +331,43 @@ export default function CommunicationPage() {
       });
     }
 
+    // SMS messages
+    const smsMessages = smsData?.messages ?? [];
+    for (const s of smsMessages) {
+      const contact = s.contact_id ? contactMap[s.contact_id] : null;
+      const isOut = s.direction === "outbound";
+      const otherNumber = isOut ? s.to_number : s.from_number;
+
+      let groupKey: string;
+      let groupName: string;
+      if (s.contact_id && contact) {
+        groupKey = s.contact_id;
+        groupName = `${contact.first_name} ${contact.last_name}`;
+      } else if (s.contact_name) {
+        groupKey = s.contact_id || `sms-${otherNumber}`;
+        groupName = s.contact_name;
+      } else {
+        groupKey = `sms-${otherNumber}`;
+        groupName = otherNumber;
+      }
+
+      items.push({
+        id: `sms-${s.id}`, type: isOut ? "sms_out" : "sms_in",
+        contact_id: s.contact_id, contact_name: groupName,
+        body: s.body, date: s.sent_at,
+        sms_data: s, groupKey, groupName,
+      });
+    }
+
     return items;
-  }, [activitiesData, emailsData, contactMap]);
+  }, [activitiesData, emailsData, smsData, contactMap]);
 
   const filteredItems = useMemo(() => {
     return allItems.filter((item) => {
       if (filter === "call") return item.type === "call";
       if (filter === "email") return item.type === "email";
       if (filter === "gmail") return item.type === "gmail_in" || item.type === "gmail_out";
+      if (filter === "sms") return item.type === "sms_in" || item.type === "sms_out";
       return true;
     });
   }, [allItems, filter]);
@@ -445,9 +523,25 @@ export default function CommunicationPage() {
     },
   });
 
+  const smsSendMutation = useMutation({
+    mutationFn: async () => {
+      const token = await getToken();
+      if (!token) throw new Error("No token");
+      const contactMatch = contacts.find((c) => c.phone && c.phone.replace(/\D/g, "").slice(-10) === smsTo.replace(/\D/g, "").slice(-10));
+      return sendSMS(token, { to: smsTo, body: smsBody, contact_id: contactMatch?.id });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sms-messages"] });
+      setShowSMSCompose(false);
+      setSmsTo("");
+      setSmsBody("");
+    },
+  });
+
   function getItemColors(type: CommItem["type"]) {
     if (type === "call") return typeColors.call;
     if (type === "gmail_in" || type === "gmail_out") return typeColors.gmail;
+    if (type === "sms_in" || type === "sms_out") return typeColors.sms;
     return typeColors.email;
   }
 
@@ -456,6 +550,8 @@ export default function CommunicationPage() {
     if (type === "email") return "Email";
     if (type === "gmail_in") return "Received";
     if (type === "gmail_out") return "Sent";
+    if (type === "sms_in") return "SMS In";
+    if (type === "sms_out") return "SMS Out";
     return "Email";
   }
 
@@ -564,6 +660,12 @@ export default function CommunicationPage() {
                   <Send size={14} />
                 </button>
               )}
+              {smsConfigured && (
+                <button onClick={() => setShowSMSCompose(true)}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#F22F46]/10 text-[#F22F46] hover:bg-[#F22F46]/20 transition-colors" title="New SMS">
+                  <MessageSquare size={14} />
+                </button>
+              )}
               <button onClick={() => setShowLog(true)}
                 className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#0EA5E9]/10 text-[#0EA5E9] hover:bg-[#0EA5E9]/20 transition-colors">
                 <Plus size={16} />
@@ -585,10 +687,10 @@ export default function CommunicationPage() {
           </div>
 
           <div className="flex gap-1">
-            {(["all", "call", "email", ...(gmailConnected ? ["gmail" as const] : [])] as const).map((f) => (
+            {(["all", "call", "email", ...(gmailConnected ? ["gmail" as const] : []), ...(smsConfigured ? ["sms" as const] : [])] as const).map((f) => (
               <button key={f} onClick={() => setFilter(f as typeof filter)}
                 className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors ${filter === f ? "bg-[#0EA5E9]/10 text-[#0EA5E9]" : "text-gray-400 hover:text-gray-600"}`}>
-                {f === "all" ? "All" : f === "call" ? "Calls" : f === "email" ? "Manual" : "Gmail"}
+                {f === "all" ? "All" : f === "call" ? "Calls" : f === "email" ? "Manual" : f === "gmail" ? "Gmail" : "SMS"}
               </button>
             ))}
           </div>
@@ -957,6 +1059,37 @@ export default function CommunicationPage() {
               <Send size={14} /> {composeMutation.isPending ? "Sending..." : "Send Email"}
             </button>
             {composeMutation.isError && <p className="text-xs text-red-500 mt-2">Failed to send. Try again.</p>}
+          </div>
+        </div>
+      )}
+
+      {/* SMS Compose modal */}
+      {showSMSCompose && (
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="font-bold text-gray-800">New SMS</h3>
+              <button onClick={() => setShowSMSCompose(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+            </div>
+            <div className="flex flex-col gap-4 mb-5">
+              <div>
+                <label className="text-xs font-semibold text-gray-500 block mb-1">To (Phone Number)</label>
+                <input value={smsTo} onChange={(e) => setSmsTo(e.target.value)} placeholder="+15551234567"
+                  className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#F22F46] bg-gray-50" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-500 block mb-1">Message</label>
+                <textarea value={smsBody} onChange={(e) => setSmsBody(e.target.value)} placeholder="Type your message..." rows={4}
+                  className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#F22F46] bg-gray-50 resize-none" />
+              </div>
+            </div>
+            <button onClick={() => smsSendMutation.mutate()}
+              disabled={!smsTo || !smsBody || smsSendMutation.isPending}
+              className="w-full py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2"
+              style={{ backgroundColor: "#F22F46" }}>
+              <MessageSquare size={14} /> {smsSendMutation.isPending ? "Sending..." : "Send SMS"}
+            </button>
+            {smsSendMutation.isError && <p className="text-xs text-red-500 mt-2">Failed to send. Try again.</p>}
           </div>
         </div>
       )}

@@ -83,6 +83,7 @@ func run() error {
 	// Public
 	r.Get("/health", handlers.Health)
 	r.Get("/api/auth/google/callback", handlers.GmailAuthCallback(pool, cfg))
+	r.Post("/api/sms/webhook", handlers.SMSWebhook(pool))
 
 	// Protected — Clerk JWT + user sync required
 	r.Group(func(r chi.Router) {
@@ -177,6 +178,16 @@ func run() error {
 		r.Get("/api/gmail/emails/{id}", handlers.GetEmail(pool))
 		r.Post("/api/gmail/send", handlers.SendEmail(pool, cfg))
 		r.Patch("/api/gmail/emails/{id}/read", handlers.MarkEmailRead(pool, cfg))
+
+		// SMS / Twilio
+		r.Post("/api/sms/configure", handlers.SMSConfigure(pool))
+		r.Get("/api/sms/status", handlers.SMSStatus(pool))
+		r.Delete("/api/sms/disconnect", handlers.SMSDisconnect(pool))
+		r.Post("/api/sms/send", handlers.SMSSend(pool))
+		r.Get("/api/sms/messages", handlers.ListSMSMessages(pool))
+		r.Get("/api/sms/messages/{id}", handlers.GetSMSMessage(pool))
+		r.Get("/api/sms/conversations", handlers.ListSMSConversations(pool))
+		r.Post("/api/sms/sync", handlers.SMSSync(pool))
 	})
 
 	// -------------------------------------------------------------------------

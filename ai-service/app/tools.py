@@ -425,6 +425,45 @@ TOOL_DEFINITIONS = [
             "required": ["property_id"],
         },
     },
+    {
+        "name": "search_sms",
+        "description": "Search SMS messages by body text, phone number, or contact. Returns matching text messages.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search term to match against message body or phone number"},
+                "contact_id": {"type": "string", "description": "Filter by contact UUID"},
+                "limit": {"type": "integer", "description": "Max results (default 20)"},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "get_sms_conversation",
+        "description": "Get all SMS messages with a specific contact or phone number, ordered chronologically.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "contact_id": {"type": "string", "description": "UUID of the contact"},
+                "phone_number": {"type": "string", "description": "Phone number (if no contact_id)"},
+                "limit": {"type": "integer", "description": "Max results (default 50)"},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "send_sms",
+        "description": "Send an SMS text message to a phone number via Twilio. Requires user confirmation before sending.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "to": {"type": "string", "description": "Phone number to send to (E.164 format preferred, e.g. +15551234567)"},
+                "body": {"type": "string", "description": "The text message content"},
+                "contact_id": {"type": "string", "description": "Optional contact UUID to associate with"},
+            },
+            "required": ["to", "body"],
+        },
+    },
 ]
 
 READ_TOOLS = {
@@ -443,6 +482,8 @@ READ_TOOLS = {
     "search_properties",
     "get_property",
     "match_buyer_to_properties",
+    "search_sms",
+    "get_sms_conversation",
 }
 
 WRITE_TOOLS = {
@@ -461,6 +502,7 @@ WRITE_TOOLS = {
     "create_property",
     "update_property",
     "delete_property",
+    "send_sms",
 }
 
 # ---------------------------------------------------------------------------
@@ -498,6 +540,10 @@ async def execute_read_tool(tool_name: str, tool_input: dict, agent_id: str) -> 
         return await run_query(lambda: _get_property(agent_id, tool_input["property_id"]))
     elif tool_name == "match_buyer_to_properties":
         return await run_query(lambda: _match_buyer_to_properties(agent_id, tool_input["contact_id"]))
+    elif tool_name == "search_sms":
+        return await run_query(lambda: _search_sms(agent_id, tool_input))
+    elif tool_name == "get_sms_conversation":
+        return await run_query(lambda: _get_sms_conversation(agent_id, tool_input))
     else:
         return {"error": f"Unknown tool: {tool_name}"}
 
@@ -774,6 +820,83 @@ async def _embed_async(source_type: str, source_id: str, agent_id: str) -> None:
         logger.warning("Embedding generation failed for %s/%s: %s", source_type, source_id, e)
 
 
+def _search_sms(agent_id: str, inp: dict) -> list:
+    query = inp.get("query", "")
+    contact_id = inp.get("contact_id")
+    limit = inp.get("limit", 20)
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        where_parts = ["s.agent_id = %s"]
+        params: list = [agent_id]
+        if query:
+            params.extend([f"%{query}%", f"%{query}%", f"%{query}%"])
+            where_parts.append("(s.body ILIKE %s OR s.from_number ILIKE %s OR s.to_number ILIKE %s)")
+        if contact_id:
+            params.append(contact_id)
+            where_parts.append("s.contact_id = %s")
+        where_clause = " AND ".join(where_parts)
+        params.append(limit)
+        cur.execute(
+            f"""SELECT s.id, s.contact_id, s.from_number, s.to_number, s.body, s.direction, s.status, s.sent_at,
+                       COALESCE(c.first_name || ' ' || c.last_name, '') as contact_name
+                FROM sms_messages s
+                LEFT JOIN contacts c ON c.id = s.contact_id
+                WHERE {where_clause}
+                ORDER BY s.sent_at DESC LIMIT %s""",
+            params,
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+
+def _get_sms_conversation(agent_id: str, inp: dict) -> list | dict:
+    contact_id = inp.get("contact_id")
+    phone_number = inp.get("phone_number")
+    limit = inp.get("limit", 50)
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        if contact_id:
+            cur.execute(
+                """SELECT s.id, s.from_number, s.to_number, s.body, s.direction, s.status, s.sent_at
+                   FROM sms_messages s
+                   WHERE s.agent_id = %s AND s.contact_id = %s
+                   ORDER BY s.sent_at ASC LIMIT %s""",
+                (agent_id, contact_id, limit),
+            )
+        elif phone_number:
+            cur.execute(
+                """SELECT s.id, s.from_number, s.to_number, s.body, s.direction, s.status, s.sent_at
+                   FROM sms_messages s
+                   WHERE s.agent_id = %s AND (s.from_number = %s OR s.to_number = %s)
+                   ORDER BY s.sent_at ASC LIMIT %s""",
+                (agent_id, phone_number, phone_number, limit),
+            )
+        else:
+            return {"error": "contact_id or phone_number is required"}
+        return [dict(r) for r in cur.fetchall()]
+
+
+async def _send_sms_via_backend(agent_id: str, inp: dict) -> dict:
+    """Send SMS by proxying through the Go backend."""
+    import httpx
+    from app.config import BACKEND_URL, AI_SERVICE_SECRET
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{BACKEND_URL}/api/sms/send",
+                json={"to": inp["to"], "body": inp["body"], "contact_id": inp.get("contact_id")},
+                headers={
+                    "X-AI-Service-Secret": AI_SERVICE_SECRET,
+                    "X-Agent-ID": agent_id,
+                },
+                timeout=15.0,
+            )
+            if resp.status_code >= 400:
+                return {"error": f"Failed to send SMS: {resp.text}"}
+            return resp.json()
+    except Exception as e:
+        return {"error": f"SMS send failed: {str(e)}"}
+
+
 # ---------------------------------------------------------------------------
 # Workflow trigger hooks (fire-and-forget)
 # ---------------------------------------------------------------------------
@@ -782,6 +905,7 @@ _TOOL_TO_TRIGGER = {
     "create_contact": "contact_created",
     "log_activity": "activity_logged",
     "update_deal": "deal_stage_changed",
+    "send_sms": "sms_sent",
 }
 
 
@@ -896,6 +1020,8 @@ async def execute_write_tool(pending_id: str) -> dict:
         result = await run_query(lambda: _update_property(agent_id, inp))
     elif tool_name == "delete_property":
         result = await run_query(lambda: _delete_property(agent_id, inp))
+    elif tool_name == "send_sms":
+        result = await _send_sms_via_backend(agent_id, inp)
     else:
         return {"error": f"Unknown write tool: {tool_name}"}
 

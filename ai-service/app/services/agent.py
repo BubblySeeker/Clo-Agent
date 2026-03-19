@@ -100,6 +100,18 @@ def _load_contact_context(contact_id: str, agent_id: str) -> str:
             for a in activities:
                 lines.append(f"  - [{a['type']}] {a['body']} ({a['created_at'].strftime('%b %d')})")
 
+        # Recent SMS messages
+        cur.execute(
+            "SELECT body, direction, sent_at FROM sms_messages WHERE contact_id = %s AND agent_id = %s ORDER BY sent_at DESC LIMIT 5",
+            (contact_id, agent_id),
+        )
+        sms_messages = cur.fetchall()
+        if sms_messages:
+            lines.append("Recent SMS:")
+            for s in sms_messages:
+                direction = "Sent" if s["direction"] == "outbound" else "Received"
+                lines.append(f"  - [{direction}] {s['body'][:80]} ({s['sent_at'].strftime('%b %d')})")
+
         return "\n".join(lines)
 
 
@@ -144,6 +156,8 @@ def _build_system_prompt(agent_name: str, contact_context: str = "") -> str:
         "- For destructive actions (deleting contacts or deals), always confirm with the user first "
         "and warn them about what data will be lost.\n"
         "- Be concise. Skip preamble. Lead with action."
+        "\n- When the agent has SMS configured, you can search and send text messages. "
+        "Use send_sms for quick follow-ups and appointment confirmations."
     )
     return base + contact_context
 
