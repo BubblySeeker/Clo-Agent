@@ -23,6 +23,7 @@ import {
   Mail,
   StickyNote,
   Plus,
+  Share2,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -42,6 +43,7 @@ const navItems = [
   { icon: CheckSquare,     label: "Tasks",     href: "/dashboard/tasks" },
   { icon: BarChart2,       label: "Reports",   href: "/dashboard/analytics" },
   { icon: Workflow,        label: "Workflows", href: "/dashboard/workflows" },
+  { icon: Share2,           label: "Referrals", href: "/dashboard/referrals" },
 ];
 
 function activityMeta(type: Activity["type"]): { icon: LucideIcon; bg: string; color: string; label: string } {

@@ -48,6 +48,7 @@ The Go backend is the single entry point for the frontend. AI requests are proxi
 | Semantic Search / Embeddings | **DONE** | OpenAI text-embedding-3-small, auto-embeds contacts/activities, semantic_search AI tool |
 | Communication Page | **DONE** | Unified call/email inbox grouped by contact, log call/email modal |
 | +New Quick Action | **DONE** | Dropdown in top bar: New Contact, New Deal, Log Activity, New Task |
+| Referral Network | **DONE** | Force-directed graph visualization, referral CRUD, stats panel, top referrers, search/filter |
 
 ## Database Schema
 
@@ -167,6 +168,15 @@ PATCH  /api/workflows/{id}           — update workflow
 DELETE /api/workflows/{id}           — delete workflow
 POST   /api/workflows/{id}/toggle    — toggle enabled/disabled
 GET    /api/workflows/{id}/runs      — list execution history
+```
+
+### Referrals
+```
+GET    /api/referrals              — list all referral relationships (includes contact names)
+POST   /api/referrals              — create referral link {referrer_id, referred_id, notes?}
+DELETE /api/referrals/{id}         — remove referral link
+GET    /api/referrals/network      — get full network graph data (nodes + edges for visualization)
+GET    /api/referrals/stats        — top referrers, referral counts, conversion rates
 ```
 
 ### Error & Pagination

@@ -163,6 +163,13 @@ func run() error {
 		r.Post("/api/workflows/{id}/toggle", handlers.ToggleWorkflow(pool))
 		r.Get("/api/workflows/{id}/runs", handlers.ListWorkflowRuns(pool))
 
+		// Referrals
+		r.Get("/api/referrals", handlers.ListReferrals(pool))
+		r.Post("/api/referrals", handlers.CreateReferral(pool))
+		r.Delete("/api/referrals/{id}", handlers.DeleteReferral(pool))
+		r.Get("/api/referrals/network", handlers.GetReferralNetwork(pool))
+		r.Get("/api/referrals/stats", handlers.GetReferralStats(pool))
+
 		// Analytics
 		r.Get("/api/analytics/pipeline", handlers.GetPipelineAnalytics(pool))
 		r.Get("/api/analytics/activities", handlers.GetActivityAnalytics(pool))
