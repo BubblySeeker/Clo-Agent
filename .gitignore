@@ -5,3 +5,4 @@ design-reference/
 .venv/
 ai-service/.venv/
 .gstack/
+.claude/skills/
