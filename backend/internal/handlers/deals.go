@@ -14,32 +14,37 @@ import (
 )
 
 type Deal struct {
-	ID          string    `json:"id"`
-	ContactID   string    `json:"contact_id"`
-	AgentID     string    `json:"agent_id"`
-	StageID     *string   `json:"stage_id"`
-	Title       string    `json:"title"`
-	Value       *float64  `json:"value"`
-	Notes       *string   `json:"notes"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
-	ContactName string    `json:"contact_name"`
-	StageName   string    `json:"stage_name"`
-	StageColor  string    `json:"stage_color"`
+	ID              string    `json:"id"`
+	ContactID       string    `json:"contact_id"`
+	AgentID         string    `json:"agent_id"`
+	StageID         *string   `json:"stage_id"`
+	Title           string    `json:"title"`
+	Value           *float64  `json:"value"`
+	Notes           *string   `json:"notes"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+	ContactName     string    `json:"contact_name"`
+	StageName       string    `json:"stage_name"`
+	StageColor      string    `json:"stage_color"`
+	PropertyID      *string   `json:"property_id"`
+	PropertyAddress string    `json:"property_address"`
 }
 
 const dealSelectSQL = `
 SELECT d.id, d.contact_id, d.agent_id, d.stage_id, d.title, d.value, d.notes, d.created_at, d.updated_at,
        c.first_name || ' ' || c.last_name AS contact_name,
        COALESCE(ds.name, '')              AS stage_name,
-       COALESCE(ds.color, '')             AS stage_color
+       COALESCE(ds.color, '')             AS stage_color,
+       d.property_id,
+       COALESCE(p.address, '')            AS property_address
 FROM deals d
 JOIN contacts c ON c.id = d.contact_id
-LEFT JOIN deal_stages ds ON ds.id = d.stage_id`
+LEFT JOIN deal_stages ds ON ds.id = d.stage_id
+LEFT JOIN properties p ON p.id = d.property_id`
 
 func scanDeal(row interface{ Scan(...any) error }) (Deal, error) {
 	var d Deal
-	err := row.Scan(&d.ID, &d.ContactID, &d.AgentID, &d.StageID, &d.Title, &d.Value, &d.Notes, &d.CreatedAt, &d.UpdatedAt, &d.ContactName, &d.StageName, &d.StageColor)
+	err := row.Scan(&d.ID, &d.ContactID, &d.AgentID, &d.StageID, &d.Title, &d.Value, &d.Notes, &d.CreatedAt, &d.UpdatedAt, &d.ContactName, &d.StageName, &d.StageColor, &d.PropertyID, &d.PropertyAddress)
 	return d, err
 }
 
@@ -188,7 +193,7 @@ func UpdateDeal(pool *pgxpool.Pool) http.HandlerFunc {
 
 		setClauses := "updated_at = NOW()"
 		args := []interface{}{}
-		allowed := []string{"stage_id", "title", "value", "notes", "contact_id"}
+		allowed := []string{"stage_id", "title", "value", "notes", "contact_id", "property_id"}
 		for _, field := range allowed {
 			if val, ok := body[field]; ok {
 				args = append(args, val)

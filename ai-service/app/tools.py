@@ -354,6 +354,108 @@ TOOL_DEFINITIONS = [
             "required": [],
         },
     },
+    # --- Property tools ---
+    {
+        "name": "search_properties",
+        "description": "Search properties by address, MLS ID, status, type, price range, or bedrooms. Returns matching property listings.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search term to match against address or MLS ID"},
+                "status": {"type": "string", "enum": ["active", "pending", "sold", "off_market"], "description": "Filter by listing status"},
+                "property_type": {"type": "string", "description": "e.g. Single Family, Condo, Townhouse"},
+                "min_price": {"type": "number", "description": "Minimum price filter"},
+                "max_price": {"type": "number", "description": "Maximum price filter"},
+                "bedrooms": {"type": "integer", "description": "Minimum number of bedrooms"},
+                "limit": {"type": "integer", "description": "Max results (default 10)"},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "get_property",
+        "description": "Get full details for a single property including linked deals.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "property_id": {"type": "string", "description": "UUID of the property"},
+            },
+            "required": ["property_id"],
+        },
+    },
+    {
+        "name": "match_buyer_to_properties",
+        "description": "Match a buyer's profile preferences against active property listings. Returns the buyer profile and ranked property matches with scores.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "contact_id": {"type": "string", "description": "UUID of the contact with a buyer profile"},
+            },
+            "required": ["contact_id"],
+        },
+    },
+    {
+        "name": "create_property",
+        "description": "Create a new property listing. Requires user confirmation before executing.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "address": {"type": "string", "description": "Street address of the property"},
+                "city": {"type": "string"},
+                "state": {"type": "string"},
+                "zip": {"type": "string"},
+                "price": {"type": "number", "description": "Listing price in dollars"},
+                "bedrooms": {"type": "integer"},
+                "bathrooms": {"type": "number"},
+                "sqft": {"type": "integer", "description": "Square footage"},
+                "property_type": {"type": "string", "description": "e.g. Single Family, Condo, Townhouse"},
+                "status": {"type": "string", "enum": ["active", "pending", "sold", "off_market"], "description": "Listing status (default: active)"},
+                "listing_type": {"type": "string", "description": "e.g. Sale, Rental"},
+                "mls_id": {"type": "string", "description": "MLS listing ID"},
+                "description": {"type": "string", "description": "Property description"},
+                "year_built": {"type": "integer"},
+                "lot_size": {"type": "number", "description": "Lot size in acres or sqft"},
+            },
+            "required": ["address"],
+        },
+    },
+    {
+        "name": "update_property",
+        "description": "Update a property listing. Requires user confirmation before executing.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "property_id": {"type": "string", "description": "UUID of the property"},
+                "address": {"type": "string"},
+                "city": {"type": "string"},
+                "state": {"type": "string"},
+                "zip": {"type": "string"},
+                "price": {"type": "number"},
+                "bedrooms": {"type": "integer"},
+                "bathrooms": {"type": "number"},
+                "sqft": {"type": "integer"},
+                "property_type": {"type": "string"},
+                "status": {"type": "string", "enum": ["active", "pending", "sold", "off_market"]},
+                "listing_type": {"type": "string"},
+                "mls_id": {"type": "string"},
+                "description": {"type": "string"},
+                "year_built": {"type": "integer"},
+                "lot_size": {"type": "number"},
+            },
+            "required": ["property_id"],
+        },
+    },
+    {
+        "name": "delete_property",
+        "description": "Delete a property listing. Linked deals will have their property_id set to NULL. Requires user confirmation before executing.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "property_id": {"type": "string", "description": "UUID of the property to delete"},
+            },
+            "required": ["property_id"],
+        },
+    },
 ]
 
 READ_TOOLS = {
@@ -371,6 +473,9 @@ READ_TOOLS = {
     "semantic_search",
     "search_documents",
     "list_documents",
+    "search_properties",
+    "get_property",
+    "match_buyer_to_properties",
 }
 
 WRITE_TOOLS = {
@@ -386,6 +491,9 @@ WRITE_TOOLS = {
     "create_task",
     "complete_task",
     "reschedule_task",
+    "create_property",
+    "update_property",
+    "delete_property",
 }
 
 # ---------------------------------------------------------------------------
@@ -421,6 +529,12 @@ async def execute_read_tool(tool_name: str, tool_input: dict, agent_id: str) -> 
         return await run_query(lambda: _search_documents(agent_id, tool_input))
     elif tool_name == "list_documents":
         return await run_query(lambda: _list_documents(agent_id, tool_input))
+    elif tool_name == "search_properties":
+        return await run_query(lambda: _search_properties(agent_id, tool_input))
+    elif tool_name == "get_property":
+        return await run_query(lambda: _get_property(agent_id, tool_input["property_id"]))
+    elif tool_name == "match_buyer_to_properties":
+        return await run_query(lambda: _match_buyer_to_properties(agent_id, tool_input["contact_id"]))
     else:
         return {"error": f"Unknown tool: {tool_name}"}
 
@@ -813,6 +927,12 @@ async def execute_write_tool(pending_id: str) -> dict:
         result = await run_query(lambda: _complete_task(agent_id, inp))
     elif tool_name == "reschedule_task":
         result = await run_query(lambda: _reschedule_task(agent_id, inp))
+    elif tool_name == "create_property":
+        result = await run_query(lambda: _create_property(agent_id, inp))
+    elif tool_name == "update_property":
+        result = await run_query(lambda: _update_property(agent_id, inp))
+    elif tool_name == "delete_property":
+        result = await run_query(lambda: _delete_property(agent_id, inp))
     else:
         return {"error": f"Unknown write tool: {tool_name}"}
 
@@ -1120,6 +1240,135 @@ def _get_overdue_tasks(agent_id: str, limit: int) -> list:
         return [dict(r) for r in cur.fetchall()]
 
 
+def _search_properties(agent_id: str, inp: dict) -> list:
+    query = inp.get("query", "")
+    status = inp.get("status")
+    property_type = inp.get("property_type")
+    min_price = inp.get("min_price")
+    max_price = inp.get("max_price")
+    bedrooms = inp.get("bedrooms")
+    limit = inp.get("limit", 10)
+
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        params: list = [agent_id]
+        where_clauses = ["agent_id = %s"]
+
+        if query:
+            params.append(f"%{query}%")
+            params.append(f"%{query}%")
+            where_clauses.append("(address ILIKE %s OR mls_id ILIKE %s)")
+        if status:
+            params.append(status)
+            where_clauses.append("status = %s")
+        if property_type:
+            params.append(property_type)
+            where_clauses.append("property_type = %s")
+        if min_price is not None:
+            params.append(min_price)
+            where_clauses.append("price >= %s")
+        if max_price is not None:
+            params.append(max_price)
+            where_clauses.append("price <= %s")
+        if bedrooms is not None:
+            params.append(bedrooms)
+            where_clauses.append("bedrooms >= %s")
+
+        params.append(limit)
+        sql = f"""
+            SELECT id, address, city, state, zip, price, bedrooms, bathrooms,
+                   sqft, property_type, status, listing_type, mls_id, created_at
+            FROM properties
+            WHERE {' AND '.join(where_clauses)}
+            ORDER BY created_at DESC LIMIT %s
+        """
+        cur.execute(sql, params)
+        return [dict(r) for r in cur.fetchall()]
+
+
+def _get_property(agent_id: str, property_id: str) -> dict:
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            "SELECT * FROM properties WHERE id = %s AND agent_id = %s",
+            (property_id, agent_id),
+        )
+        prop = cur.fetchone()
+        if not prop:
+            return {"error": "Property not found"}
+        cur.execute(
+            """SELECT d.id, d.title, d.value,
+                      s.name AS stage_name,
+                      c.first_name || ' ' || c.last_name AS contact_name
+               FROM deals d
+               JOIN deal_stages s ON s.id = d.stage_id
+               JOIN contacts c ON c.id = d.contact_id
+               WHERE d.property_id = %s AND d.agent_id = %s""",
+            (property_id, agent_id),
+        )
+        deals = [dict(r) for r in cur.fetchall()]
+        result = dict(prop)
+        result["linked_deals"] = deals
+        return result
+
+
+def _match_buyer_to_properties(agent_id: str, contact_id: str) -> dict:
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            "SELECT id FROM contacts WHERE id = %s AND agent_id = %s",
+            (contact_id, agent_id),
+        )
+        if not cur.fetchone():
+            return {"error": "Contact not found"}
+        cur.execute("SELECT * FROM buyer_profiles WHERE contact_id = %s", (contact_id,))
+        bp = cur.fetchone()
+        if not bp:
+            return {"error": "No buyer profile exists for this contact"}
+        bp = dict(bp)
+        cur.execute(
+            """SELECT id, address, city, state, zip, price, bedrooms, bathrooms,
+                      sqft, property_type, status, listing_type
+               FROM properties
+               WHERE agent_id = %s AND status = 'active'""",
+            (agent_id,),
+        )
+        properties = [dict(r) for r in cur.fetchall()]
+        matches = []
+        for prop in properties:
+            score = 0
+            if bp.get("budget_min") is not None and bp.get("budget_max") is not None and prop.get("price") is not None:
+                if float(bp["budget_min"]) <= float(prop["price"]) <= float(bp["budget_max"]):
+                    score += 1
+            if bp.get("bedrooms") is not None and prop.get("bedrooms") is not None:
+                if prop["bedrooms"] >= bp["bedrooms"]:
+                    score += 1
+            if bp.get("bathrooms") is not None and prop.get("bathrooms") is not None:
+                if float(prop["bathrooms"]) >= float(bp["bathrooms"]):
+                    score += 1
+            if bp.get("property_type") and prop.get("property_type"):
+                if prop["property_type"] == bp["property_type"]:
+                    score += 1
+            if bp.get("locations") and prop.get("city"):
+                if prop["city"] in bp["locations"]:
+                    score += 1
+            if score > 0:
+                prop["match_score"] = score
+                matches.append(prop)
+        matches.sort(key=lambda x: x["match_score"], reverse=True)
+        return {
+            "buyer_profile": {
+                "budget_min": bp.get("budget_min"),
+                "budget_max": bp.get("budget_max"),
+                "bedrooms": bp.get("bedrooms"),
+                "bathrooms": bp.get("bathrooms"),
+                "property_type": bp.get("property_type"),
+                "locations": bp.get("locations"),
+            },
+            "matching_properties": matches,
+        }
+
+
 def _create_task(agent_id: str, inp: dict) -> dict:
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -1161,3 +1410,61 @@ def _reschedule_task(agent_id: str, inp: dict) -> dict:
         if not row:
             return {"error": "Task not found"}
         return dict(row)
+
+
+_PROPERTY_FIELDS = {
+    "address", "city", "state", "zip", "price", "bedrooms", "bathrooms",
+    "sqft", "property_type", "status", "listing_type", "mls_id",
+    "description", "year_built", "lot_size",
+}
+
+
+def _create_property(agent_id: str, inp: dict) -> dict:
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            """INSERT INTO properties (agent_id, address, city, state, zip, price, bedrooms, bathrooms,
+                   sqft, property_type, status, listing_type, mls_id, description, year_built, lot_size)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+               RETURNING id, address, city, state, price, bedrooms, bathrooms, sqft, property_type, status, created_at""",
+            (agent_id, inp["address"], inp.get("city"), inp.get("state"), inp.get("zip"),
+             inp.get("price"), inp.get("bedrooms"), inp.get("bathrooms"), inp.get("sqft"),
+             inp.get("property_type"), inp.get("status", "active"), inp.get("listing_type"),
+             inp.get("mls_id"), inp.get("description"), inp.get("year_built"), inp.get("lot_size")),
+        )
+        return dict(cur.fetchone())
+
+
+def _update_property(agent_id: str, inp: dict) -> dict:
+    inp = dict(inp)
+    property_id = inp.pop("property_id")
+    inp = {k: v for k, v in inp.items() if k in _PROPERTY_FIELDS}
+    if not inp:
+        return {"error": "No fields to update"}
+    fields = ", ".join(f"{k} = %s" for k in inp)
+    vals = list(inp.values()) + [property_id, agent_id]
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            f"UPDATE properties SET {fields} WHERE id = %s AND agent_id = %s RETURNING id, address",
+            vals,
+        )
+        row = cur.fetchone()
+        if not row:
+            return {"error": "Property not found"}
+        return {"updated": True, "property_id": property_id, "address": row["address"]}
+
+
+def _delete_property(agent_id: str, inp: dict) -> dict:
+    property_id = inp["property_id"]
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            "SELECT address FROM properties WHERE id = %s AND agent_id = %s",
+            (property_id, agent_id),
+        )
+        prop = cur.fetchone()
+        if not prop:
+            return {"error": "Property not found"}
+        cur.execute("DELETE FROM properties WHERE id = %s AND agent_id = %s", (property_id, agent_id))
+        return {"deleted": True, "property": prop["address"]}

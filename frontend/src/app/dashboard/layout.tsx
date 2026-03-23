@@ -9,6 +9,7 @@ import {
   GitBranch,
   Bot,
   Activity as ActivityIcon,
+  Building,
   CheckSquare,
   BarChart2,
   Settings,
@@ -36,6 +37,7 @@ const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard", exact: true },
   { icon: Users,           label: "Contacts",  href: "/dashboard/contacts" },
   { icon: GitBranch,       label: "Pipeline",  href: "/dashboard/pipeline" },
+  { icon: Building,        label: "Properties", href: "/dashboard/properties" },
   { icon: Bot,             label: "AI Chat",   href: "/dashboard/chat" },
   { icon: Phone,            label: "Comms",     href: "/dashboard/communication" },
   { icon: ActivityIcon,     label: "Activities",href: "/dashboard/activities" },
@@ -262,6 +264,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 {[
                   { icon: Users, label: "New Contact", href: "/dashboard/contacts?action=new" },
                   { icon: GitBranch, label: "New Deal", href: "/dashboard/pipeline?action=new" },
+                  { icon: Building, label: "New Property", href: "/dashboard/properties?action=new" },
                   { icon: ActivityIcon, label: "Log Activity", href: "/dashboard/activities?action=new" },
                   { icon: CheckSquare, label: "New Task", href: "/dashboard/tasks?action=new" },
                 ].map((item) => (

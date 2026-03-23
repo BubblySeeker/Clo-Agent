@@ -33,6 +33,12 @@ func TestHandlerFactoriesReturnHandlers(t *testing.T) {
 		"DeleteWorkflow":    func() http.HandlerFunc { return DeleteWorkflow(nil) },
 		"ToggleWorkflow":    func() http.HandlerFunc { return ToggleWorkflow(nil) },
 		"ListWorkflowRuns":  func() http.HandlerFunc { return ListWorkflowRuns(nil) },
+		"ListProperties":    func() http.HandlerFunc { return ListProperties(nil) },
+		"CreateProperty":    func() http.HandlerFunc { return CreateProperty(nil) },
+		"GetProperty":       func() http.HandlerFunc { return GetProperty(nil) },
+		"UpdateProperty":    func() http.HandlerFunc { return UpdateProperty(nil) },
+		"DeleteProperty":    func() http.HandlerFunc { return DeleteProperty(nil) },
+		"GetPropertyMatches": func() http.HandlerFunc { return GetPropertyMatches(nil) },
 	}
 
 	for name, factory := range factories {
@@ -176,6 +182,51 @@ func TestCreateWorkflowValidation(t *testing.T) {
 			}
 
 			req := httptest.NewRequest(http.MethodPost, "/api/workflows", bytes.NewReader(bodyBytes))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+
+			handler.ServeHTTP(w, req)
+
+			if w.Code != tt.wantStatus {
+				t.Errorf("expected status %d, got %d; body: %s", tt.wantStatus, w.Code, w.Body.String())
+			}
+		})
+	}
+}
+
+// TestCreatePropertyValidation tests that CreateProperty rejects bad input
+// before hitting the database.
+func TestCreatePropertyValidation(t *testing.T) {
+	handler := CreateProperty(nil)
+
+	tests := []struct {
+		name       string
+		body       interface{}
+		wantStatus int
+	}{
+		{
+			name:       "invalid JSON",
+			body:       "not json",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "missing address",
+			body:       map[string]string{"city": "Miami"},
+			wantStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var bodyBytes []byte
+			switch v := tt.body.(type) {
+			case string:
+				bodyBytes = []byte(v)
+			default:
+				bodyBytes, _ = json.Marshal(v)
+			}
+
+			req := httptest.NewRequest(http.MethodPost, "/api/properties", bytes.NewReader(bodyBytes))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 

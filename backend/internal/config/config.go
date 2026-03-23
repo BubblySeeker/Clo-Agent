@@ -38,12 +38,16 @@ func loadDotEnv(path string) {
 
 // Config holds all application configuration loaded from environment variables.
 type Config struct {
-	DatabaseURL      string
-	ClerkSecretKey   string
-	RedisURL         string
-	Port             string
-	AIServiceURL     string
-	AIServiceSecret  string
+	DatabaseURL        string
+	ClerkSecretKey     string
+	RedisURL           string
+	Port               string
+	AIServiceURL       string
+	AIServiceSecret    string
+	GoogleClientID     string
+	GoogleClientSecret string
+	GoogleRedirectURI  string
+	FrontendURL        string
 }
 
 // Load reads configuration from environment variables (and a .env file if present)
@@ -53,12 +57,16 @@ func Load() (*Config, error) {
 	loadDotEnv(".env")
 
 	cfg := &Config{
-		DatabaseURL:     os.Getenv("DATABASE_URL"),
-		ClerkSecretKey:  os.Getenv("CLERK_SECRET_KEY"),
-		RedisURL:        os.Getenv("REDIS_URL"),
-		Port:            os.Getenv("PORT"),
-		AIServiceURL:    os.Getenv("AI_SERVICE_URL"),
-		AIServiceSecret: os.Getenv("AI_SERVICE_SECRET"),
+		DatabaseURL:        os.Getenv("DATABASE_URL"),
+		ClerkSecretKey:     os.Getenv("CLERK_SECRET_KEY"),
+		RedisURL:           os.Getenv("REDIS_URL"),
+		Port:               os.Getenv("PORT"),
+		AIServiceURL:       os.Getenv("AI_SERVICE_URL"),
+		AIServiceSecret:    os.Getenv("AI_SERVICE_SECRET"),
+		GoogleClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
+		GoogleClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
+		GoogleRedirectURI:  os.Getenv("GOOGLE_REDIRECT_URI"),
+		FrontendURL:        os.Getenv("FRONTEND_URL"),
 	}
 
 	if cfg.AIServiceURL == "" {
@@ -67,6 +75,13 @@ func Load() (*Config, error) {
 
 	if cfg.Port == "" {
 		cfg.Port = "8080"
+	}
+
+	if cfg.GoogleRedirectURI == "" {
+		cfg.GoogleRedirectURI = "http://localhost:8080/api/auth/google/callback"
+	}
+	if cfg.FrontendURL == "" {
+		cfg.FrontendURL = "http://localhost:3000"
 	}
 
 	if cfg.DatabaseURL == "" {

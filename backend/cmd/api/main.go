@@ -98,6 +98,7 @@ func run() error {
 
 	// Public
 	r.Get("/health", handlers.Health)
+	r.Get("/api/auth/google/callback", handlers.GmailAuthCallback(pool, cfg))
 
 	// Protected — Clerk JWT + user sync required
 	r.Group(func(r chi.Router) {
@@ -144,6 +145,14 @@ func run() error {
 
 		// Deal stages
 		r.Get("/api/deal-stages", handlers.ListDealStages(pool))
+
+		// Properties
+		r.Get("/api/properties", handlers.ListProperties(pool))
+		r.Post("/api/properties", handlers.CreateProperty(pool))
+		r.Get("/api/properties/{id}", handlers.GetProperty(pool))
+		r.Patch("/api/properties/{id}", handlers.UpdateProperty(pool))
+		r.Delete("/api/properties/{id}", handlers.DeleteProperty(pool))
+		r.Get("/api/properties/{id}/matches", handlers.GetPropertyMatches(pool))
 
 		// Conversations
 		r.Get("/api/ai/conversations", handlers.ListConversations(pool))
@@ -198,6 +207,16 @@ func run() error {
 		r.Get("/api/documents/{id}/preview", handlers.PreviewDocument(pool))
 		r.Get("/api/documents/{id}/chunks", handlers.GetDocumentChunks(pool))
 		r.Get("/api/documents/{id}/chunks/{chunkId}", handlers.GetDocumentChunk(pool))
+
+		// Gmail
+		r.Post("/api/gmail/auth/init", handlers.GmailAuthInit(cfg))
+		r.Get("/api/gmail/status", handlers.GmailStatus(pool))
+		r.Delete("/api/gmail/disconnect", handlers.GmailDisconnect(pool))
+		r.Post("/api/gmail/sync", handlers.GmailSync(pool, cfg))
+		r.Get("/api/gmail/emails", handlers.ListEmails(pool))
+		r.Get("/api/gmail/emails/{id}", handlers.GetEmail(pool))
+		r.Post("/api/gmail/send", handlers.SendEmail(pool, cfg))
+		r.Patch("/api/gmail/emails/{id}/read", handlers.MarkEmailRead(pool, cfg))
 	})
 
 	// -------------------------------------------------------------------------
