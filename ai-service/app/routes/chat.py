@@ -64,7 +64,7 @@ async def send_message(req: SendMessageRequest):
 @router.post("/confirm", dependencies=[Depends(verify_secret)])
 async def confirm_action(req: ConfirmRequest):
     """Execute a pending write tool action after user confirmation."""
-    result = await execute_write_tool(req.pending_id)
+    result = await execute_write_tool(req.pending_id, req.agent_id)
     if "error" in result:
         raise HTTPException(status_code=404, detail=result["error"])
     return {"status": "executed", "result": result}
