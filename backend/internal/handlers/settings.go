@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -43,8 +44,18 @@ func UpdateSettings(pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		agentID := middleware.AgentUUIDFromContext(r.Context())
 
+		const maxSettingsBodyBytes = 10 * 1024 // 10 KB
+		rawBody, err := io.ReadAll(io.LimitReader(r.Body, maxSettingsBodyBytes+1))
+		if err != nil {
+			respondError(w, http.StatusBadRequest, "failed to read request body")
+			return
+		}
+		if len(rawBody) > maxSettingsBodyBytes {
+			respondError(w, http.StatusRequestEntityTooLarge, "request body must be 10KB or less")
+			return
+		}
 		var body json.RawMessage
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if err := json.Unmarshal(rawBody, &body); err != nil {
 			respondError(w, http.StatusBadRequest, "invalid request body")
 			return
 		}

@@ -74,6 +74,10 @@ func SendMessage(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 			respondError(w, http.StatusBadRequest, "content is required")
 			return
 		}
+		if err := validateMaxLen("content", body.Content, 10000); err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 
 		// Persist user message in a separate committed transaction.
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)

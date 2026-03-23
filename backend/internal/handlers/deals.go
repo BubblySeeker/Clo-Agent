@@ -141,6 +141,16 @@ func CreateDeal(pool *pgxpool.Pool) http.HandlerFunc {
 			respondError(w, http.StatusBadRequest, "contact_id, stage_id, and title are required")
 			return
 		}
+		if err := validateMaxLen("title", body.Title, 200); err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if body.Notes != nil {
+			if err := validateMaxLen("notes", *body.Notes, 5000); err != nil {
+				respondError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
@@ -182,6 +192,18 @@ func UpdateDeal(pool *pgxpool.Pool) http.HandlerFunc {
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			respondError(w, http.StatusBadRequest, "invalid JSON")
 			return
+		}
+		if title, ok := body["title"].(string); ok {
+			if err := validateMaxLen("title", title, 200); err != nil {
+				respondError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+		}
+		if notes, ok := body["notes"].(string); ok {
+			if err := validateMaxLen("notes", notes, 5000); err != nil {
+				respondError(w, http.StatusBadRequest, err.Error())
+				return
+			}
 		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)

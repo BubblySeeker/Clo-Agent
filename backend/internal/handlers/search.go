@@ -28,6 +28,10 @@ func SemanticSearch(cfg *config.Config) http.HandlerFunc {
 			respondError(w, http.StatusBadRequest, "query is required")
 			return
 		}
+		if err := validateMaxLen("query", body.Query, 500); err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		if body.Limit <= 0 {
 			body.Limit = 10
 		}

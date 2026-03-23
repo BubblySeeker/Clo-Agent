@@ -124,6 +124,10 @@ func CreateWorkflow(pool *pgxpool.Pool) http.HandlerFunc {
 			respondError(w, http.StatusBadRequest, "name and trigger_type are required")
 			return
 		}
+		if err := validateMaxLen("name", body.Name, 200); err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		if body.TriggerConfig == nil {
 			body.TriggerConfig = json.RawMessage(`{}`)
 		}
@@ -165,6 +169,12 @@ func UpdateWorkflow(pool *pgxpool.Pool) http.HandlerFunc {
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			respondError(w, http.StatusBadRequest, "invalid JSON")
 			return
+		}
+		if name, ok := body["name"].(string); ok {
+			if err := validateMaxLen("name", name, 200); err != nil {
+				respondError(w, http.StatusBadRequest, err.Error())
+				return
+			}
 		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
