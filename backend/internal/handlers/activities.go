@@ -156,6 +156,11 @@ func CreateGeneralActivity(pool *pgxpool.Pool) http.HandlerFunc {
 			respondError(w, http.StatusBadRequest, "type must be one of: call, email, note, showing, task")
 			return
 		}
+		if body.Body != nil {
+			if err := validateMaxLen("body", *body.Body, 10000); err != nil {
+				respondError(w, http.StatusBadRequest, err.Error()); return
+			}
+		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
@@ -203,6 +208,11 @@ func CreateActivity(pool *pgxpool.Pool) http.HandlerFunc {
 		if !validTypes[body.Type] {
 			respondError(w, http.StatusBadRequest, "type must be one of: call, email, note, showing, task")
 			return
+		}
+		if body.Body != nil {
+			if err := validateMaxLen("body", *body.Body, 10000); err != nil {
+				respondError(w, http.StatusBadRequest, err.Error()); return
+			}
 		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)

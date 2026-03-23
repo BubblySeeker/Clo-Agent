@@ -138,7 +138,7 @@ func GmailAuthCallback(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc 
 			return
 		}
 
-		// Upsert gmail_tokens row
+		// Upsert gmail_tokens row (encrypt tokens at rest)
 		_, err = pool.Exec(r.Context(),
 			`INSERT INTO gmail_tokens (agent_id, gmail_address, access_token, refresh_token, token_expiry)
 			 VALUES ($1, $2, $3, $4, $5)
@@ -148,7 +148,7 @@ func GmailAuthCallback(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc 
 			   refresh_token = EXCLUDED.refresh_token,
 			   token_expiry = EXCLUDED.token_expiry,
 			   updated_at = now()`,
-			agentID, profile.EmailAddress, token.AccessToken, token.RefreshToken, token.Expiry,
+			agentID, profile.EmailAddress, encryptToken(token.AccessToken), encryptToken(token.RefreshToken), token.Expiry,
 		)
 		if err != nil {
 			slog.Error("gmail token save failed", "error", err)
@@ -234,14 +234,24 @@ func GmailDisconnect(pool *pgxpool.Pool) http.HandlerFunc {
 
 // getGmailService reads tokens from DB, refreshes if expired, and returns a Gmail service.
 func getGmailService(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config, agentID string) (*gmail.Service, error) {
-	var accessToken, refreshToken string
+	var encAccessToken, encRefreshToken string
 	var expiry time.Time
 	err := pool.QueryRow(ctx,
 		`SELECT access_token, refresh_token, token_expiry FROM gmail_tokens WHERE agent_id = $1`,
 		agentID,
-	).Scan(&accessToken, &refreshToken, &expiry)
+	).Scan(&encAccessToken, &encRefreshToken, &expiry)
 	if err != nil {
 		return nil, fmt.Errorf("no gmail connection found")
+	}
+
+	// Decrypt tokens (backward compatible with plaintext)
+	accessToken, err := decryptToken(encAccessToken)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt access token: %w", err)
+	}
+	refreshToken, err := decryptToken(encRefreshToken)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt refresh token: %w", err)
 	}
 
 	oauthCfg := gmailOAuthConfig(cfg)
@@ -263,7 +273,7 @@ func getGmailService(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config
 	if newTok.AccessToken != accessToken {
 		pool.Exec(ctx,
 			`UPDATE gmail_tokens SET access_token = $1, token_expiry = $2, updated_at = now() WHERE agent_id = $3`,
-			newTok.AccessToken, newTok.Expiry, agentID,
+			encryptToken(newTok.AccessToken), newTok.Expiry, agentID,
 		)
 	}
 

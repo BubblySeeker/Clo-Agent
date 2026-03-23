@@ -174,6 +174,30 @@ func CreateContact(pool *pgxpool.Pool) http.HandlerFunc {
 			respondError(w, http.StatusBadRequest, "first_name and last_name are required")
 			return
 		}
+		// Input validation
+		for _, v := range []struct{ f, val string; max int }{
+			{"first_name", body.FirstName, 100},
+			{"last_name", body.LastName, 100},
+		} {
+			if err := validateMaxLen(v.f, v.val, v.max); err != nil {
+				respondError(w, http.StatusBadRequest, err.Error()); return
+			}
+		}
+		if body.Email != nil {
+			if err := validateEmail(*body.Email); err != nil {
+				respondError(w, http.StatusBadRequest, err.Error()); return
+			}
+		}
+		if body.Phone != nil {
+			if err := validateMaxLen("phone", *body.Phone, 20); err != nil {
+				respondError(w, http.StatusBadRequest, err.Error()); return
+			}
+		}
+		if body.Source != nil {
+			if err := validateMaxLen("source", *body.Source, 50); err != nil {
+				respondError(w, http.StatusBadRequest, err.Error()); return
+			}
+		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {

@@ -234,7 +234,7 @@ func ListDocuments(pool *pgxpool.Pool) http.HandlerFunc {
 			if folderID == "general" {
 				whereExpr += " AND d.folder_id IS NULL"
 			} else if folderID == "unfiled" {
-				whereExpr += " AND d.contact_id IS NULL AND d.property_id IS NULL AND d.folder_id IS NULL"
+				whereExpr += " AND d.contact_id IS NULL AND d.property_id IS NULL"
 			} else {
 				args = append(args, folderID)
 				whereExpr += fmt.Sprintf(" AND d.folder_id = $%d", len(args))
@@ -670,10 +670,10 @@ func DocumentCounts(pool *pgxpool.Pool) http.HandlerFunc {
 		}
 		defer tx.Rollback(r.Context())
 
-		// General count: no contact, no property, no folder
+		// General count: no contact, no property (may or may not have a folder)
 		var general int
 		tx.QueryRow(r.Context(),
-			`SELECT COUNT(*) FROM documents WHERE contact_id IS NULL AND property_id IS NULL AND folder_id IS NULL`,
+			`SELECT COUNT(*) FROM documents WHERE contact_id IS NULL AND property_id IS NULL`,
 		).Scan(&general)
 
 		// By contact

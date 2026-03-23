@@ -4,24 +4,15 @@ Chat routes for the AI service.
 POST /ai/messages  — stream a response to a user message
 POST /ai/confirm   — execute a pending write tool action after user confirmation
 """
-from fastapi import APIRouter, HTTPException, Header, Depends
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.config import AI_SERVICE_SECRET
+from app.routes import verify_secret
 from app.services.agent import run_agent
 from app.tools import execute_write_tool
 
 router = APIRouter(prefix="/ai")
-
-
-# ---------------------------------------------------------------------------
-# Auth dependency
-# ---------------------------------------------------------------------------
-
-def verify_secret(x_ai_service_secret: str = Header(...)):
-    if x_ai_service_secret != AI_SERVICE_SECRET:
-        raise HTTPException(status_code=403, detail="Invalid service secret")
 
 
 # ---------------------------------------------------------------------------
