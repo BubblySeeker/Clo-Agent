@@ -44,20 +44,20 @@ func gmailOAuthConfig(cfg *config.Config) *oauth2.Config {
 func GmailAuthInit(cfg *config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if cfg.GoogleClientID == "" || cfg.GoogleClientSecret == "" {
-			respondError(w, http.StatusBadRequest, "Google OAuth is not configured")
+			respondErrorWithCode(w, http.StatusBadRequest, "Google OAuth is not configured", ErrCodeBadRequest)
 			return
 		}
 
 		agentID := middleware.AgentUUIDFromContext(r.Context())
 		if agentID == "" {
-			respondError(w, http.StatusUnauthorized, "unauthorized")
+			respondErrorWithCode(w, http.StatusUnauthorized, "unauthorized", ErrCodeUnauthorized)
 			return
 		}
 
 		// Generate random state with embedded agent ID
 		b := make([]byte, 16)
 		if _, err := rand.Read(b); err != nil {
-			respondError(w, http.StatusInternalServerError, "failed to generate state")
+			respondErrorWithCode(w, http.StatusInternalServerError, "failed to generate state", ErrCodeDatabase)
 			return
 		}
 		state := base64.URLEncoding.EncodeToString(b) + "|" + agentID
@@ -174,7 +174,7 @@ func GmailStatus(pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		agentID := middleware.AgentUUIDFromContext(r.Context())
 		if agentID == "" {
-			respondError(w, http.StatusUnauthorized, "unauthorized")
+			respondErrorWithCode(w, http.StatusUnauthorized, "unauthorized", ErrCodeUnauthorized)
 			return
 		}
 
@@ -208,14 +208,14 @@ func GmailDisconnect(pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		agentID := middleware.AgentUUIDFromContext(r.Context())
 		if agentID == "" {
-			respondError(w, http.StatusUnauthorized, "unauthorized")
+			respondErrorWithCode(w, http.StatusUnauthorized, "unauthorized", ErrCodeUnauthorized)
 			return
 		}
 
 		// Delete emails first (FK), then tokens
 		tx, err := pool.Begin(r.Context())
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -224,7 +224,7 @@ func GmailDisconnect(pool *pgxpool.Pool) http.HandlerFunc {
 		tx.Exec(r.Context(), `DELETE FROM gmail_tokens WHERE agent_id = $1`, agentID)
 
 		if err := tx.Commit(r.Context()); err != nil {
-			respondError(w, http.StatusInternalServerError, "failed to disconnect")
+			respondErrorWithCode(w, http.StatusInternalServerError, "failed to disconnect", ErrCodeDatabase)
 			return
 		}
 
@@ -290,7 +290,7 @@ func GmailSync(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		agentID := middleware.AgentUUIDFromContext(r.Context())
 		if agentID == "" {
-			respondError(w, http.StatusUnauthorized, "unauthorized")
+			respondErrorWithCode(w, http.StatusUnauthorized, "unauthorized", ErrCodeUnauthorized)
 			return
 		}
 
@@ -310,7 +310,7 @@ func GmailSync(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 
 		svc, err := getGmailService(r.Context(), pool, cfg, agentID)
 		if err != nil {
-			respondError(w, http.StatusBadRequest, err.Error())
+			respondErrorWithCode(w, http.StatusBadRequest, err.Error(), ErrCodeBadRequest)
 			return
 		}
 
@@ -329,7 +329,7 @@ func GmailSync(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 		msgList, err := listCall.Do()
 		if err != nil {
 			slog.Error("gmail list messages failed", "error", err)
-			respondError(w, http.StatusInternalServerError, "failed to list messages")
+			respondErrorWithCode(w, http.StatusInternalServerError, "failed to list messages", ErrCodeDatabase)
 			return
 		}
 
@@ -455,7 +455,7 @@ func ListEmails(pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		agentID := middleware.AgentUUIDFromContext(r.Context())
 		if agentID == "" {
-			respondError(w, http.StatusUnauthorized, "unauthorized")
+			respondErrorWithCode(w, http.StatusUnauthorized, "unauthorized", ErrCodeUnauthorized)
 			return
 		}
 
@@ -473,7 +473,7 @@ func ListEmails(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -497,7 +497,7 @@ func ListEmails(pool *pgxpool.Pool) http.HandlerFunc {
 			"SELECT COUNT(*) FROM emails WHERE "+whereExpr, countArgs...,
 		).Scan(&total)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "count error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "count error", ErrCodeDatabase)
 			return
 		}
 
@@ -517,7 +517,7 @@ func ListEmails(pool *pgxpool.Pool) http.HandlerFunc {
 
 		rows, err := tx.Query(r.Context(), dataSQL, dataArgs...)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "query error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "query error", ErrCodeDatabase)
 			return
 		}
 		defer rows.Close()
@@ -574,7 +574,7 @@ func GetEmail(pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		agentID := middleware.AgentUUIDFromContext(r.Context())
 		if agentID == "" {
-			respondError(w, http.StatusUnauthorized, "unauthorized")
+			respondErrorWithCode(w, http.StatusUnauthorized, "unauthorized", ErrCodeUnauthorized)
 			return
 		}
 
@@ -582,7 +582,7 @@ func GetEmail(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -624,7 +624,7 @@ func GetEmail(pool *pgxpool.Pool) http.HandlerFunc {
 			&e.Labels, &e.IsRead, &e.IsOutbound, &e.GmailDate, &e.CreatedAt, &e.ContactName,
 		)
 		if err != nil {
-			respondError(w, http.StatusNotFound, "email not found")
+			respondErrorWithCode(w, http.StatusNotFound, "email not found", ErrCodeNotFound)
 			return
 		}
 
@@ -639,7 +639,7 @@ func SendEmail(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		agentID := middleware.AgentUUIDFromContext(r.Context())
 		if agentID == "" {
-			respondError(w, http.StatusUnauthorized, "unauthorized")
+			respondErrorWithCode(w, http.StatusUnauthorized, "unauthorized", ErrCodeUnauthorized)
 			return
 		}
 
@@ -652,17 +652,17 @@ func SendEmail(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 			ReplyToMessageID  *string `json:"reply_to_message_id"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respondError(w, http.StatusBadRequest, "invalid request body")
+			respondErrorWithCode(w, http.StatusBadRequest, "invalid request body", ErrCodeBadRequest)
 			return
 		}
 		if body.To == "" || body.Subject == "" || body.Body == "" {
-			respondError(w, http.StatusBadRequest, "to, subject, and body are required")
+			respondErrorWithCode(w, http.StatusBadRequest, "to, subject, and body are required", ErrCodeBadRequest)
 			return
 		}
 
 		svc, err := getGmailService(r.Context(), pool, cfg, agentID)
 		if err != nil {
-			respondError(w, http.StatusBadRequest, err.Error())
+			respondErrorWithCode(w, http.StatusBadRequest, err.Error(), ErrCodeBadRequest)
 			return
 		}
 
@@ -704,7 +704,7 @@ func SendEmail(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 		sent, err := svc.Users.Messages.Send("me", gmailMsg).Do()
 		if err != nil {
 			slog.Error("gmail send failed", "error", err)
-			respondError(w, http.StatusInternalServerError, "failed to send email")
+			respondErrorWithCode(w, http.StatusInternalServerError, "failed to send email", ErrCodeDatabase)
 			return
 		}
 
@@ -743,7 +743,7 @@ func MarkEmailRead(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		agentID := middleware.AgentUUIDFromContext(r.Context())
 		if agentID == "" {
-			respondError(w, http.StatusUnauthorized, "unauthorized")
+			respondErrorWithCode(w, http.StatusUnauthorized, "unauthorized", ErrCodeUnauthorized)
 			return
 		}
 
@@ -751,7 +751,7 @@ func MarkEmailRead(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -764,7 +764,7 @@ func MarkEmailRead(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 			emailID,
 		).Scan(&gmailMessageID, &isRead)
 		if err != nil {
-			respondError(w, http.StatusNotFound, "email not found")
+			respondErrorWithCode(w, http.StatusNotFound, "email not found", ErrCodeNotFound)
 			return
 		}
 
@@ -778,7 +778,7 @@ func MarkEmailRead(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 		// Mark as read in Gmail (remove UNREAD label)
 		svc, err := getGmailService(r.Context(), pool, cfg, agentID)
 		if err != nil {
-			respondError(w, http.StatusBadRequest, err.Error())
+			respondErrorWithCode(w, http.StatusBadRequest, err.Error(), ErrCodeBadRequest)
 			return
 		}
 
@@ -787,7 +787,7 @@ func MarkEmailRead(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 		}).Do()
 		if err != nil {
 			slog.Error("gmail mark read failed", "gmail_message_id", gmailMessageID, "error", err)
-			respondError(w, http.StatusInternalServerError, "failed to mark email as read in Gmail")
+			respondErrorWithCode(w, http.StatusInternalServerError, "failed to mark email as read in Gmail", ErrCodeDatabase)
 			return
 		}
 
@@ -797,12 +797,12 @@ func MarkEmailRead(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 			emailID,
 		)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "failed to update email")
+			respondErrorWithCode(w, http.StatusInternalServerError, "failed to update email", ErrCodeDatabase)
 			return
 		}
 
 		if err := tx.Commit(r.Context()); err != nil {
-			respondError(w, http.StatusInternalServerError, "failed to commit")
+			respondErrorWithCode(w, http.StatusInternalServerError, "failed to commit", ErrCodeDatabase)
 			return
 		}
 

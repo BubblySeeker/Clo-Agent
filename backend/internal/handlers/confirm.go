@@ -23,7 +23,7 @@ func ConfirmToolAction(cfg *config.Config) http.HandlerFunc {
 			PendingID string `json:"pending_id"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.PendingID == "" {
-			respondError(w, http.StatusBadRequest, "pending_id is required")
+			respondErrorWithCode(w, http.StatusBadRequest, "pending_id is required", ErrCodeBadRequest)
 			return
 		}
 
@@ -35,7 +35,7 @@ func ConfirmToolAction(cfg *config.Config) http.HandlerFunc {
 		req, err := http.NewRequestWithContext(r.Context(), http.MethodPost,
 			cfg.AIServiceURL+"/ai/confirm", bytes.NewBuffer(payload))
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "proxy request build failed")
+			respondErrorWithCode(w, http.StatusInternalServerError, "proxy request build failed", ErrCodeInternal)
 			return
 		}
 		req.Header.Set("Content-Type", "application/json")
@@ -44,7 +44,7 @@ func ConfirmToolAction(cfg *config.Config) http.HandlerFunc {
 		client := &http.Client{Timeout: 30 * time.Second}
 		resp, err := client.Do(req)
 		if err != nil {
-			respondError(w, http.StatusBadGateway, "AI service unavailable")
+			respondErrorWithCode(w, http.StatusBadGateway, "AI service unavailable", ErrCodeInternal)
 			return
 		}
 		defer resp.Body.Close()

@@ -56,7 +56,7 @@ func ListDeals(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -75,7 +75,7 @@ func ListDeals(pool *pgxpool.Pool) http.HandlerFunc {
 		sql := dealSelectSQL + " WHERE " + whereExpr + " ORDER BY d.created_at DESC"
 		rows, err := tx.Query(r.Context(), sql, args...)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "query error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "query error", ErrCodeDatabase)
 			return
 		}
 		defer rows.Close()
@@ -84,7 +84,7 @@ func ListDeals(pool *pgxpool.Pool) http.HandlerFunc {
 		for rows.Next() {
 			d, err := scanDeal(rows)
 			if err != nil {
-				respondError(w, http.StatusInternalServerError, "scan error")
+				respondErrorWithCode(w, http.StatusInternalServerError, "scan error", ErrCodeDatabase)
 				return
 			}
 			deals = append(deals, d)
@@ -105,7 +105,7 @@ func GetDeal(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -113,7 +113,7 @@ func GetDeal(pool *pgxpool.Pool) http.HandlerFunc {
 		row := tx.QueryRow(r.Context(), dealSelectSQL+" WHERE d.id = $1", id)
 		d, err := scanDeal(row)
 		if err != nil {
-			respondError(w, http.StatusNotFound, "deal not found")
+			respondErrorWithCode(w, http.StatusNotFound, "deal not found", ErrCodeNotFound)
 			return
 		}
 
@@ -134,27 +134,27 @@ func CreateDeal(pool *pgxpool.Pool) http.HandlerFunc {
 			Notes     *string  `json:"notes"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respondError(w, http.StatusBadRequest, "invalid JSON")
+			respondErrorWithCode(w, http.StatusBadRequest, "invalid JSON", ErrCodeBadRequest)
 			return
 		}
 		if body.ContactID == "" || body.StageID == "" || body.Title == "" {
-			respondError(w, http.StatusBadRequest, "contact_id, stage_id, and title are required")
+			respondErrorWithCode(w, http.StatusBadRequest, "contact_id, stage_id, and title are required", ErrCodeBadRequest)
 			return
 		}
 		if err := validateMaxLen("title", body.Title, 200); err != nil {
-			respondError(w, http.StatusBadRequest, err.Error())
+			respondErrorWithCode(w, http.StatusBadRequest, err.Error(), ErrCodeBadRequest)
 			return
 		}
 		if body.Notes != nil {
 			if err := validateMaxLen("notes", *body.Notes, 5000); err != nil {
-				respondError(w, http.StatusBadRequest, err.Error())
+				respondErrorWithCode(w, http.StatusBadRequest, err.Error(), ErrCodeBadRequest)
 				return
 			}
 		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -167,14 +167,14 @@ func CreateDeal(pool *pgxpool.Pool) http.HandlerFunc {
 			body.ContactID, agentID, body.StageID, body.Title, body.Value, body.Notes,
 		).Scan(&newID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "create failed")
+			respondErrorWithCode(w, http.StatusInternalServerError, "create failed", ErrCodeDatabase)
 			return
 		}
 
 		row := tx.QueryRow(r.Context(), dealSelectSQL+" WHERE d.id = $1", newID)
 		d, err := scanDeal(row)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "fetch after create failed")
+			respondErrorWithCode(w, http.StatusInternalServerError, "fetch after create failed", ErrCodeDatabase)
 			return
 		}
 
@@ -190,25 +190,25 @@ func UpdateDeal(pool *pgxpool.Pool) http.HandlerFunc {
 
 		var body map[string]interface{}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respondError(w, http.StatusBadRequest, "invalid JSON")
+			respondErrorWithCode(w, http.StatusBadRequest, "invalid JSON", ErrCodeBadRequest)
 			return
 		}
 		if title, ok := body["title"].(string); ok {
 			if err := validateMaxLen("title", title, 200); err != nil {
-				respondError(w, http.StatusBadRequest, err.Error())
+				respondErrorWithCode(w, http.StatusBadRequest, err.Error(), ErrCodeBadRequest)
 				return
 			}
 		}
 		if notes, ok := body["notes"].(string); ok {
 			if err := validateMaxLen("notes", notes, 5000); err != nil {
-				respondError(w, http.StatusBadRequest, err.Error())
+				respondErrorWithCode(w, http.StatusBadRequest, err.Error(), ErrCodeBadRequest)
 				return
 			}
 		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -230,14 +230,14 @@ func UpdateDeal(pool *pgxpool.Pool) http.HandlerFunc {
 			args...,
 		).Scan(&newID)
 		if err != nil {
-			respondError(w, http.StatusNotFound, "deal not found")
+			respondErrorWithCode(w, http.StatusNotFound, "deal not found", ErrCodeNotFound)
 			return
 		}
 
 		row := tx.QueryRow(r.Context(), dealSelectSQL+" WHERE d.id = $1", newID)
 		d, err := scanDeal(row)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "fetch after update failed")
+			respondErrorWithCode(w, http.StatusInternalServerError, "fetch after update failed", ErrCodeDatabase)
 			return
 		}
 
@@ -253,14 +253,14 @@ func DeleteDeal(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
 
 		result, err := tx.Exec(r.Context(), `DELETE FROM deals WHERE id = $1`, id)
 		if err != nil || result.RowsAffected() == 0 {
-			respondError(w, http.StatusNotFound, "deal not found")
+			respondErrorWithCode(w, http.StatusNotFound, "deal not found", ErrCodeNotFound)
 			return
 		}
 

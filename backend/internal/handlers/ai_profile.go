@@ -30,7 +30,7 @@ func GetAIProfile(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -41,7 +41,7 @@ func GetAIProfile(pool *pgxpool.Pool) http.HandlerFunc {
 			contactID,
 		).Scan(&p.ID, &p.ContactID, &p.Summary, &p.CreatedAt, &p.UpdatedAt)
 		if err != nil {
-			respondError(w, http.StatusNotFound, "AI profile not found")
+			respondErrorWithCode(w, http.StatusNotFound, "AI profile not found", ErrCodeNotFound)
 			return
 		}
 
@@ -64,7 +64,7 @@ func RegenerateAIProfile(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFun
 		req, err := http.NewRequestWithContext(r.Context(), http.MethodPost,
 			cfg.AIServiceURL+"/ai/profiles/generate", bytes.NewBuffer(payload))
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "proxy request build failed")
+			respondErrorWithCode(w, http.StatusInternalServerError, "proxy request build failed", ErrCodeInternal)
 			return
 		}
 		req.Header.Set("Content-Type", "application/json")
@@ -76,7 +76,7 @@ func RegenerateAIProfile(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFun
 			// AI service unavailable — fall back to placeholder in DB
 			tx, txErr := database.BeginWithRLS(r.Context(), pool, agentID)
 			if txErr != nil {
-				respondError(w, http.StatusInternalServerError, "database error")
+				respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 				return
 			}
 			defer tx.Rollback(r.Context())

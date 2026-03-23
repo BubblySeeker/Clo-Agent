@@ -29,7 +29,7 @@ func GetMessages(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -40,7 +40,7 @@ func GetMessages(pool *pgxpool.Pool) http.HandlerFunc {
 			convID,
 		)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "query error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "query error", ErrCodeDatabase)
 			return
 		}
 		defer rows.Close()
@@ -49,7 +49,7 @@ func GetMessages(pool *pgxpool.Pool) http.HandlerFunc {
 		for rows.Next() {
 			var m Message
 			if err := rows.Scan(&m.ID, &m.ConversationID, &m.Role, &m.Content, &m.CreatedAt); err != nil {
-				respondError(w, http.StatusInternalServerError, "scan error")
+				respondErrorWithCode(w, http.StatusInternalServerError, "scan error", ErrCodeDatabase)
 				return
 			}
 			messages = append(messages, m)
@@ -71,18 +71,18 @@ func SendMessage(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 			Content string `json:"content"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Content == "" {
-			respondError(w, http.StatusBadRequest, "content is required")
+			respondErrorWithCode(w, http.StatusBadRequest, "content is required", ErrCodeBadRequest)
 			return
 		}
 		if err := validateMaxLen("content", body.Content, 10000); err != nil {
-			respondError(w, http.StatusBadRequest, err.Error())
+			respondErrorWithCode(w, http.StatusBadRequest, err.Error(), ErrCodeBadRequest)
 			return
 		}
 
 		// Persist user message in a separate committed transaction.
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		_, err = tx.Exec(r.Context(),
@@ -91,7 +91,7 @@ func SendMessage(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 		)
 		if err != nil {
 			tx.Rollback(r.Context())
-			respondError(w, http.StatusInternalServerError, "failed to save message")
+			respondErrorWithCode(w, http.StatusInternalServerError, "failed to save message", ErrCodeDatabase)
 			return
 		}
 
@@ -131,7 +131,7 @@ func SendMessage(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 		req, err := http.NewRequestWithContext(r.Context(), http.MethodPost,
 			cfg.AIServiceURL+"/ai/messages", bytes.NewBuffer(payload))
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "proxy request build failed")
+			respondErrorWithCode(w, http.StatusInternalServerError, "proxy request build failed", ErrCodeInternal)
 			return
 		}
 		req.Header.Set("Content-Type", "application/json")
@@ -140,7 +140,7 @@ func SendMessage(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 		aiClient := &http.Client{Timeout: 5 * time.Minute}
 		resp, err := aiClient.Do(req)
 		if err != nil {
-			respondError(w, http.StatusBadGateway, "AI service unavailable")
+			respondErrorWithCode(w, http.StatusBadGateway, "AI service unavailable", ErrCodeInternal)
 			return
 		}
 		defer resp.Body.Close()

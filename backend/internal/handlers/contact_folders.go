@@ -26,13 +26,13 @@ func ListContactFolders(pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		agentID := middleware.AgentUUIDFromContext(r.Context())
 		if agentID == "" {
-			respondError(w, http.StatusUnauthorized, "unauthorized")
+			respondErrorWithCode(w, http.StatusUnauthorized, "unauthorized", ErrCodeUnauthorized)
 			return
 		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -44,7 +44,7 @@ func ListContactFolders(pool *pgxpool.Pool) http.HandlerFunc {
 			 GROUP BY f.id, f.name, f.created_at
 			 ORDER BY f.name ASC`)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "query error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "query error", ErrCodeDatabase)
 			return
 		}
 		defer rows.Close()
@@ -53,7 +53,7 @@ func ListContactFolders(pool *pgxpool.Pool) http.HandlerFunc {
 		for rows.Next() {
 			var f ContactFolder
 			if err := rows.Scan(&f.ID, &f.Name, &f.ContactCount, &f.CreatedAt); err != nil {
-				respondError(w, http.StatusInternalServerError, "scan error")
+				respondErrorWithCode(w, http.StatusInternalServerError, "scan error", ErrCodeDatabase)
 				return
 			}
 			folders = append(folders, f)
@@ -71,7 +71,7 @@ func CreateContactFolder(pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		agentID := middleware.AgentUUIDFromContext(r.Context())
 		if agentID == "" {
-			respondError(w, http.StatusUnauthorized, "unauthorized")
+			respondErrorWithCode(w, http.StatusUnauthorized, "unauthorized", ErrCodeUnauthorized)
 			return
 		}
 
@@ -79,18 +79,18 @@ func CreateContactFolder(pool *pgxpool.Pool) http.HandlerFunc {
 			Name string `json:"name"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respondError(w, http.StatusBadRequest, "invalid JSON")
+			respondErrorWithCode(w, http.StatusBadRequest, "invalid JSON", ErrCodeBadRequest)
 			return
 		}
 		body.Name = strings.TrimSpace(body.Name)
 		if body.Name == "" {
-			respondError(w, http.StatusBadRequest, "name is required")
+			respondErrorWithCode(w, http.StatusBadRequest, "name is required", ErrCodeBadRequest)
 			return
 		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -104,10 +104,10 @@ func CreateContactFolder(pool *pgxpool.Pool) http.HandlerFunc {
 		).Scan(&f.ID, &f.Name, &f.ContactCount, &f.CreatedAt)
 		if err != nil {
 			if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "23505") {
-				respondError(w, http.StatusConflict, "a folder with that name already exists")
+				respondErrorWithCode(w, http.StatusConflict, "a folder with that name already exists", ErrCodeConflict)
 				return
 			}
-			respondError(w, http.StatusInternalServerError, "failed to create folder")
+			respondErrorWithCode(w, http.StatusInternalServerError, "failed to create folder", ErrCodeDatabase)
 			return
 		}
 
@@ -121,7 +121,7 @@ func UpdateContactFolder(pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		agentID := middleware.AgentUUIDFromContext(r.Context())
 		if agentID == "" {
-			respondError(w, http.StatusUnauthorized, "unauthorized")
+			respondErrorWithCode(w, http.StatusUnauthorized, "unauthorized", ErrCodeUnauthorized)
 			return
 		}
 		id := chi.URLParam(r, "id")
@@ -130,18 +130,18 @@ func UpdateContactFolder(pool *pgxpool.Pool) http.HandlerFunc {
 			Name string `json:"name"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respondError(w, http.StatusBadRequest, "invalid JSON")
+			respondErrorWithCode(w, http.StatusBadRequest, "invalid JSON", ErrCodeBadRequest)
 			return
 		}
 		body.Name = strings.TrimSpace(body.Name)
 		if body.Name == "" {
-			respondError(w, http.StatusBadRequest, "name is required")
+			respondErrorWithCode(w, http.StatusBadRequest, "name is required", ErrCodeBadRequest)
 			return
 		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -154,10 +154,10 @@ func UpdateContactFolder(pool *pgxpool.Pool) http.HandlerFunc {
 		).Scan(&f.ID, &f.Name, &f.ContactCount, &f.CreatedAt)
 		if err != nil {
 			if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "23505") {
-				respondError(w, http.StatusConflict, "a folder with that name already exists")
+				respondErrorWithCode(w, http.StatusConflict, "a folder with that name already exists", ErrCodeConflict)
 				return
 			}
-			respondError(w, http.StatusNotFound, "folder not found")
+			respondErrorWithCode(w, http.StatusNotFound, "folder not found", ErrCodeNotFound)
 			return
 		}
 
@@ -172,7 +172,7 @@ func DeleteContactFolder(pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		agentID := middleware.AgentUUIDFromContext(r.Context())
 		if agentID == "" {
-			respondError(w, http.StatusUnauthorized, "unauthorized")
+			respondErrorWithCode(w, http.StatusUnauthorized, "unauthorized", ErrCodeUnauthorized)
 			return
 		}
 		id := chi.URLParam(r, "id")
@@ -181,13 +181,13 @@ func DeleteContactFolder(pool *pgxpool.Pool) http.HandlerFunc {
 			ConfirmName string `json:"confirm_name"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respondError(w, http.StatusBadRequest, "invalid JSON")
+			respondErrorWithCode(w, http.StatusBadRequest, "invalid JSON", ErrCodeBadRequest)
 			return
 		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -196,19 +196,19 @@ func DeleteContactFolder(pool *pgxpool.Pool) http.HandlerFunc {
 		var actualName string
 		err = tx.QueryRow(r.Context(), `SELECT name FROM contact_folders WHERE id = $1`, id).Scan(&actualName)
 		if err != nil {
-			respondError(w, http.StatusNotFound, "folder not found")
+			respondErrorWithCode(w, http.StatusNotFound, "folder not found", ErrCodeNotFound)
 			return
 		}
 
 		if body.ConfirmName != actualName {
-			respondError(w, http.StatusBadRequest, "folder name does not match — type the exact folder name to confirm deletion")
+			respondErrorWithCode(w, http.StatusBadRequest, "folder name does not match — type the exact folder name to confirm deletion", ErrCodeBadRequest)
 			return
 		}
 
 		// Delete folder (ON DELETE SET NULL moves contacts to unfiled)
 		_, err = tx.Exec(r.Context(), `DELETE FROM contact_folders WHERE id = $1`, id)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "failed to delete folder")
+			respondErrorWithCode(w, http.StatusInternalServerError, "failed to delete folder", ErrCodeDatabase)
 			return
 		}
 
@@ -222,7 +222,7 @@ func MoveContactsToFolder(pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		agentID := middleware.AgentUUIDFromContext(r.Context())
 		if agentID == "" {
-			respondError(w, http.StatusUnauthorized, "unauthorized")
+			respondErrorWithCode(w, http.StatusUnauthorized, "unauthorized", ErrCodeUnauthorized)
 			return
 		}
 		folderID := chi.URLParam(r, "id")
@@ -231,17 +231,17 @@ func MoveContactsToFolder(pool *pgxpool.Pool) http.HandlerFunc {
 			ContactIDs []string `json:"contact_ids"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respondError(w, http.StatusBadRequest, "invalid JSON")
+			respondErrorWithCode(w, http.StatusBadRequest, "invalid JSON", ErrCodeBadRequest)
 			return
 		}
 		if len(body.ContactIDs) == 0 {
-			respondError(w, http.StatusBadRequest, "contact_ids is required")
+			respondErrorWithCode(w, http.StatusBadRequest, "contact_ids is required", ErrCodeBadRequest)
 			return
 		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -250,7 +250,7 @@ func MoveContactsToFolder(pool *pgxpool.Pool) http.HandlerFunc {
 		var exists bool
 		err = tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM contact_folders WHERE id = $1)`, folderID).Scan(&exists)
 		if err != nil || !exists {
-			respondError(w, http.StatusNotFound, "folder not found")
+			respondErrorWithCode(w, http.StatusNotFound, "folder not found", ErrCodeNotFound)
 			return
 		}
 
@@ -269,7 +269,7 @@ func RemoveContactsFromFolder(pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		agentID := middleware.AgentUUIDFromContext(r.Context())
 		if agentID == "" {
-			respondError(w, http.StatusUnauthorized, "unauthorized")
+			respondErrorWithCode(w, http.StatusUnauthorized, "unauthorized", ErrCodeUnauthorized)
 			return
 		}
 
@@ -277,17 +277,17 @@ func RemoveContactsFromFolder(pool *pgxpool.Pool) http.HandlerFunc {
 			ContactIDs []string `json:"contact_ids"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respondError(w, http.StatusBadRequest, "invalid JSON")
+			respondErrorWithCode(w, http.StatusBadRequest, "invalid JSON", ErrCodeBadRequest)
 			return
 		}
 		if len(body.ContactIDs) == 0 {
-			respondError(w, http.StatusBadRequest, "contact_ids is required")
+			respondErrorWithCode(w, http.StatusBadRequest, "contact_ids is required", ErrCodeBadRequest)
 			return
 		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())

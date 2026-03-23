@@ -27,7 +27,7 @@ func ListConversations(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -41,7 +41,7 @@ func ListConversations(pool *pgxpool.Pool) http.HandlerFunc {
 			 ORDER BY cv.created_at DESC`,
 		)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "query error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "query error", ErrCodeDatabase)
 			return
 		}
 		defer rows.Close()
@@ -50,7 +50,7 @@ func ListConversations(pool *pgxpool.Pool) http.HandlerFunc {
 		for rows.Next() {
 			var cv Conversation
 			if err := rows.Scan(&cv.ID, &cv.ContactID, &cv.AgentID, &cv.CreatedAt, &cv.ContactName, &cv.Title); err != nil {
-				respondError(w, http.StatusInternalServerError, "scan error")
+				respondErrorWithCode(w, http.StatusInternalServerError, "scan error", ErrCodeDatabase)
 				return
 			}
 			convs = append(convs, cv)
@@ -73,7 +73,7 @@ func CreateConversation(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -85,7 +85,7 @@ func CreateConversation(pool *pgxpool.Pool) http.HandlerFunc {
 			body.ContactID, agentID,
 		).Scan(&cv.ID, &cv.ContactID, &cv.AgentID, &cv.CreatedAt)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "create failed")
+			respondErrorWithCode(w, http.StatusInternalServerError, "create failed", ErrCodeDatabase)
 			return
 		}
 
@@ -101,7 +101,7 @@ func GetConversation(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -117,7 +117,7 @@ func GetConversation(pool *pgxpool.Pool) http.HandlerFunc {
 			id,
 		).Scan(&cv.ID, &cv.ContactID, &cv.AgentID, &cv.CreatedAt, &cv.ContactName, &cv.Title)
 		if err != nil {
-			respondError(w, http.StatusNotFound, "conversation not found")
+			respondErrorWithCode(w, http.StatusNotFound, "conversation not found", ErrCodeNotFound)
 			return
 		}
 
@@ -133,7 +133,7 @@ func DeleteConversation(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -144,20 +144,20 @@ func DeleteConversation(pool *pgxpool.Pool) http.HandlerFunc {
 			`SELECT EXISTS(SELECT 1 FROM conversations WHERE id = $1)`, id,
 		).Scan(&exists)
 		if err != nil || !exists {
-			respondError(w, http.StatusNotFound, "conversation not found")
+			respondErrorWithCode(w, http.StatusNotFound, "conversation not found", ErrCodeNotFound)
 			return
 		}
 
 		// Delete messages first, then conversation
 		_, err = tx.Exec(r.Context(), `DELETE FROM messages WHERE conversation_id = $1`, id)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "delete messages failed")
+			respondErrorWithCode(w, http.StatusInternalServerError, "delete messages failed", ErrCodeDatabase)
 			return
 		}
 
 		_, err = tx.Exec(r.Context(), `DELETE FROM conversations WHERE id = $1`, id)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "delete failed")
+			respondErrorWithCode(w, http.StatusInternalServerError, "delete failed", ErrCodeDatabase)
 			return
 		}
 

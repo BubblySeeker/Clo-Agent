@@ -18,7 +18,7 @@ func GetSettings(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -28,7 +28,7 @@ func GetSettings(pool *pgxpool.Pool) http.HandlerFunc {
 			`SELECT COALESCE(settings, '{}') FROM users WHERE id = $1`, agentID,
 		).Scan(&settings)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "query error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "query error", ErrCodeDatabase)
 			return
 		}
 
@@ -47,22 +47,22 @@ func UpdateSettings(pool *pgxpool.Pool) http.HandlerFunc {
 		const maxSettingsBodyBytes = 10 * 1024 // 10 KB
 		rawBody, err := io.ReadAll(io.LimitReader(r.Body, maxSettingsBodyBytes+1))
 		if err != nil {
-			respondError(w, http.StatusBadRequest, "failed to read request body")
+			respondErrorWithCode(w, http.StatusBadRequest, "failed to read request body", ErrCodeBadRequest)
 			return
 		}
 		if len(rawBody) > maxSettingsBodyBytes {
-			respondError(w, http.StatusRequestEntityTooLarge, "request body must be 10KB or less")
+			respondErrorWithCode(w, http.StatusRequestEntityTooLarge, "request body must be 10KB or less", ErrCodePayloadTooLarge)
 			return
 		}
 		var body json.RawMessage
 		if err := json.Unmarshal(rawBody, &body); err != nil {
-			respondError(w, http.StatusBadRequest, "invalid request body")
+			respondErrorWithCode(w, http.StatusBadRequest, "invalid request body", ErrCodeBadRequest)
 			return
 		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -73,7 +73,7 @@ func UpdateSettings(pool *pgxpool.Pool) http.HandlerFunc {
 			body, agentID,
 		)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "failed to save settings")
+			respondErrorWithCode(w, http.StatusInternalServerError, "failed to save settings", ErrCodeDatabase)
 			return
 		}
 
