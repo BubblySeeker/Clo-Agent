@@ -188,8 +188,25 @@ def run_workflow(workflow: dict, agent_id: str, trigger_data: dict | None = None
     return run_id
 
 
-def trigger_workflows(trigger_type: str, agent_id: str, trigger_data: dict | None = None) -> list[str]:
-    """Find and execute all matching workflows for a trigger event. Returns list of run IDs."""
+def trigger_workflows(
+    trigger_type: str,
+    agent_id: str,
+    trigger_data: dict | None = None,
+    triggered_by_workflow: bool = False,
+) -> list[str]:
+    """Find and execute all matching workflows for a trigger event. Returns list of run IDs.
+
+    If ``triggered_by_workflow`` is True the call originated from inside a running
+    workflow step.  We skip firing new workflows to prevent infinite recursion
+    (e.g. a contact_created workflow that calls create_contact would loop forever).
+    """
+    if triggered_by_workflow:
+        logger.debug(
+            "Skipping workflow trigger '%s' — already executing inside a workflow (recursion guard).",
+            trigger_type,
+        )
+        return []
+
     workflows = find_matching_workflows(trigger_type, agent_id)
     run_ids = []
     for wf in workflows:
