@@ -326,6 +326,37 @@ TOOL_DEFINITIONS = [
             "required": ["task_id", "new_due_date"],
         },
     },
+    # --- Document RAG tools ---
+    {
+        "name": "search_documents",
+        "description": (
+            "Search uploaded documents using hybrid semantic + keyword search. "
+            "Returns relevant passages with source citations (document name, page number, section). "
+            "Use this when the user asks questions that might be answered by their uploaded documents "
+            "(contracts, listings, reports, spreadsheets, etc.)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "The search query — be specific for best results"},
+                "document_id": {"type": "string", "description": "Optional: limit search to a specific document UUID"},
+                "contact_id": {"type": "string", "description": "Optional: search only documents linked to this contact"},
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "list_documents",
+        "description": "List all documents uploaded by the agent. Use to see what documents are available before searching.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "contact_id": {"type": "string", "description": "Optional: filter to documents linked to this contact"},
+            },
+            "required": [],
+        },
+    },
+    # --- Property tools ---
     {
         "name": "search_properties",
         "description": "Search properties by address, MLS ID, status, type, price range, or bedrooms. Returns matching property listings.",
@@ -496,6 +527,8 @@ READ_TOOLS = {
     "get_analytics",
     "get_overdue_tasks",
     "semantic_search",
+    "search_documents",
+    "list_documents",
     "search_properties",
     "get_property",
     "match_buyer_to_properties",
@@ -552,6 +585,10 @@ async def execute_read_tool(tool_name: str, tool_input: dict, agent_id: str) -> 
         return await run_query(lambda: _get_overdue_tasks(agent_id, tool_input.get("limit", 20)))
     elif tool_name == "semantic_search":
         return await run_query(lambda: _semantic_search(agent_id, tool_input))
+    elif tool_name == "search_documents":
+        return await run_query(lambda: _search_documents(agent_id, tool_input))
+    elif tool_name == "list_documents":
+        return await run_query(lambda: _list_documents(agent_id, tool_input))
     elif tool_name == "search_properties":
         return await run_query(lambda: _search_properties(agent_id, tool_input))
     elif tool_name == "get_property":
@@ -1198,6 +1235,64 @@ def _semantic_search(agent_id: str, inp: dict) -> list:
         return semantic_search(inp["query"], agent_id, inp.get("limit", 10))
     except Exception as e:
         return [{"error": str(e)}]
+
+
+def _search_documents(agent_id: str, inp: dict) -> dict:
+    """Hybrid semantic + keyword search across uploaded documents."""
+    try:
+        from app.services.document_search import hybrid_search, determine_k, refine_results_by_score_gap
+
+        query = inp["query"]
+        document_id = inp.get("document_id")
+        contact_id = inp.get("contact_id")
+        k = determine_k(query)
+
+        raw_results = hybrid_search(query, agent_id, k, document_id, contact_id)
+        results = refine_results_by_score_gap(raw_results, k)
+
+        formatted = []
+        for r in results:
+            formatted.append({
+                "chunk_id": r["chunk_id"],
+                "document_id": r["document_id"],
+                "filename": r["filename"],
+                "page_number": r.get("page_number"),
+                "section_heading": r.get("section_heading"),
+                "content": r["content"],
+                "score": round(r["rrf_score"], 4),
+            })
+
+        return {
+            "results": formatted,
+            "total_found": len(formatted),
+            "query": query,
+            "k_used": k,
+        }
+    except Exception as e:
+        logger.exception("search_documents tool error")
+        return {"error": str(e), "results": []}
+
+
+def _list_documents(agent_id: str, inp: dict) -> list:
+    """List all documents for the agent, optionally filtered by contact."""
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        contact_id = inp.get("contact_id")
+        if contact_id:
+            cur.execute(
+                """SELECT id, filename, file_type, file_size, status, page_count, chunk_count, created_at
+                   FROM documents WHERE agent_id = %s AND contact_id = %s AND status = 'ready'
+                   ORDER BY created_at DESC""",
+                (agent_id, contact_id),
+            )
+        else:
+            cur.execute(
+                """SELECT id, filename, file_type, file_size, status, page_count, chunk_count, created_at
+                   FROM documents WHERE agent_id = %s AND status = 'ready'
+                   ORDER BY created_at DESC""",
+                (agent_id,),
+            )
+        return [dict(r) for r in cur.fetchall()]
 
 
 def _get_overdue_tasks(agent_id: str, limit: int) -> list:

@@ -11,6 +11,8 @@ import { listDeals } from "@/lib/api/deals";
 import { getBuyerProfile, createBuyerProfile, updateBuyerProfile } from "@/lib/api/buyer-profiles";
 import type { CreateBuyerProfileBody } from "@/lib/api/buyer-profiles";
 import { getAIProfile, regenerateAIProfile } from "@/lib/api/ai-profiles";
+import { listDocuments, uploadDocument, deleteDocument, type Document as DocType } from "@/lib/api/documents";
+import { listContactFolders } from "@/lib/api/contact-folders";
 import { useUIStore } from "@/store/ui-store";
 import {
   Phone,
@@ -36,6 +38,13 @@ import {
   Plus,
   User,
   BedDouble,
+  Upload,
+  FileSpreadsheet,
+  File,
+  Download,
+  Loader2,
+  AlertCircle,
+  FolderOpen,
 } from "lucide-react";
 
 const typeIconColors: Record<string, { bg: string; color: string }> = {
@@ -80,7 +89,7 @@ function timeStr(dateStr: string) {
   });
 }
 
-const tabOptions = ["All Activity", "Calls", "Emails", "Notes", "Showings", "Buyer Profile", "AI Profile"];
+const tabOptions = ["All Activity", "Calls", "Emails", "Notes", "Showings", "Buyer Profile", "AI Profile", "Documents"];
 const tabTypeMap: Record<string, string> = {
   Calls: "call",
   Emails: "email",
@@ -108,7 +117,7 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
 
   // Edit contact modal
   const [showEdit, setShowEdit] = useState(false);
-  const [editForm, setEditForm] = useState({ first_name: "", last_name: "", email: "", phone: "", source: "" });
+  const [editForm, setEditForm] = useState({ first_name: "", last_name: "", email: "", phone: "", source: "", folder_id: "" });
 
   // Delete confirmation modal
   const [showDelete, setShowDelete] = useState(false);
@@ -140,6 +149,11 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
     deal_breakers: "",
     notes: "",
   });
+
+  // Document upload state
+  const [showDocUpload, setShowDocUpload] = useState(false);
+  const [docFile, setDocFile] = useState<File | null>(null);
+  const [isDraggingDoc, setIsDraggingDoc] = useState(false);
 
   // --- Queries ---
   const { data: contact, isLoading: contactLoading } = useQuery({
@@ -189,6 +203,26 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
 
   const aiProfileNotFound = aiProfileError && (aiProfileError as Error).message?.includes("404");
 
+  const { data: documentsData, isLoading: docsLoading } = useQuery({
+    queryKey: ["contact-documents", id],
+    queryFn: async () => {
+      const token = await getToken();
+      return listDocuments(token!, 1, 100, undefined, id);
+    },
+    refetchInterval: (query) => {
+      const docs = query.state.data?.documents;
+      return docs?.some((d: DocType) => d.status === "processing") ? 5000 : false;
+    },
+  });
+
+  const { data: foldersData } = useQuery({
+    queryKey: ["contact-folders"],
+    queryFn: async () => {
+      const token = await getToken();
+      return listContactFolders(token!);
+    },
+  });
+
   // --- Mutations ---
   const logMutation = useMutation({
     mutationFn: async () => {
@@ -218,7 +252,21 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["contact", id] });
+      queryClient.invalidateQueries({ queryKey: ["contacts"] });
+      queryClient.invalidateQueries({ queryKey: ["contact-folders"] });
       setShowEdit(false);
+    },
+  });
+
+  const folderChangeMutation = useMutation({
+    mutationFn: async (folderId: string | null) => {
+      const token = await getToken();
+      return updateContact(token!, id, { folder_id: folderId } as UpdateContactBody);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["contact", id] });
+      queryClient.invalidateQueries({ queryKey: ["contacts"] });
+      queryClient.invalidateQueries({ queryKey: ["contact-folders"] });
     },
   });
 
@@ -264,6 +312,28 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
     },
   });
 
+  const uploadDocMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const token = await getToken();
+      return uploadDocument(token!, file, id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["contact-documents", id] });
+      setShowDocUpload(false);
+      setDocFile(null);
+    },
+  });
+
+  const deleteDocMutation = useMutation({
+    mutationFn: async (docId: string) => {
+      const token = await getToken();
+      return deleteDocument(token!, docId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["contact-documents", id] });
+    },
+  });
+
   // --- Helpers ---
   const toggleExpand = (itemId: string) => {
     setExpandedItems((prev) => {
@@ -282,6 +352,7 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
       email: contact.email ?? "",
       phone: contact.phone ?? "",
       source: contact.source ?? "",
+      folder_id: contact.folder_id ?? "",
     });
     setShowEdit(true);
   };
@@ -293,6 +364,7 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
     body.email = editForm.email || undefined;
     body.phone = editForm.phone || undefined;
     body.source = editForm.source || undefined;
+    body.folder_id = editForm.folder_id || null;
     updateContactMutation.mutate(body);
   };
 
@@ -463,6 +535,19 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
                   ))}
                 </select>
               </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-500 mb-1 block">Folder</label>
+                <select
+                  value={editForm.folder_id}
+                  onChange={(e) => setEditForm({ ...editForm, folder_id: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200 bg-white"
+                >
+                  <option value="">Unfiled</option>
+                  {(foldersData?.folders ?? []).map((f) => (
+                    <option key={f.id} value={f.id}>{f.name}</option>
+                  ))}
+                </select>
+              </div>
             </div>
             <div className="flex justify-end gap-2 mt-5">
               <button
@@ -595,6 +680,20 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
               <div className="flex items-center gap-2 text-gray-600">
                 <span className="text-gray-400 text-xs">Source:</span>
                 {contact.source ?? "Unknown"}
+              </div>
+              <div className="flex items-center gap-2 text-gray-600">
+                <FolderOpen size={13} className="text-gray-400" />
+                <select
+                  value={contact.folder_id ?? ""}
+                  onChange={(e) => folderChangeMutation.mutate(e.target.value || null)}
+                  className="text-sm bg-transparent border-none outline-none cursor-pointer hover:text-sky-600 -ml-0.5 py-0"
+                  style={{ appearance: "auto" }}
+                >
+                  <option value="">Unfiled</option>
+                  {(foldersData?.folders ?? []).map((f) => (
+                    <option key={f.id} value={f.id}>{f.name}</option>
+                  ))}
+                </select>
               </div>
               <div className="flex items-center gap-2 text-gray-600">
                 <span className="text-gray-400 text-xs">Added:</span>
@@ -1227,6 +1326,221 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
                   </button>
                 </div>
               )}
+            </div>
+          ) : activeTab === "Documents" ? (
+            /* ── DOCUMENTS TAB ── */
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
+              <div className="flex items-center justify-between p-6 pb-4">
+                <h4 className="text-lg font-bold flex items-center gap-2" style={{ color: "#1E3A5F" }}>
+                  <FileText size={18} className="text-sky-500" />
+                  Documents
+                </h4>
+                <button
+                  onClick={() => setShowDocUpload(true)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-semibold"
+                  style={{ backgroundColor: "#0EA5E9" }}
+                >
+                  <Upload size={14} />
+                  Upload Document
+                </button>
+              </div>
+
+              {/* Upload Modal */}
+              {showDocUpload && (
+                <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
+                  <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl">
+                    <div className="flex items-center justify-between mb-5">
+                      <h3 className="text-lg font-bold" style={{ color: "#1E3A5F" }}>Upload Document</h3>
+                      <button
+                        onClick={() => { setShowDocUpload(false); setDocFile(null); }}
+                        className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center"
+                      >
+                        <X size={16} className="text-gray-400" />
+                      </button>
+                    </div>
+                    <div
+                      className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
+                        isDraggingDoc ? "border-sky-400 bg-sky-50" : "border-gray-200 hover:border-gray-300"
+                      }`}
+                      onDragOver={(e) => { e.preventDefault(); setIsDraggingDoc(true); }}
+                      onDragLeave={() => setIsDraggingDoc(false)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setIsDraggingDoc(false);
+                        const file = e.dataTransfer.files[0];
+                        if (file) setDocFile(file);
+                      }}
+                    >
+                      {docFile ? (
+                        <div className="flex flex-col items-center gap-2">
+                          <FileText size={32} className="text-sky-500" />
+                          <p className="text-sm font-semibold text-gray-800">{docFile.name}</p>
+                          <p className="text-xs text-gray-400">{(docFile.size / 1024).toFixed(1)} KB</p>
+                          <button
+                            onClick={() => setDocFile(null)}
+                            className="text-xs text-red-500 hover:text-red-600 font-semibold mt-1"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center gap-2">
+                          <Upload size={32} className="text-gray-300" />
+                          <p className="text-sm text-gray-500">Drag and drop a file here, or</p>
+                          <label className="cursor-pointer px-4 py-2 rounded-xl text-sm font-semibold text-white" style={{ backgroundColor: "#0EA5E9" }}>
+                            Browse Files
+                            <input
+                              type="file"
+                              className="hidden"
+                              accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.png,.jpg,.jpeg"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) setDocFile(file);
+                              }}
+                            />
+                          </label>
+                          <p className="text-xs text-gray-400 mt-1">PDF, DOC, XLS, CSV, TXT, images</p>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex justify-end gap-2 mt-5">
+                      <button
+                        onClick={() => { setShowDocUpload(false); setDocFile(null); }}
+                        className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-500 hover:bg-gray-100 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => docFile && uploadDocMutation.mutate(docFile)}
+                        disabled={!docFile || uploadDocMutation.isPending}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-50"
+                        style={{ backgroundColor: "#0EA5E9" }}
+                      >
+                        {uploadDocMutation.isPending ? (
+                          <><Loader2 size={14} className="animate-spin" /> Uploading...</>
+                        ) : (
+                          <><Upload size={14} /> Upload</>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Document List */}
+              <div className="px-6 pb-6">
+                {docsLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 size={24} className="animate-spin text-gray-300" />
+                  </div>
+                ) : !documentsData?.documents?.length ? (
+                  <div className="flex flex-col items-center justify-center py-16 px-6">
+                    <div
+                      className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
+                      style={{ backgroundColor: "#EFF6FF" }}
+                    >
+                      <FileText size={28} className="text-sky-500" />
+                    </div>
+                    <h4 className="text-base font-bold mb-1" style={{ color: "#1E3A5F" }}>No Documents</h4>
+                    <p className="text-sm text-gray-400 mb-5 text-center max-w-xs">
+                      Upload documents related to this contact such as contracts, disclosures, or inspection reports.
+                    </p>
+                    <button
+                      onClick={() => setShowDocUpload(true)}
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-semibold"
+                      style={{ backgroundColor: "#0EA5E9" }}
+                    >
+                      <Upload size={14} />
+                      Upload Document
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {documentsData.documents.map((doc: DocType) => {
+                      const ext = doc.filename.split(".").pop()?.toLowerCase() ?? "";
+                      const isSpreadsheet = ["xls", "xlsx", "csv"].includes(ext);
+                      const isPdf = ext === "pdf";
+                      const DocIcon = isSpreadsheet ? FileSpreadsheet : isPdf ? FileText : File;
+                      const iconColor = isSpreadsheet ? "#22C55E" : isPdf ? "#EF4444" : "#6B7280";
+                      const iconBg = isSpreadsheet ? "#F0FDF4" : isPdf ? "#FEF2F2" : "#F3F4F6";
+
+                      const sizeStr = doc.file_size < 1024
+                        ? `${doc.file_size} B`
+                        : doc.file_size < 1024 * 1024
+                        ? `${(doc.file_size / 1024).toFixed(1)} KB`
+                        : `${(doc.file_size / (1024 * 1024)).toFixed(1)} MB`;
+
+                      return (
+                        <div
+                          key={doc.id}
+                          className="flex items-center gap-4 p-4 rounded-xl bg-gray-50 hover:bg-blue-50/50 transition-colors"
+                        >
+                          <div
+                            className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                            style={{ backgroundColor: iconBg }}
+                          >
+                            <DocIcon size={18} style={{ color: iconColor }} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-gray-800 truncate">{doc.filename}</p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-xs text-gray-400">{sizeStr}</span>
+                              <span className="text-xs text-gray-300">|</span>
+                              <span className="text-xs text-gray-400">
+                                {new Date(doc.created_at).toLocaleDateString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                })}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {doc.status === "processing" && (
+                              <span className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-50 text-amber-600">
+                                <Loader2 size={10} className="animate-spin" />
+                                Processing
+                              </span>
+                            )}
+                            {doc.status === "ready" && (
+                              <span className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-green-50 text-green-600">
+                                <CheckCircle2 size={10} />
+                                Ready
+                              </span>
+                            )}
+                            {doc.status === "failed" && (
+                              <span className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-red-50 text-red-600" title={doc.error_message ?? "Processing failed"}>
+                                <AlertCircle size={10} />
+                                Failed
+                              </span>
+                            )}
+                            <a
+                              href={`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080"}/api/documents/${doc.id}/download`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="w-8 h-8 rounded-lg hover:bg-gray-200 flex items-center justify-center transition-colors"
+                              title="Download"
+                            >
+                              <Download size={14} className="text-gray-400" />
+                            </a>
+                            <button
+                              onClick={() => {
+                                if (confirm("Delete this document?")) {
+                                  deleteDocMutation.mutate(doc.id);
+                                }
+                              }}
+                              className="w-8 h-8 rounded-lg hover:bg-red-50 flex items-center justify-center transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 size={14} className="text-red-400" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           ) : activeTab === "AI Profile" ? (
             /* ── AI PROFILE TAB ── */
