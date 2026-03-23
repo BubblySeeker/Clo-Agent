@@ -56,6 +56,22 @@ func run() error {
 	slog.Info("database connection pool established")
 
 	// -------------------------------------------------------------------------
+	// Recover stuck documents from previous crashes
+	// -------------------------------------------------------------------------
+	{
+		cleanupCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		result, err := pool.Exec(cleanupCtx,
+			`UPDATE documents SET status = 'failed', error_message = 'Processing interrupted by server restart', updated_at = NOW()
+			 WHERE status = 'processing' AND updated_at < NOW() - INTERVAL '10 minutes'`)
+		if err != nil {
+			slog.Error("failed to recover stuck documents", "error", err)
+		} else if result.RowsAffected() > 0 {
+			slog.Info("recovered stuck documents", "count", result.RowsAffected())
+		}
+	}
+
+	// -------------------------------------------------------------------------
 	// Clerk client
 	// -------------------------------------------------------------------------
 	clerkClient, err := clerk.NewClient(cfg.ClerkSecretKey)
@@ -158,6 +174,30 @@ func run() error {
 		r.Get("/api/analytics/pipeline", handlers.GetPipelineAnalytics(pool))
 		r.Get("/api/analytics/activities", handlers.GetActivityAnalytics(pool))
 		r.Get("/api/analytics/contacts", handlers.GetContactAnalytics(pool))
+
+		// Contact Folders
+		r.Get("/api/contact-folders", handlers.ListContactFolders(pool))
+		r.Post("/api/contact-folders", handlers.CreateContactFolder(pool))
+		r.Patch("/api/contact-folders/{id}", handlers.UpdateContactFolder(pool))
+		r.Delete("/api/contact-folders/{id}", handlers.DeleteContactFolder(pool))
+		r.Post("/api/contact-folders/{id}/contacts", handlers.MoveContactsToFolder(pool))
+		r.Delete("/api/contact-folders/{id}/contacts", handlers.RemoveContactsFromFolder(pool))
+
+		// Document Folders
+		r.Get("/api/document-folders", handlers.ListFolders(pool))
+		r.Post("/api/document-folders", handlers.CreateFolder(pool))
+		r.Patch("/api/document-folders/{id}", handlers.RenameFolder(pool))
+		r.Delete("/api/document-folders/{id}", handlers.DeleteFolder(pool))
+
+		// Documents
+		r.Post("/api/documents", handlers.UploadDocument(pool, cfg))
+		r.Get("/api/documents", handlers.ListDocuments(pool))
+		r.Get("/api/documents/{id}", handlers.GetDocument(pool))
+		r.Delete("/api/documents/{id}", handlers.DeleteDocument(pool))
+		r.Get("/api/documents/{id}/download", handlers.DownloadDocument(pool))
+		r.Get("/api/documents/{id}/preview", handlers.PreviewDocument(pool))
+		r.Get("/api/documents/{id}/chunks", handlers.GetDocumentChunks(pool))
+		r.Get("/api/documents/{id}/chunks/{chunkId}", handlers.GetDocumentChunk(pool))
 	})
 
 	// -------------------------------------------------------------------------

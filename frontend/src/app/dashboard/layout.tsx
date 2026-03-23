@@ -22,11 +22,13 @@ import {
   Mail,
   StickyNote,
   Plus,
+  FileText,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import AIChatBubble from "@/components/shared/AIChatBubble";
+import CitationViewer from "@/components/shared/CitationViewer";
 import { useUIStore } from "@/store/ui-store";
 import { listAllActivities, type Activity } from "@/lib/api/activities";
 
@@ -40,6 +42,7 @@ const navItems = [
   { icon: CheckSquare,     label: "Tasks",     href: "/dashboard/tasks" },
   { icon: BarChart2,       label: "Reports",   href: "/dashboard/analytics" },
   { icon: Workflow,        label: "Workflows", href: "/dashboard/workflows" },
+  { icon: FileText,        label: "Documents", href: "/dashboard/documents" },
 ];
 
 function activityMeta(type: Activity["type"]): { icon: LucideIcon; bg: string; color: string; label: string } {
@@ -426,6 +429,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Floating AI chat bubble */}
       <AIChatBubble />
+
+      {/* Citation source viewer (slides in from right) */}
+      <CitationViewer />
     </div>
   );
 }

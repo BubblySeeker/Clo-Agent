@@ -31,6 +31,16 @@ interface UIState {
   setChatMessages: (msgs: ChatMessage[]) => void;
   appendChatMessage: (msg: ChatMessage) => void;
   updateLastMessage: (patch: Partial<ChatMessage>) => void;
+
+  // Citation viewer
+  citationViewerOpen: boolean;
+  citationDocId: string | null;
+  citationChunkId: string | null;
+  citationPageNumber: number | null;
+  citationFilename: string | null;
+  openCitationViewer: (docId: string, chunkId: string, pageNumber?: number | null) => void;
+  openCitationByFilename: (filename: string, pageNumber?: number | null) => void;
+  closeCitationViewer: () => void;
 }
 
 export const useUIStore = create<UIState>()((set) => ({
@@ -53,4 +63,16 @@ export const useUIStore = create<UIState>()((set) => ({
       msgs[msgs.length - 1] = { ...msgs[msgs.length - 1], ...patch };
       return { chatMessages: msgs };
     }),
+
+  citationViewerOpen: false,
+  citationDocId: null,
+  citationChunkId: null,
+  citationPageNumber: null,
+  citationFilename: null,
+  openCitationViewer: (docId, chunkId, pageNumber) =>
+    set({ citationViewerOpen: true, citationDocId: docId, citationChunkId: chunkId, citationPageNumber: pageNumber ?? null, citationFilename: null }),
+  openCitationByFilename: (filename, pageNumber) =>
+    set({ citationViewerOpen: true, citationDocId: null, citationChunkId: null, citationPageNumber: pageNumber ?? null, citationFilename: filename }),
+  closeCitationViewer: () =>
+    set({ citationViewerOpen: false, citationDocId: null, citationChunkId: null, citationPageNumber: null, citationFilename: null }),
 }));
