@@ -27,6 +27,13 @@ func AgentUUIDFromContext(ctx context.Context) string {
 func UserSync(pool *pgxpool.Pool, clerkClient clerk.Client) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// If AgentUUIDKey is already set (e.g., by service-to-service auth bypass),
+			// skip the Clerk user lookup and upsert.
+			if AgentUUIDFromContext(r.Context()) != "" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			clerkID := UserIDFromContext(r.Context())
 			if clerkID == "" {
 				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
