@@ -27,6 +27,8 @@ type Document struct {
 	AgentID      string    `json:"agent_id"`
 	ContactID    *string   `json:"contact_id"`
 	ContactName  *string   `json:"contact_name"`
+	PropertyID   *string   `json:"property_id"`
+	PropertyName *string   `json:"property_name"`
 	FolderID     *string   `json:"folder_id"`
 	FolderName   *string   `json:"folder_name"`
 	Filename     string    `json:"filename"`
@@ -129,6 +131,12 @@ func UploadDocument(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 			folderID = &fid
 		}
 
+		// Optional property_id.
+		var propertyID *string
+		if pid := r.FormValue("property_id"); pid != "" {
+			propertyID = &pid
+		}
+
 		// Read file bytes.
 		fileBytes, err := io.ReadAll(file)
 		if err != nil {
@@ -145,11 +153,11 @@ func UploadDocument(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 
 		var doc Document
 		err = tx.QueryRow(r.Context(),
-			`INSERT INTO documents (agent_id, contact_id, folder_id, filename, file_type, file_size, raw_file, status)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, 'processing')
-			 RETURNING id, agent_id, contact_id, folder_id, filename, file_type, file_size, status, error_message, page_count, chunk_count, created_at, updated_at`,
-			agentID, contactID, folderID, header.Filename, ext, len(fileBytes), fileBytes,
-		).Scan(&doc.ID, &doc.AgentID, &doc.ContactID, &doc.FolderID, &doc.Filename, &doc.FileType, &doc.FileSize,
+			`INSERT INTO documents (agent_id, contact_id, property_id, folder_id, filename, file_type, file_size, raw_file, status)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'processing')
+			 RETURNING id, agent_id, contact_id, property_id, folder_id, filename, file_type, file_size, status, error_message, page_count, chunk_count, created_at, updated_at`,
+			agentID, contactID, propertyID, folderID, header.Filename, ext, len(fileBytes), fileBytes,
+		).Scan(&doc.ID, &doc.AgentID, &doc.ContactID, &doc.PropertyID, &doc.FolderID, &doc.Filename, &doc.FileType, &doc.FileSize,
 			&doc.Status, &doc.ErrorMessage, &doc.PageCount, &doc.ChunkCount, &doc.CreatedAt, &doc.UpdatedAt)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "failed to store document")
@@ -190,6 +198,7 @@ func ListDocuments(pool *pgxpool.Pool) http.HandlerFunc {
 		status := r.URL.Query().Get("status")
 		contactID := r.URL.Query().Get("contact_id")
 		folderID := r.URL.Query().Get("folder_id")
+		propertyID := r.URL.Query().Get("property_id")
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
@@ -213,9 +222,19 @@ func ListDocuments(pool *pgxpool.Pool) http.HandlerFunc {
 				whereExpr += fmt.Sprintf(" AND d.contact_id = $%d", len(args))
 			}
 		}
+		if propertyID != "" {
+			if propertyID == "general" {
+				whereExpr += " AND d.property_id IS NULL"
+			} else {
+				args = append(args, propertyID)
+				whereExpr += fmt.Sprintf(" AND d.property_id = $%d", len(args))
+			}
+		}
 		if folderID != "" {
 			if folderID == "general" {
 				whereExpr += " AND d.folder_id IS NULL"
+			} else if folderID == "unfiled" {
+				whereExpr += " AND d.contact_id IS NULL AND d.property_id IS NULL AND d.folder_id IS NULL"
 			} else {
 				args = append(args, folderID)
 				whereExpr += fmt.Sprintf(" AND d.folder_id = $%d", len(args))
@@ -233,11 +252,13 @@ func ListDocuments(pool *pgxpool.Pool) http.HandlerFunc {
 		dataSQL := fmt.Sprintf(
 			`SELECT d.id, d.agent_id, d.contact_id,
 			        c.first_name || ' ' || c.last_name AS contact_name,
+			        d.property_id, p.address AS property_name,
 			        d.folder_id, f.name AS folder_name,
 			        d.filename, d.file_type, d.file_size, d.status, d.error_message,
 			        d.page_count, d.chunk_count, d.created_at, d.updated_at
 			 FROM documents d
 			 LEFT JOIN contacts c ON c.id = d.contact_id
+			 LEFT JOIN properties p ON p.id = d.property_id
 			 LEFT JOIN document_folders f ON f.id = d.folder_id
 			 WHERE %s ORDER BY d.created_at DESC LIMIT $%d OFFSET $%d`,
 			whereExpr, len(dataArgs)-1, len(dataArgs),
@@ -254,6 +275,7 @@ func ListDocuments(pool *pgxpool.Pool) http.HandlerFunc {
 		for rows.Next() {
 			var d Document
 			if err := rows.Scan(&d.ID, &d.AgentID, &d.ContactID, &d.ContactName,
+				&d.PropertyID, &d.PropertyName,
 				&d.FolderID, &d.FolderName,
 				&d.Filename, &d.FileType, &d.FileSize,
 				&d.Status, &d.ErrorMessage, &d.PageCount, &d.ChunkCount, &d.CreatedAt, &d.UpdatedAt); err != nil {
@@ -290,13 +312,20 @@ func GetDocument(pool *pgxpool.Pool) http.HandlerFunc {
 
 		var d Document
 		err = tx.QueryRow(r.Context(),
-			`SELECT d.id, d.agent_id, d.contact_id, d.folder_id, f.name,
+			`SELECT d.id, d.agent_id, d.contact_id,
+			        c.first_name || ' ' || c.last_name AS contact_name,
+			        d.property_id, p.address AS property_name,
+			        d.folder_id, f.name AS folder_name,
 			        d.filename, d.file_type, d.file_size, d.status, d.error_message,
 			        d.page_count, d.chunk_count, d.created_at, d.updated_at
 			 FROM documents d
+			 LEFT JOIN contacts c ON c.id = d.contact_id
+			 LEFT JOIN properties p ON p.id = d.property_id
 			 LEFT JOIN document_folders f ON f.id = d.folder_id
 			 WHERE d.id = $1`, id,
-		).Scan(&d.ID, &d.AgentID, &d.ContactID, &d.FolderID, &d.FolderName,
+		).Scan(&d.ID, &d.AgentID, &d.ContactID, &d.ContactName,
+			&d.PropertyID, &d.PropertyName,
+			&d.FolderID, &d.FolderName,
 			&d.Filename, &d.FileType, &d.FileSize,
 			&d.Status, &d.ErrorMessage, &d.PageCount, &d.ChunkCount, &d.CreatedAt, &d.UpdatedAt)
 		if err != nil {
@@ -553,6 +582,180 @@ func proxyProcessDocument(cfg *config.Config, pool *pgxpool.Pool, docID, agentID
 		errMsg := fmt.Sprintf("AI service returned %d: %s", resp.StatusCode, string(body))
 		slog.Error("document processing: AI service error", "doc_id", docID, "status", resp.StatusCode)
 		markDocumentFailed(pool, docID, agentID, errMsg)
+	}
+}
+
+// UpdateDocument allows patching a document's contact_id, property_id, or folder_id.
+func UpdateDocument(pool *pgxpool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		agentID := middleware.AgentUUIDFromContext(r.Context())
+		id := chi.URLParam(r, "id")
+
+		var body struct {
+			ContactID  *string `json:"contact_id"`
+			PropertyID *string `json:"property_id"`
+			FolderID   *string `json:"folder_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			respondError(w, http.StatusBadRequest, "invalid JSON")
+			return
+		}
+
+		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "database error")
+			return
+		}
+		defer tx.Rollback(r.Context())
+
+		setClauses := []string{"updated_at = NOW()"}
+		args := []interface{}{}
+
+		if body.ContactID != nil {
+			args = append(args, *body.ContactID)
+			if *body.ContactID == "" {
+				setClauses = append(setClauses, "contact_id = NULL")
+				args = args[:len(args)-1]
+			} else {
+				setClauses = append(setClauses, fmt.Sprintf("contact_id = $%d", len(args)))
+			}
+		}
+		if body.PropertyID != nil {
+			args = append(args, *body.PropertyID)
+			if *body.PropertyID == "" {
+				setClauses = append(setClauses, "property_id = NULL")
+				args = args[:len(args)-1]
+			} else {
+				setClauses = append(setClauses, fmt.Sprintf("property_id = $%d", len(args)))
+			}
+		}
+		if body.FolderID != nil {
+			args = append(args, *body.FolderID)
+			if *body.FolderID == "" {
+				setClauses = append(setClauses, "folder_id = NULL")
+				args = args[:len(args)-1]
+			} else {
+				setClauses = append(setClauses, fmt.Sprintf("folder_id = $%d", len(args)))
+			}
+		}
+
+		args = append(args, id)
+		sql := fmt.Sprintf("UPDATE documents SET %s WHERE id = $%d",
+			strings.Join(setClauses, ", "), len(args))
+
+		result, err := tx.Exec(r.Context(), sql, args...)
+		if err != nil || result.RowsAffected() == 0 {
+			respondError(w, http.StatusNotFound, "document not found")
+			return
+		}
+
+		tx.Commit(r.Context())
+		respondJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+	}
+}
+
+// DocumentCounts returns grouped document counts for the sidebar.
+func DocumentCounts(pool *pgxpool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		agentID := middleware.AgentUUIDFromContext(r.Context())
+		if agentID == "" {
+			respondError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+
+		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "database error")
+			return
+		}
+		defer tx.Rollback(r.Context())
+
+		// General count: no contact, no property, no folder
+		var general int
+		tx.QueryRow(r.Context(),
+			`SELECT COUNT(*) FROM documents WHERE contact_id IS NULL AND property_id IS NULL AND folder_id IS NULL`,
+		).Scan(&general)
+
+		// By contact
+		type contactCount struct {
+			ID    string `json:"id"`
+			Name  string `json:"name"`
+			Count int    `json:"count"`
+		}
+		contactRows, _ := tx.Query(r.Context(),
+			`SELECT c.id, c.first_name || ' ' || c.last_name, COUNT(d.id)
+			 FROM contacts c INNER JOIN documents d ON d.contact_id = c.id
+			 GROUP BY c.id, c.first_name, c.last_name ORDER BY c.first_name, c.last_name`)
+		defer contactRows.Close()
+		byContact := make([]contactCount, 0)
+		for contactRows.Next() {
+			var cc contactCount
+			contactRows.Scan(&cc.ID, &cc.Name, &cc.Count)
+			byContact = append(byContact, cc)
+		}
+
+		// By property
+		type propertyCount struct {
+			ID    string `json:"id"`
+			Name  string `json:"name"`
+			Count int    `json:"count"`
+		}
+		propRows, _ := tx.Query(r.Context(),
+			`SELECT p.id, p.address, COUNT(d.id)
+			 FROM properties p INNER JOIN documents d ON d.property_id = p.id
+			 GROUP BY p.id, p.address ORDER BY p.address`)
+		defer propRows.Close()
+		byProperty := make([]propertyCount, 0)
+		for propRows.Next() {
+			var pc propertyCount
+			propRows.Scan(&pc.ID, &pc.Name, &pc.Count)
+			byProperty = append(byProperty, pc)
+		}
+
+		tx.Commit(r.Context())
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"general":     general,
+			"by_contact":  byContact,
+			"by_property": byProperty,
+		})
+	}
+}
+
+// ProxyExtractProperty forwards a property extraction request to the AI service.
+func ProxyExtractProperty(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		agentID := middleware.AgentUUIDFromContext(r.Context())
+		docID := chi.URLParam(r, "id")
+
+		payload, _ := json.Marshal(map[string]string{
+			"document_id": docID,
+			"agent_id":    agentID,
+		})
+
+		ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+		defer cancel()
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+			cfg.AIServiceURL+"/ai/documents/extract-property", bytes.NewBuffer(payload))
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "failed to build request")
+			return
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-AI-Service-Secret", cfg.AIServiceSecret)
+
+		client := &http.Client{Timeout: 60 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			respondError(w, http.StatusBadGateway, "AI service unavailable")
+			return
+		}
+		defer resp.Body.Close()
+
+		body, _ := io.ReadAll(resp.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(resp.StatusCode)
+		w.Write(body) //nolint:errcheck
 	}
 }
 

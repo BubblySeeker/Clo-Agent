@@ -159,7 +159,7 @@ def _remap_chunks_to_pdf_pages(
 # Vision support (Claude Haiku 4.5)
 # ---------------------------------------------------------------------------
 
-MAX_VISION_CALLS_PER_DOC = 20
+MAX_VISION_CALLS_PER_DOC = 5
 
 
 def _vision_describe(image_bytes: bytes, mime_type: str = "image/png", context: str = "") -> str:
@@ -857,37 +857,40 @@ def process_document(document_id: str, agent_id: str) -> dict:
         raw_file = bytes(row["raw_file"])
         file_type = row["file_type"]
 
+        import time as _time
+
         # ---- Extract text ----
+        t0 = _time.time()
         logger.info("Extracting text from %s document", file_type)
         pages = extract_text(raw_file, file_type)
-        logger.info("Extracted %d pages from text", len(pages))
+        logger.info("Extracted %d pages in %.1fs", len(pages), _time.time() - t0)
 
-        # ---- Enhance image-heavy PDF pages with vision ----
-        if file_type.lower() == "pdf":
-            pages = _enhance_pdf_pages_with_vision(raw_file, pages)
-            logger.info("After vision enhancement: %d pages", len(pages))
+        # ---- Enhance image-heavy PDF pages with vision (only for scanned PDFs) ----
+        if file_type.lower() in (".pdf", "pdf"):
+            total_text = sum(len(p.text) for p in pages)
+            if total_text < 2000:
+                t1 = _time.time()
+                logger.info("Low text content (%d chars) — running vision enhancement", total_text)
+                pages = _enhance_pdf_pages_with_vision(raw_file, pages)
+                logger.info("Vision enhancement done in %.1fs, %d pages", _time.time() - t1, len(pages))
+            else:
+                logger.info("Skipping vision — document has %d chars of extracted text", total_text)
 
         page_count = max(p.page_number for p in pages)
 
         # ---- Chunk ----
+        t2 = _time.time()
         chunks = chunk_text(pages)
         if not chunks:
             raise ValueError("Document produced no text chunks")
-        logger.info("Created %d chunks", len(chunks))
+        logger.info("Created %d chunks in %.1fs", len(chunks), _time.time() - t2)
 
-        # ---- Generate embeddings in batches ----
-        embeddings: list[list[float]] = []
-        for batch_start in range(0, len(chunks), EMBEDDING_BATCH_SIZE):
-            batch = chunks[batch_start : batch_start + EMBEDDING_BATCH_SIZE]
-            logger.info(
-                "Generating embeddings for chunks %d-%d of %d",
-                batch_start,
-                batch_start + len(batch) - 1,
-                len(chunks),
-            )
-            for chunk in batch:
-                emb = generate_embedding(chunk.content)
-                embeddings.append(emb)
+        # ---- Generate embeddings in batches (using batch API) ----
+        t3 = _time.time()
+        from app.services.embeddings import generate_embeddings_batch
+        chunk_texts = [c.content for c in chunks]
+        embeddings = generate_embeddings_batch(chunk_texts)
+        logger.info("Generated %d embeddings in %.1fs", len(embeddings), _time.time() - t3)
 
         # ---- Batch insert chunks ----
         insert_rows = []

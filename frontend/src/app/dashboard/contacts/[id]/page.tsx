@@ -315,7 +315,7 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
   const uploadDocMutation = useMutation({
     mutationFn: async (file: File) => {
       const token = await getToken();
-      return uploadDocument(token!, file, id);
+      return uploadDocument(token!, file, { contactId: id });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["contact-documents", id] });

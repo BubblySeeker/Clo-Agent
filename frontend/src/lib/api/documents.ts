@@ -7,6 +7,8 @@ export interface Document {
   agent_id: string;
   contact_id: string | null;
   contact_name: string | null;
+  property_id: string | null;
+  property_name: string | null;
   folder_id: string | null;
   folder_name: string | null;
   filename: string;
@@ -55,12 +57,14 @@ export function listDocuments(
   limit = 25,
   status?: string,
   contactId?: string,
-  folderId?: string
+  folderId?: string,
+  propertyId?: string
 ): Promise<DocumentsResponse> {
   const params = new URLSearchParams({ page: String(page), limit: String(limit) });
   if (status) params.set("status", status);
   if (contactId) params.set("contact_id", contactId);
   if (folderId) params.set("folder_id", folderId);
+  if (propertyId) params.set("property_id", propertyId);
   return apiRequest(`/documents?${params}`, token);
 }
 
@@ -125,13 +129,13 @@ export function deleteDocument(token: string, id: string): Promise<void> {
 export async function uploadDocument(
   token: string,
   file: File,
-  contactId?: string,
-  folderId?: string
+  opts?: { contactId?: string; folderId?: string; propertyId?: string }
 ): Promise<Document> {
   const formData = new FormData();
   formData.append("file", file);
-  if (contactId) formData.append("contact_id", contactId);
-  if (folderId) formData.append("folder_id", folderId);
+  if (opts?.contactId) formData.append("contact_id", opts.contactId);
+  if (opts?.folderId) formData.append("folder_id", opts.folderId);
+  if (opts?.propertyId) formData.append("property_id", opts.propertyId);
 
   const res = await fetch(`${BASE}/api/documents`, {
     method: "POST",
@@ -149,16 +153,16 @@ export async function uploadDocument(
 export function uploadDocumentWithProgress(
   token: string,
   file: File,
-  contactId?: string,
-  folderId?: string,
+  opts?: { contactId?: string; folderId?: string; propertyId?: string },
   onProgress?: (percent: number) => void
 ): Promise<Document> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const formData = new FormData();
     formData.append("file", file);
-    if (contactId) formData.append("contact_id", contactId);
-    if (folderId) formData.append("folder_id", folderId);
+    if (opts?.contactId) formData.append("contact_id", opts.contactId);
+    if (opts?.folderId) formData.append("folder_id", opts.folderId);
+    if (opts?.propertyId) formData.append("property_id", opts.propertyId);
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) {
@@ -176,6 +180,53 @@ export function uploadDocumentWithProgress(
     xhr.open("POST", `${BASE}/api/documents`);
     xhr.setRequestHeader("Authorization", `Bearer ${token}`);
     xhr.send(formData);
+  });
+}
+
+export function updateDocument(
+  token: string,
+  id: string,
+  body: { contact_id?: string; property_id?: string; folder_id?: string }
+): Promise<{ status: string }> {
+  return apiRequest(`/documents/${id}`, token, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export interface DocumentCounts {
+  general: number;
+  by_contact: { id: string; name: string; count: number }[];
+  by_property: { id: string; name: string; count: number }[];
+}
+
+export function getDocumentCounts(token: string): Promise<DocumentCounts> {
+  return apiRequest("/documents/counts", token);
+}
+
+export interface ExtractedProperty {
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+  price: number | null;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  sqft: number | null;
+  property_type: string | null;
+  listing_type: string | null;
+  mls_id: string | null;
+  description: string | null;
+  year_built: number | null;
+  lot_size: string | null;
+}
+
+export function extractPropertyFromDocument(
+  token: string,
+  docId: string
+): Promise<ExtractedProperty> {
+  return apiRequest(`/documents/${docId}/extract-property`, token, {
+    method: "POST",
   });
 }
 

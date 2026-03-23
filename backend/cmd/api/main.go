@@ -201,10 +201,13 @@ func run() error {
 		// Documents
 		r.Post("/api/documents", handlers.UploadDocument(pool, cfg))
 		r.Get("/api/documents", handlers.ListDocuments(pool))
+		r.Get("/api/documents/counts", handlers.DocumentCounts(pool))
 		r.Get("/api/documents/{id}", handlers.GetDocument(pool))
+		r.Patch("/api/documents/{id}", handlers.UpdateDocument(pool))
 		r.Delete("/api/documents/{id}", handlers.DeleteDocument(pool))
 		r.Get("/api/documents/{id}/download", handlers.DownloadDocument(pool))
 		r.Get("/api/documents/{id}/preview", handlers.PreviewDocument(pool))
+		r.Post("/api/documents/{id}/extract-property", handlers.ProxyExtractProperty(pool, cfg))
 		r.Get("/api/documents/{id}/chunks", handlers.GetDocumentChunks(pool))
 		r.Get("/api/documents/{id}/chunks/{chunkId}", handlers.GetDocumentChunk(pool))
 
