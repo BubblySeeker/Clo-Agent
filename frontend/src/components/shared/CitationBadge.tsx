@@ -19,7 +19,8 @@ export default function CitationBadge({ filename, pageNumber, chunkId, documentI
       openCitationViewer(documentId, chunkId, pageNumber);
     } else {
       // Fallback: open by filename + page number (for citations without chunk UUIDs)
-      openCitationByFilename(filename, pageNumber);
+      // For page-only citations (empty filename), still open — viewer will resolve to most recent doc
+      openCitationByFilename(filename || "", pageNumber);
     }
   };
 
@@ -32,9 +33,11 @@ export default function CitationBadge({ filename, pageNumber, chunkId, documentI
       title={`${filename}${pageNumber ? `, Page ${pageNumber}` : ""}`}
     >
       <FileText size={11} className="shrink-0" />
-      <span className="truncate max-w-[120px]">{filename}</span>
+      {filename ? (
+        <span className="truncate max-w-[120px]">{filename}</span>
+      ) : null}
       {pageNumber && (
-        <span className="text-blue-500">p.{pageNumber}</span>
+        <span className="text-blue-500">{filename ? `p.${pageNumber}` : `Page ${pageNumber}`}</span>
       )}
     </span>
   );

@@ -151,9 +151,20 @@ export function parseMessageWithCitations(content: string): MessageSegment[] {
       if (firstNum) pageNumber = parseInt(firstNum[0], 10);
     }
 
+    let filename = match[1].trim();
+
+    // Handle page-only citations like [Doc: Page 2-3] where AI omitted the filename
+    const pageOnlyMatch = filename.match(/^Pages?\s*([\d,\s-]+)$/i);
+    if (pageOnlyMatch) {
+      // "filename" is actually a page reference — extract page number and clear filename
+      const firstNum = pageOnlyMatch[1].match(/\d+/);
+      if (firstNum) pageNumber = parseInt(firstNum[0], 10);
+      filename = "";
+    }
+
     segments.push({
       type: "citation",
-      filename: match[1].trim(),
+      filename,
       pageNumber,
       chunkId: match[3] || null,
       documentId: match[4] || null,

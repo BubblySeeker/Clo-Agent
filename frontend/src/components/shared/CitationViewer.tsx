@@ -53,7 +53,7 @@ export default function CitationViewer() {
       return;
     }
 
-    if (!citationDocId && !citationFilename) return;
+    if (!citationDocId && !citationFilename && !citationPageNumber) return;
 
     let cancelled = false;
     setLoading(true);
@@ -67,14 +67,31 @@ export default function CitationViewer() {
         let docData: DocType | null = null;
 
         // Resolve document ID from filename if needed
-        if (!resolvedDocId && citationFilename) {
+        if (!resolvedDocId) {
           try {
             const docs = await listDocuments(token, 1, 50);
-            const match = docs.documents.find((d) => {
-              const citName = citationFilename.replace(/\.{3,}$/, "").replace(/_/g, " ").toLowerCase();
-              const docName = d.filename.replace(/_/g, " ").toLowerCase();
-              return docName.includes(citName) || citName.includes(docName.slice(0, citName.length));
-            });
+            let match: DocType | undefined;
+
+            if (citationFilename) {
+              const normalize = (s: string) =>
+                s.replace(/\.{3,}$/, "").replace(/\.[^.]+$/, "").replace(/_/g, " ").toLowerCase().trim();
+              const citNorm = normalize(citationFilename);
+              if (citNorm) {
+                match = docs.documents.find((d) => {
+                  const docNorm = normalize(d.filename);
+                  return docNorm === citNorm
+                    || docNorm.startsWith(citNorm)
+                    || citNorm.startsWith(docNorm)
+                    || (citNorm.length >= 8 && docNorm.startsWith(citNorm.slice(0, 8)));
+                });
+              }
+            }
+
+            // Fallback: if no filename or match failed, use the most recent document
+            if (!match && docs.documents.length > 0) {
+              match = docs.documents[0]; // sorted by created_at DESC
+            }
+
             if (match) {
               resolvedDocId = match.id;
               docData = match;
