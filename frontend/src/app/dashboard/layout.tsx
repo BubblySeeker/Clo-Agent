@@ -30,6 +30,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import AIChatBubble from "@/components/shared/AIChatBubble";
 import CitationViewer from "@/components/shared/CitationViewer";
+import ErrorBoundary from "@/components/shared/ErrorBoundary";
 import { useUIStore } from "@/store/ui-store";
 import { listAllActivities, type Activity } from "@/lib/api/activities";
 
@@ -426,7 +427,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto">
-          {children}
+          <ErrorBoundary>
+            {children}
+          </ErrorBoundary>
         </main>
       </div>
 

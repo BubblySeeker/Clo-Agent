@@ -156,7 +156,7 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
   const [isDraggingDoc, setIsDraggingDoc] = useState(false);
 
   // --- Queries ---
-  const { data: contact, isLoading: contactLoading } = useQuery({
+  const { data: contact, isLoading: contactLoading, isError: contactError, refetch: refetchContact } = useQuery({
     queryKey: ["contact", id],
     queryFn: async () => {
       const token = await getToken();
@@ -448,6 +448,17 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
       },
     },
   ];
+
+  if (contactError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full min-h-[400px] gap-4 p-6 text-center">
+        <p className="text-gray-600 font-medium">Failed to load contact</p>
+        <button onClick={() => refetchContact()} className="px-4 py-2 rounded-xl text-white text-sm font-semibold" style={{ backgroundColor: "#0EA5E9" }}>
+          Try again
+        </button>
+      </div>
+    );
+  }
 
   if (contactLoading) {
     return (

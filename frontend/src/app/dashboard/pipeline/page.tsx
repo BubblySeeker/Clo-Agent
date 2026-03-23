@@ -50,7 +50,7 @@ export default function PipelinePage() {
     },
   });
 
-  const { data: dealsData, isLoading: dealsLoading } = useQuery({
+  const { data: dealsData, isLoading: dealsLoading, isError: dealsError, refetch: refetchDeals } = useQuery({
     queryKey: ["deals"],
     queryFn: async () => {
       const token = await getToken();
@@ -98,6 +98,17 @@ export default function PipelinePage() {
   const stages = stagesData ?? [];
   const deals = dealsData?.deals ?? [];
   const contacts = contactsData?.contacts ?? [];
+
+  if (dealsError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full min-h-[400px] gap-4 p-6 text-center">
+        <p className="text-gray-600 font-medium">Failed to load pipeline</p>
+        <button onClick={() => refetchDeals()} className="px-4 py-2 rounded-xl text-white text-sm font-semibold" style={{ backgroundColor: "#0EA5E9" }}>
+          Try again
+        </button>
+      </div>
+    );
+  }
 
   const dealsByStage: Record<string, Deal[]> = {};
   stages.forEach((s) => {
