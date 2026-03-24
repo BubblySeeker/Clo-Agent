@@ -16,7 +16,7 @@
 
 ### Context Awareness
 
-- [ ] **CTX-01**: AI resolves pronoun references ("email him", "call her") using the current conversation's contact context or most recently discussed contact
+- [x] **CTX-01**: AI resolves pronoun references ("email him", "call her") using the current conversation's contact context or most recently discussed contact
 - [x] **CTX-02**: AI skips search_contacts when conversation is already contact-scoped (contact_id pre-loaded) and uses the known UUID directly
 - [x] **CTX-03**: AI uses contact context from earlier in the conversation (e.g. if user searched for "Rohan" 2 messages ago, "create a deal for him" resolves to Rohan)
 
@@ -55,7 +55,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | RES-04 | Phase 1 | Complete |
 | RES-05 | Phase 1 | Complete |
 | RES-06 | Phase 1 | Complete |
-| CTX-01 | Phase 2 | Pending |
+| CTX-01 | Phase 2 | Complete |
 | CTX-02 | Phase 1 | Complete |
 | CTX-03 | Phase 1 | Complete |
 | SAFE-01 | Phase 1 | Complete |

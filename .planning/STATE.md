@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to plan
-stopped_at: Phase 2 context gathered
-last_updated: "2026-03-24T15:30:56.591Z"
+status: Phase complete — ready for verification
+stopped_at: Completed 02-context-awareness-and-hardening/02-01-PLAN.md
+last_updated: "2026-03-24T15:52:44.804Z"
 progress:
   total_phases: 2
-  completed_phases: 1
-  total_plans: 1
-  completed_plans: 1
+  completed_phases: 2
+  total_plans: 2
+  completed_plans: 2
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-24)
 
 **Core value:** When a user references a contact by any natural description, the AI finds the right contact and acts on it — every time.
-**Current focus:** Phase 01 — core-resolution-protocol
+**Current focus:** Phase 02 — context-awareness-and-hardening
 
 ## Current Position
 
-Phase: 2
-Plan: Not started
+Phase: 02 (context-awareness-and-hardening) — EXECUTING
+Plan: 1 of 1
 
 ## Performance Metrics
 
@@ -47,6 +47,7 @@ Plan: Not started
 
 *Updated after each plan completion*
 | Phase 01-core-resolution-protocol P01 | 1 | 2 tasks | 2 files |
+| Phase 02-context-awareness-and-hardening P01 | 8 | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -59,6 +60,8 @@ Recent decisions affecting current work:
 - Keep Haiku 4.5 model (cost/speed constraints for real-time chat)
 - [Phase 01-core-resolution-protocol]: Used XML tags (<contact_resolution>) for behavioral contract in system prompt — XML triggers native pattern recognition in Claude Haiku 4.5
 - [Phase 01-core-resolution-protocol]: Contact resolution protocol placed before IMPORTANT GUIDELINES for maximum Haiku attention (early placement is critical for instruction following)
+- [Phase 02-context-awareness-and-hardening]: Rule 8 added as standalone (not merged into Rule 6) — keeps pronoun resolution atomic and separately testable
+- [Phase 02-context-awareness-and-hardening]: Full 20-message window used for pronoun lookback — no arbitrary limit, 'earlier in this conversation' instructs Haiku naturally
 
 ### Pending Todos
 
@@ -71,6 +74,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-24T15:30:56.570Z
-Stopped at: Phase 2 context gathered
-Resume file: .planning/phases/02-context-awareness-and-hardening/02-CONTEXT.md
+Last session: 2026-03-24T15:52:44.800Z
+Stopped at: Completed 02-context-awareness-and-hardening/02-01-PLAN.md
+Resume file: None

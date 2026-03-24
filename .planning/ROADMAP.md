@@ -13,7 +13,7 @@ This milestone fixes CloAgent's AI assistant contact resolution. The AI currentl
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 1: Core Resolution Protocol** - Rewrite system prompt and tool descriptions so the AI reliably searches for contacts before acting on them
-- [ ] **Phase 2: Context Awareness and Hardening** - Add pronoun resolution and validate edge cases observed after Phase 1 ships
+- [x] **Phase 2: Context Awareness and Hardening** - Add pronoun resolution and validate edge cases observed after Phase 1 ships (completed 2026-03-24)
 
 ## Phase Details
 
@@ -40,10 +40,10 @@ Plans:
   1. Saying "create a task for him" after discussing a specific contact resolves to that contact without a new search
   2. Saying "call her" in a contact-scoped conversation resolves to the scoped contact without asking for clarification
   3. Phase 1 behavior remains stable under the additional prompt additions
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 Plans:
-- [ ] 02-01-PLAN.md — Add Rule 8 (PRONOUN RESOLUTION) to contact_resolution block and validate prompt integrity
+- [x] 02-01-PLAN.md — Add Rule 8 (PRONOUN RESOLUTION) to contact_resolution block and validate prompt integrity
 
 ## Progress
 
@@ -53,4 +53,4 @@ Phases execute in numeric order: 1 → 2
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Core Resolution Protocol | 0/1 | Not started | - |
-| 2. Context Awareness and Hardening | 0/1 | Not started | - |
+| 2. Context Awareness and Hardening | 1/1 | Complete   | 2026-03-24 |
