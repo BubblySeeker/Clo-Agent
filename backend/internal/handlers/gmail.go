@@ -887,6 +887,137 @@ func SendEmail(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 	}
 }
 
+// ForwardEmail forwards an existing email to a new recipient.
+// POST /api/gmail/forward
+func ForwardEmail(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		agentID := middleware.AgentUUIDFromContext(r.Context())
+		if agentID == "" {
+			respondErrorWithCode(w, http.StatusUnauthorized, "unauthorized", ErrCodeUnauthorized)
+			return
+		}
+
+		var body struct {
+			EmailID string  `json:"email_id"`
+			To      string  `json:"to"`
+			Cc      string  `json:"cc"`
+			Body    string  `json:"body"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			respondErrorWithCode(w, http.StatusBadRequest, "invalid request body", ErrCodeBadRequest)
+			return
+		}
+		if body.EmailID == "" || body.To == "" {
+			respondErrorWithCode(w, http.StatusBadRequest, "email_id and to are required", ErrCodeBadRequest)
+			return
+		}
+
+		svc, err := getGmailService(r.Context(), pool, cfg, agentID)
+		if err != nil {
+			respondErrorWithCode(w, http.StatusBadRequest, err.Error(), ErrCodeBadRequest)
+			return
+		}
+
+		// Fetch original email and sender address in RLS transaction
+		txRead, txReadErr := database.BeginWithRLS(r.Context(), pool, agentID)
+		if txReadErr != nil {
+			respondError(w, http.StatusInternalServerError, "database error")
+			return
+		}
+		defer txRead.Rollback(r.Context())
+
+		var origFrom, origTo, origSubject, origBody, origDate string
+		var origContactID *string
+		err = txRead.QueryRow(r.Context(),
+			`SELECT COALESCE(from_address,''), COALESCE(to_addresses::text,'[]'),
+			        COALESCE(subject,''), COALESCE(body_text,''),
+			        COALESCE(to_char(gmail_date, 'Mon DD, YYYY HH:MI AM'),''),
+			        contact_id
+			 FROM emails WHERE id = $1 AND agent_id = $2`, body.EmailID, agentID,
+		).Scan(&origFrom, &origTo, &origSubject, &origBody, &origDate, &origContactID)
+		if err != nil {
+			respondErrorWithCode(w, http.StatusNotFound, "original email not found", ErrCodeNotFound)
+			return
+		}
+
+		var senderEmail string
+		txRead.QueryRow(r.Context(),
+			`SELECT gmail_address FROM gmail_tokens WHERE agent_id = $1`, agentID,
+		).Scan(&senderEmail)
+		txRead.Commit(r.Context())
+
+		// Build forwarded subject
+		fwdSubject := origSubject
+		if !strings.HasPrefix(strings.ToLower(fwdSubject), "fwd:") {
+			fwdSubject = "Fwd: " + fwdSubject
+		}
+
+		// Build quoted original
+		quoted := fmt.Sprintf(
+			"\r\n\r\n---------- Forwarded message ----------\r\nFrom: %s\r\nDate: %s\r\nSubject: %s\r\nTo: %s\r\n\r\n%s",
+			origFrom, origDate, origSubject, origTo, origBody,
+		)
+
+		fullBody := body.Body + quoted
+
+		// Build RFC 2822
+		headers := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=\"UTF-8\"\r\n",
+			senderEmail, body.To, fwdSubject)
+		if body.Cc != "" {
+			headers += fmt.Sprintf("Cc: %s\r\n", body.Cc)
+		}
+
+		raw := headers + "\r\n" + fullBody
+		encoded := base64.URLEncoding.EncodeToString([]byte(raw))
+		gmailMsg := &gmail.Message{Raw: encoded}
+
+		sent, err := svc.Users.Messages.Send("me", gmailMsg).Do()
+		if err != nil {
+			slog.Error("gmail forward failed", "error", err)
+			respondErrorWithCode(w, http.StatusInternalServerError, "failed to forward email", ErrCodeDatabase)
+			return
+		}
+
+		// Save forwarded email to DB
+		txWrite, txWriteErr := database.BeginWithRLS(r.Context(), pool, agentID)
+		if txWriteErr != nil {
+			slog.Error("gmail forward: post-send db error", "error", txWriteErr)
+			respondJSON(w, http.StatusOK, map[string]interface{}{
+				"id": sent.Id, "thread_id": sent.ThreadId, "message": "email forwarded (db save failed)",
+			})
+			return
+		}
+		defer txWrite.Rollback(r.Context())
+
+		toJSON, _ := json.Marshal([]string{body.To})
+		now := time.Now()
+		txWrite.Exec(r.Context(),
+			`INSERT INTO emails (agent_id, gmail_message_id, thread_id, contact_id, from_address, from_name,
+			  to_addresses, subject, body_text, is_read, is_outbound, gmail_date)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, true, $10)
+			 ON CONFLICT (agent_id, gmail_message_id) DO NOTHING`,
+			agentID, sent.Id, sent.ThreadId, origContactID, senderEmail, "",
+			toJSON, fwdSubject, fullBody, now,
+		)
+
+		if origContactID != nil && *origContactID != "" {
+			txWrite.Exec(r.Context(),
+				`INSERT INTO activities (agent_id, contact_id, type, body)
+				 VALUES ($1, $2, 'email', $3)`,
+				agentID, *origContactID, fmt.Sprintf("Forwarded email: %s to %s", origSubject, body.To),
+			)
+		}
+
+		txWrite.Commit(r.Context())
+
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"id":        sent.Id,
+			"thread_id": sent.ThreadId,
+			"message":   "email forwarded",
+		})
+	}
+}
+
 // MarkEmailRead marks an email as read in the local DB and removes the UNREAD label in Gmail.
 // PATCH /api/gmail/emails/{id}/read
 func MarkEmailRead(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {

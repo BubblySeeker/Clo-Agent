@@ -255,6 +255,7 @@ func run() error {
 		r.Get("/api/gmail/emails", handlers.ListEmails(pool))
 		r.Get("/api/gmail/emails/{id}", handlers.GetEmail(pool))
 		r.Post("/api/gmail/send", handlers.SendEmail(pool, cfg))
+		r.Post("/api/gmail/forward", handlers.ForwardEmail(pool, cfg))
 		r.Patch("/api/gmail/emails/{id}/read", handlers.MarkEmailRead(pool, cfg))
 
 		// Lead suggestions
