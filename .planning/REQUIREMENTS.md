@@ -25,8 +25,8 @@
 
 ### AI Intelligence
 
-- [ ] **AI-01**: Completed call recordings are automatically transcribed using OpenAI gpt-4o-transcribe with speaker diarization via dual-channel split
-- [ ] **AI-02**: Call transcripts are analyzed by Claude to generate a call summary, action items, and CRM update suggestions
+- [x] **AI-01**: Completed call recordings are automatically transcribed using OpenAI gpt-4o-transcribe with speaker diarization via dual-channel split
+- [x] **AI-02**: Call transcripts are analyzed by Claude to generate a call summary, action items, and CRM update suggestions
 - [ ] **AI-03**: AI-extracted tasks are surfaced as confirmation cards the agent can approve with one click
 - [ ] **AI-04**: AI-suggested deal stage and buyer profile updates are surfaced as confirmation cards
 - [ ] **AI-05**: Recent call transcripts and summaries are loaded into AI chat contact context
@@ -88,8 +88,8 @@
 | REC-03 | Phase 5 | Complete |
 | REC-04 | Phase 5 | Complete |
 | REC-05 | Phase 5 | Complete |
-| AI-01 | Phase 6 | Pending |
-| AI-02 | Phase 6 | Pending |
+| AI-01 | Phase 6 | Complete |
+| AI-02 | Phase 6 | Complete |
 | AI-03 | Phase 6 | Pending |
 | AI-04 | Phase 6 | Pending |
 | AI-05 | Phase 6 | Pending |

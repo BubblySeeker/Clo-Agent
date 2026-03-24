@@ -75,7 +75,7 @@ Plans:
   3. AI-suggested tasks and deal/buyer-profile updates appear as confirmation cards the agent can approve or dismiss with one click
   4. Asking the AI chat "What did [contact] say about their budget?" returns relevant information from call transcripts
   5. Call transcripts appear in semantic search results when searching for topics discussed on calls
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
 - [ ] 06-01-PLAN.md — Transcription pipeline: migration, dual-channel split + transcribe, Claude analysis, Go trigger, FastAPI route
@@ -122,7 +122,7 @@ Phases execute in numeric order: 4 -> 5 -> 6 -> 7 -> 8
 |-------|----------------|--------|-----------|
 | 4. Core Call Flow | 2/2 | Complete | 2026-03-24 |
 | 5. Recording Infrastructure | 2/2 | Complete   | 2026-03-24 |
-| 6. AI Transcription & Intelligence | 0/2 | Planning complete | - |
+| 6. AI Transcription & Intelligence | 1/2 | In Progress|  |
 | 7. Frontend Call Experience | 0/2 | Planning complete | - |
 | 8. React Native Mobile Dialer | 0/2 | Planning complete | - |
 

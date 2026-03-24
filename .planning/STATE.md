@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Twilio Voice Calling
-status: completed
-stopped_at: Completed 05-02-PLAN.md (Phase 5 complete)
-last_updated: "2026-03-24T18:16:39.192Z"
-last_activity: "2026-03-24 — Completed 05-02 (Recording Playback: Proxy Endpoint, Audio Player)"
+status: in-progress
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-03-24T23:28:30.000Z"
+last_activity: "2026-03-24 — Completed 06-01 (Transcription Pipeline: Migration, Services, Route, Go Trigger)"
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 4
-  completed_plans: 4
-  percent: 100
+  total_plans: 10
+  completed_plans: 6
+  percent: 50
 ---
 
 # Project State
@@ -21,23 +21,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-23)
 
 **Core value:** AI-powered voice calling that automatically transcribes conversations and updates the CRM, so real estate agents never miss a follow-up.
-**Current focus:** Phase 5 — Recording Infrastructure
+**Current focus:** Phase 6 — AI Transcription & Intelligence
 
 ## Current Position
 
-Phase: 5 of 8 (Recording Infrastructure) -- COMPLETE
-Plan: 2 of 2 in current phase
-Status: Phase Complete
-Last activity: 2026-03-24 — Completed 05-02 (Recording Playback: Proxy Endpoint, Audio Player)
+Phase: 6 of 8 (AI Transcription & Intelligence)
+Plan: 1 of 2 in current phase -- COMPLETE
+Status: In Progress
+Last activity: 2026-03-24 — Completed 06-01 (Transcription Pipeline: Migration, Services, Route, Go Trigger)
 
-Progress: [##########] 100%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4 (v2.0)
-- Average duration: 4m38s
-- Total execution time: 18m31s
+- Total plans completed: 5 (v2.0)
+- Average duration: 4m30s
+- Total execution time: 22m31s
 
 **By Phase:**
 
@@ -45,9 +45,10 @@ Progress: [##########] 100%
 |-------|-------|-------|----------|
 | 4 | 2 | 7m58s | 3m59s |
 | 5 | 2 | 10m33s | 5m17s |
+| 6 | 1 | 4m00s | 4m00s |
 
 **Recent Trend:**
-- Last 5 plans: 04-01 (3m17s), 04-02 (4m41s), 05-01 (6m52s), 05-02 (3m41s)
+- Last 5 plans: 04-01 (3m17s), 04-02 (4m41s), 05-01 (6m52s), 05-02 (3m41s), 06-01 (4m00s)
 - Trend: Consistent
 
 *Updated after each plan completion*
@@ -75,6 +76,9 @@ Recent decisions affecting current work:
 - Dual-channel recording for speaker diarization (split with pydub, transcribe separately)
 - On-demand blob fetch for audio playback (keeps auth on every request, no exposed URLs)
 - HasRecording derived from both recording_sid and local_recording_path being non-null
+- Dual-channel split with pydub over native gpt-4o-transcribe-diarize for reliable speaker attribution
+- Embed transcript summary + key quotes (not full text) to stay within embedding token limits
+- Non-blocking triggerTranscription as separate goroutine so recording cleanup is not delayed
 
 ### Pending Todos
 
@@ -88,5 +92,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-24
-Stopped at: Completed 05-02-PLAN.md (Phase 5 complete)
+Stopped at: Completed 06-01-PLAN.md
 Resume file: None
