@@ -5,16 +5,14 @@ import { useAuth } from "@clerk/nextjs";
 import { usePathname } from "next/navigation";
 import { Bot, Send, Minimize2, Check, XCircle, Loader2 } from "lucide-react";
 import {
-  streamMessage,
   createConversation,
   getMessages,
   confirmToolAction,
-  type SSEEvent,
 } from "@/lib/api/conversations";
+import { useSSEStream } from "@/hooks/useSSEStream";
 import { useUIStore } from "@/store/ui-store";
 import { toolLabel, confirmLabel, formatPreview } from "@/lib/ai-chat-helpers";
 import MessageContent from "./MessageContent";
-// CitationBadge available for future use
 
 export default function AIChatBubble() {
   const { getToken } = useAuth();
@@ -32,10 +30,9 @@ export default function AIChatBubble() {
   } = useUIStore();
 
   const [input, setInput] = useState("");
-  const [isStreaming, setIsStreaming] = useState(false);
   const [activeToolName, setActiveToolName] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const cleanupRef = useRef<(() => void) | null>(null);
+  const { isStreaming, startStream } = useSSEStream();
 
   // Detect if we're on a contact detail page
   const contactMatch = pathname.match(/\/dashboard\/contacts\/([a-f0-9-]{36})/);
@@ -96,64 +93,55 @@ export default function AIChatBubble() {
     appendChatMessage({ id: crypto.randomUUID(), role: "user", content: msg });
 
     // Placeholder assistant message (will be filled by stream)
-    const assistantId = crypto.randomUUID();
     appendChatMessage({
-      id: assistantId,
+      id: crypto.randomUUID(),
       role: "assistant",
       content: "",
       isStreaming: true,
       toolCalls: [],
     });
 
-    setIsStreaming(true);
-    let accumulated = "";
-
-    cleanupRef.current = streamMessage(
+    startStream(
       token,
-      chatConversationId,
-      msg,
-      (event: SSEEvent) => {
-        if (event.type === "text") {
-          accumulated += event.content;
+      `/api/ai/conversations/${chatConversationId}/messages`,
+      { content: msg },
+      {
+        onText: (accumulated) => {
           updateLastMessage({ content: accumulated, isStreaming: true });
-        } else if (event.type === "tool_call") {
-          setActiveToolName(event.name);
-          const toolName = event.name;
+        },
+        onToolCall: (name) => {
+          setActiveToolName(name);
           const current = useUIStore.getState().chatMessages;
           if (current.length > 0) {
             const last = current[current.length - 1];
             useUIStore.getState().setChatMessages([
               ...current.slice(0, -1),
-              { ...last, toolCalls: [...(last.toolCalls ?? []), toolName] },
+              { ...last, toolCalls: [...(last.toolCalls ?? []), name] },
             ]);
           }
-        } else if (event.type === "tool_result") {
+        },
+        onToolResult: () => {
           setActiveToolName(null);
-        } else if (event.type === "confirmation") {
+        },
+        onConfirmation: (tool, preview, pendingId) => {
           updateLastMessage({
-            confirmationData: {
-              tool: event.tool,
-              preview: event.preview,
-              pending_id: event.pending_id,
-            },
+            confirmationData: { tool, preview, pending_id: pendingId },
           });
-        }
-      },
-      () => {
-        setIsStreaming(false);
-        setActiveToolName(null);
-        const current = useUIStore.getState().chatMessages;
-        const last = current.length > 0 ? current[current.length - 1] : null;
-        updateLastMessage({
-          isStreaming: false,
-          content: (last?.content) || "Sorry, I couldn\u2019t generate a response. Please try again.",
-        });
-      },
-      (err) => {
-        console.error("AI stream error:", err);
-        setIsStreaming(false);
-        setActiveToolName(null);
-        updateLastMessage({ content: "Sorry, something went wrong. Please try again.", isStreaming: false });
+        },
+        onDone: () => {
+          setActiveToolName(null);
+          const current = useUIStore.getState().chatMessages;
+          const last = current.length > 0 ? current[current.length - 1] : null;
+          updateLastMessage({
+            isStreaming: false,
+            content: last?.content || "Sorry, I couldn\u2019t generate a response. Please try again.",
+          });
+        },
+        onError: (err) => {
+          console.error("AI stream error:", err);
+          setActiveToolName(null);
+          updateLastMessage({ content: "Sorry, something went wrong. Please try again.", isStreaming: false });
+        },
       }
     );
   };
