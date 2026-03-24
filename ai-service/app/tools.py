@@ -35,7 +35,14 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "search_contacts",
-        "description": "Search for contacts by name, email, or filter by source. Returns matching contacts. The query matches against first name, last name, email, and full name (first + last). You can search with a full name like 'John Doe' or just a first/last name.",
+        "description": (
+            "Search for contacts by name, email, or filter by source. "
+            "Use this tool before any operation that needs a contact_id — never guess UUIDs. "
+            "The query matches against first_name, last_name, email, and full name (first + last concatenated). "
+            "Pass a full name like 'Rohan Batre' or just a partial name like 'Rohan'. "
+            "For recency references ('my last contact'), call with no query and limit=1 — results are sorted newest first. "
+            "Returns: id, first_name, last_name, email, source, created_at, last_activity_at."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
