@@ -20,6 +20,14 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.ResponseWriter.WriteHeader(code)
 }
 
+// Flush implements http.Flusher so that SSE streaming endpoints can flush
+// incremental data to the client even when this middleware wraps the writer.
+func (rw *responseWriter) Flush() {
+	if f, ok := rw.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
 // StructuredLogger returns a Chi-compatible middleware that logs every HTTP
 // request as a structured JSON log line using log/slog.
 //
