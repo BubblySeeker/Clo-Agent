@@ -25,23 +25,23 @@
     --ring: 222.2 84% 4.9%;
     --radius: 0.5rem;
 
-    /* Communication page design tokens */
-    --comm-bg: #FAFAF8;
-    --comm-sidebar-bg: #FFFFFF;
-    --comm-sidebar-selected: #F0F4FA;
-    --comm-sidebar-hover: #F8F9FC;
-    --comm-border: #E8E6E1;
-    --comm-border-subtle: #F0EEEA;
-    --comm-navy: #1A2E44;
-    --comm-navy-light: #2D4A6F;
-    --comm-accent: #2563EB;
-    --comm-accent-soft: #EFF4FF;
-    --comm-text-primary: #1A1A1A;
-    --comm-text-secondary: #6B7280;
-    --comm-text-tertiary: #9CA3AF;
-    --comm-gmail-red: #DC2626;
-    --comm-success: #16A34A;
-    --comm-star: #F59E0B;
+    /* Communication page design tokens — slate/sky palette */
+    --comm-bg: #f8fafc;
+    --comm-sidebar-bg: #ffffff;
+    --comm-sidebar-selected: #f0f9ff;
+    --comm-sidebar-hover: #f8fafc;
+    --comm-border: #e2e8f0;
+    --comm-border-subtle: #f1f5f9;
+    --comm-navy: #0f172a;
+    --comm-navy-light: #1e3a5f;
+    --comm-accent: #0ea5e9;
+    --comm-accent-soft: #f0f9ff;
+    --comm-text-primary: #0f172a;
+    --comm-text-secondary: #64748b;
+    --comm-text-tertiary: #94a3b8;
+    --comm-gmail-red: #dc2626;
+    --comm-success: #16a34a;
+    --comm-star: #f59e0b;
   }
 
   .dark {
@@ -82,30 +82,27 @@
     @apply focus:border-[#0EA5E9] focus:ring-1 focus:ring-[#0EA5E9]/30;
   }
 
-  /* Communication page utilities */
+  /* Communication page utilities — slate/sky palette */
   .comm-card {
-    @apply bg-white rounded-2xl;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02);
+    @apply bg-white rounded-xl border border-slate-200;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
   }
 
   .comm-card-elevated {
-    @apply bg-white rounded-2xl;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
+    @apply bg-white rounded-2xl border border-slate-200;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
   }
 
   .comm-input {
-    @apply w-full px-4 py-2.5 rounded-xl text-sm outline-none transition-all duration-200;
-    background: var(--comm-bg);
-    border: 1.5px solid var(--comm-border);
-    color: var(--comm-text-primary);
+    @apply w-full px-4 py-2.5 rounded-lg text-sm outline-none transition-all duration-200 bg-slate-50 border border-slate-200 text-slate-900;
     font-family: var(--font-dm-sans);
   }
   .comm-input:focus {
-    border-color: var(--comm-accent);
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
+    @apply border-sky-500 bg-white;
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.12);
   }
   .comm-input::placeholder {
-    color: var(--comm-text-tertiary);
+    @apply text-slate-400;
   }
 }
 

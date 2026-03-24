@@ -21,10 +21,10 @@ const settingsSections = [
 ];
 
 const otherIntegrations = [
-  { id: "outlook", name: "Outlook", logo: "O", color: "#0078D4" },
-  { id: "whatsapp", name: "WhatsApp", logo: "W", color: "#25D366" },
-  { id: "twilio", name: "Twilio", logo: "T", color: "#F22F46" },
-  { id: "mls", name: "MLS Feed", logo: "M", color: "#6B7280" },
+  { id: "outlook", name: "Outlook", logo: "O", color: "#0078D4", desc: "Email & calendar sync" },
+  { id: "whatsapp", name: "WhatsApp", logo: "W", color: "#25D366", desc: "Messaging integration" },
+  { id: "twilio", name: "Twilio", logo: "T", color: "#F22F46", desc: "SMS & voice calls" },
+  { id: "mls", name: "MLS Feed", logo: "M", color: "#1a2e44", desc: "Property listing sync" },
 ];
 
 const initialStages = [
@@ -510,9 +510,22 @@ function IntegrationsSection() {
       window.history.replaceState({}, "", window.location.pathname + "?section=integrations");
       setTimeout(() => setGmailToast(null), 4000);
     } else if (gmailParam === "error") {
-      setGmailToast("Failed to connect Gmail. Please try again.");
+      const reason = searchParams.get("reason");
+      const reasonMessages: Record<string, string> = {
+        missing_params: "Missing OAuth parameters from Google",
+        invalid_state: "OAuth state mismatch — please try again",
+        exchange_failed: "Failed to exchange OAuth code — check Google credentials",
+        service_error: "Failed to connect to Gmail service",
+        profile_error: "Failed to fetch Gmail profile",
+        db_error: "Database error saving Gmail credentials",
+        access_denied: "Access was denied — please grant Gmail permissions",
+      };
+      const message = reason
+        ? reasonMessages[reason] || `Failed to connect Gmail: ${reason}`
+        : "Failed to connect Gmail. Please try again.";
+      setGmailToast(message);
       window.history.replaceState({}, "", window.location.pathname + "?section=integrations");
-      setTimeout(() => setGmailToast(null), 4000);
+      setTimeout(() => setGmailToast(null), 6000);
     }
   }, [searchParams, queryClient]);
 
@@ -552,93 +565,123 @@ function IntegrationsSection() {
     }
   }
 
+  const [showManage, setShowManage] = useState(false);
   const connected = gmailStatus?.connected ?? false;
   const lastSynced = gmailStatus?.last_synced_at
     ? new Date(gmailStatus.last_synced_at).toLocaleString()
     : null;
 
+  function timeAgoShort(dateStr: string) {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.floor(hrs / 24)}d ago`;
+  }
+
   return (
-    <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-      <h3 className="font-bold mb-5" style={{ color: "#1E3A5F" }}>Integrations</h3>
+    <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
+      <h3 className="font-bold mb-5 text-slate-900">Integrations</h3>
 
       {gmailToast && (
-        <div className={`flex items-center gap-2 mb-4 px-4 py-2.5 rounded-xl text-sm font-medium ${
-          gmailToast.includes("success") ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"
+        <div className={`flex items-center gap-2 mb-4 px-4 py-2.5 rounded-lg text-sm font-medium ${
+          gmailToast.includes("success") ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-red-50 text-red-700 border border-red-200"
         }`}>
           {gmailToast.includes("success") ? <CheckCircle size={14} /> : <XCircle size={14} />}
           {gmailToast}
         </div>
       )}
 
-      <div className="flex flex-col gap-3">
-        {/* Gmail — dynamic */}
-        <div className="flex items-center justify-between p-4 rounded-2xl border border-gray-100 bg-gray-50">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-white border border-gray-200">
-              <GoogleIcon />
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        {/* Gmail row */}
+        <div className="border-b border-slate-100">
+          <div className="flex items-center justify-between px-5 py-4">
+            <div className="flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-white border border-slate-200 shadow-sm">
+                <GoogleIcon />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-slate-900">Gmail</p>
+                {gmailLoading ? (
+                  <p className="text-xs text-slate-400">Checking status...</p>
+                ) : connected ? (
+                  <p className="text-xs text-slate-500">
+                    {gmailStatus?.gmail_address}
+                    {gmailStatus?.last_synced_at && <span className="text-slate-400"> · Synced {timeAgoShort(gmailStatus.last_synced_at)}</span>}
+                  </p>
+                ) : (
+                  <p className="text-xs text-slate-400">Sync your Gmail inbox</p>
+                )}
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-bold text-gray-800">Gmail</p>
-              {gmailLoading ? (
-                <p className="text-xs text-gray-400">Checking status...</p>
-              ) : connected ? (
-                <div>
-                  <p className="text-xs text-green-600 font-medium">{gmailStatus?.gmail_address}</p>
-                  {lastSynced && <p className="text-[10px] text-gray-400">Last synced: {lastSynced}</p>}
-                </div>
+            <div className="flex items-center gap-2">
+              {connected ? (
+                <>
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200">
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    <span className="text-[10px] font-semibold text-emerald-600">Connected</span>
+                  </div>
+                  <button
+                    onClick={() => setShowManage(!showManage)}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+                  >
+                    Manage
+                  </button>
+                </>
               ) : (
-                <p className="text-xs text-gray-400">Connect to sync and send emails</p>
+                <button
+                  onClick={handleConnectGmail}
+                  disabled={connectingGmail}
+                  className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-sky-500 hover:bg-sky-600 transition-colors disabled:opacity-60"
+                >
+                  {connectingGmail ? "Connecting..." : "Connect"}
+                </button>
               )}
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            {connected ? (
-              <>
-                <button
-                  onClick={() => syncMutation.mutate()}
-                  disabled={syncMutation.isPending}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#0EA5E9]/10 text-[#0EA5E9] hover:bg-[#0EA5E9]/20 transition-colors disabled:opacity-50"
-                >
-                  <RefreshCw size={12} className={syncMutation.isPending ? "animate-spin" : ""} />
-                  {syncMutation.isPending ? "Syncing..." : "Sync Now"}
-                </button>
-                <button
-                  onClick={() => {
-                    if (confirm("Disconnect Gmail? This will remove all synced emails.")) {
-                      disconnectMutation.mutate();
-                    }
-                  }}
-                  disabled={disconnectMutation.isPending}
-                  className="px-3 py-1.5 rounded-lg text-xs font-semibold text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
-                >
-                  {disconnectMutation.isPending ? "Disconnecting..." : "Disconnect"}
-                </button>
-              </>
-            ) : (
+          {/* Expandable manage panel */}
+          {connected && showManage && (
+            <div className="px-5 pb-4 flex items-center gap-2 border-t border-slate-50 pt-3">
               <button
-                onClick={handleConnectGmail}
-                disabled={connectingGmail}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-opacity disabled:opacity-60"
-                style={{ backgroundColor: "#0EA5E9" }}
+                onClick={() => syncMutation.mutate()}
+                disabled={syncMutation.isPending}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-sky-50 text-sky-600 hover:bg-sky-100 transition-colors disabled:opacity-50"
               >
-                {connectingGmail ? "Connecting..." : "Connect Gmail"}
+                <RefreshCw size={12} className={syncMutation.isPending ? "animate-spin" : ""} />
+                {syncMutation.isPending ? "Syncing..." : "Sync Now"}
               </button>
-            )}
-          </div>
+              <button
+                onClick={() => {
+                  if (confirm("Disconnect Gmail? This will remove all synced emails.")) {
+                    disconnectMutation.mutate();
+                    setShowManage(false);
+                  }
+                }}
+                disabled={disconnectMutation.isPending}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold text-red-500 border border-red-200 hover:bg-red-50 transition-colors disabled:opacity-50"
+              >
+                {disconnectMutation.isPending ? "Disconnecting..." : "Disconnect"}
+              </button>
+              {lastSynced && <span className="text-[10px] text-slate-400 ml-auto">Last sync: {lastSynced}</span>}
+            </div>
+          )}
         </div>
 
-        {/* Other integrations — Coming Soon */}
-        {otherIntegrations.map((intg) => (
-          <div key={intg.id} className="flex items-center justify-between p-4 rounded-2xl border border-gray-100 bg-gray-50">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm" style={{ backgroundColor: intg.color }}>
+        {/* Coming soon integrations */}
+        {otherIntegrations.map((intg, idx) => (
+          <div key={intg.id} className={`flex items-center justify-between px-5 py-4 opacity-60 ${idx < otherIntegrations.length - 1 ? "border-b border-slate-100" : ""}`}>
+            <div className="flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-sm" style={{ backgroundColor: intg.color }}>
                 {intg.logo}
               </div>
               <div>
-                <p className="text-sm font-bold text-gray-800">{intg.name}</p>
+                <p className="text-sm font-bold text-slate-900">{intg.name}</p>
+                <p className="text-xs text-slate-400">{intg.desc}</p>
               </div>
             </div>
-            <span className="text-xs font-bold px-2 py-1 rounded-full bg-gray-200 text-gray-500">Coming Soon</span>
+            <span className="text-[10px] font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-400">Coming Soon</span>
           </div>
         ))}
       </div>

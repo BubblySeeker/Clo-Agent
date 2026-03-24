@@ -11,9 +11,9 @@ import { useSearchParams } from "next/navigation";
 import { listLeadSuggestions, acceptLeadSuggestion, dismissLeadSuggestion, type LeadSuggestion } from "@/lib/api/lead-suggestions";
 
 const typeColors: Record<string, { bg: string; color: string }> = {
-  call: { bg: "#EFF4FF", color: "#2563EB" },
-  email: { bg: "#ECFDF5", color: "#16A34A" },
-  gmail: { bg: "#FEF2F2", color: "#DC2626" },
+  call: { bg: "#dbeafe", color: "#2563eb" },
+  email: { bg: "#d1fae5", color: "#059669" },
+  gmail: { bg: "#fee2e2", color: "#dc2626" },
 };
 
 interface CommItem {
@@ -53,24 +53,20 @@ function formatDate(dateStr: string) {
   });
 }
 
-// Internal Gmail labels that should not be shown as user-facing label pills
 const INTERNAL_LABELS = new Set([
   "INBOX", "UNREAD", "SENT", "DRAFT", "SPAM", "TRASH", "IMPORTANT", "STARRED",
   "CATEGORY_PERSONAL", "CATEGORY_SOCIAL", "CATEGORY_PROMOTIONS",
   "CATEGORY_UPDATES", "CATEGORY_FORUMS", "HAS_ATTACHMENT",
 ]);
 
-/** Return only user-created labels (filter out Gmail system labels). */
 function getUserLabels(labels: string[]): string[] {
   return labels.filter((l) => !INTERNAL_LABELS.has(l));
 }
 
-/** Check if the labels list indicates the email has attachments. */
 function emailHasAttachment(labels: string[]): boolean {
   return labels.includes("HAS_ATTACHMENT");
 }
 
-/** Check if the labels list contains IMPORTANT or STARRED. */
 function emailIsStarred(labels: string[]): boolean {
   return labels.includes("STARRED") || labels.includes("IMPORTANT");
 }
@@ -81,7 +77,7 @@ function EmailHtmlFrame({ html }: { html: string }) {
 
   const baseStyles = `
     <style>
-      body { font-family: sans-serif; font-size: 14px; color: #374151; margin: 0; padding: 0; overflow-x: hidden; }
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; color: #334155; margin: 0; padding: 0; overflow-x: hidden; }
       img { max-width: 100%; height: auto; }
       * { max-width: 100%; box-sizing: border-box; }
     </style>
@@ -99,27 +95,25 @@ function EmailHtmlFrame({ html }: { html: string }) {
         if (newHeight > 0) setHeight(newHeight);
       }
     } catch {
-      // cross-origin fallback — keep current height
+      // cross-origin fallback
     }
   }, []);
 
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe) return;
-
     try {
       const doc = iframe.contentDocument;
       if (doc) {
         doc.open();
         doc.write(fullHtml);
         doc.close();
-        // Adjust after content loads (images etc.)
         adjustHeight();
         const timer = setTimeout(adjustHeight, 500);
         return () => clearTimeout(timer);
       }
     } catch {
-      // If contentDocument.write fails, srcdoc fallback handles it
+      // srcdoc fallback handles it
     }
   }, [fullHtml, adjustHeight]);
 
@@ -151,31 +145,22 @@ export default function CommunicationPage() {
   const [logContactId, setLogContactId] = useState("");
   const [logBody, setLogBody] = useState("");
 
-  // Inline reply
   const [showReply, setShowReply] = useState(false);
   const [replyBody, setReplyBody] = useState("");
   const replyRef = useRef<HTMLTextAreaElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
 
-  // Compose state
   const [composeTo, setComposeTo] = useState("");
   const [composeSubject, setComposeSubject] = useState("");
   const [composeBody, setComposeBody] = useState("");
-
-  // CC fields
   const [replyCc, setReplyCc] = useState("");
   const [composeCc, setComposeCc] = useState("");
 
-  // Track which thread items are expanded (by item id); most recent is expanded by default
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
-
-  // Cache of loaded full email bodies: emailId -> Email
   const emailCacheRef = useRef<Record<string, Email>>({});
   const [loadingEmail, setLoadingEmail] = useState(false);
-  // Trigger re-render when cache updates
   const [cacheVersion, setCacheVersion] = useState(0);
 
-  // Gmail status
   const { data: gmailStatusData } = useQuery({
     queryKey: ["gmail-status"],
     queryFn: async () => {
@@ -187,7 +172,6 @@ export default function CommunicationPage() {
 
   const gmailConnected = gmailStatusData?.connected ?? false;
 
-  // Lead suggestions
   const { data: leadSuggestionsData } = useQuery({
     queryKey: ["lead-suggestions"],
     queryFn: async () => {
@@ -259,7 +243,6 @@ export default function CommunicationPage() {
 
   const allItems = useMemo(() => {
     const items: CommItem[] = [];
-
     const activities = activitiesData?.activities ?? [];
     for (const a of activities) {
       if (a.type !== "call" && a.type !== "email") continue;
@@ -271,14 +254,12 @@ export default function CommunicationPage() {
         groupKey: a.contact_id || `manual-${a.id}`, groupName: name,
       });
     }
-
     const emails = emailsData?.emails ?? [];
     for (const e of emails) {
       const contact = e.contact_id ? contactMap[e.contact_id] : null;
       const isOut = e.is_outbound;
       const otherEmail = isOut ? (e.to_addresses?.[0] ?? "") : (e.from_address ?? "");
       const otherName = isOut ? (e.to_addresses?.[0] ?? "Unknown") : (e.from_name || e.from_address || "Unknown");
-
       let groupKey: string;
       let groupName: string;
       if (e.contact_id && contact) {
@@ -291,7 +272,6 @@ export default function CommunicationPage() {
         groupKey = `email-${otherEmail.toLowerCase()}`;
         groupName = otherName;
       }
-
       items.push({
         id: `gmail-${e.id}`, type: isOut ? "gmail_out" : "gmail_in",
         contact_id: e.contact_id, contact_name: groupName,
@@ -301,7 +281,6 @@ export default function CommunicationPage() {
         to_addresses: e.to_addresses, email_data: e, groupKey, groupName,
       });
     }
-
     return items;
   }, [activitiesData, emailsData, contactMap]);
 
@@ -339,25 +318,17 @@ export default function CommunicationPage() {
   }, [filteredItems, search]);
 
   const selectedThread = threads.find((t) => t.groupKey === selectedGroupKey);
-  const selectedContact = selectedThread?.contactId ? contactMap[selectedThread.contactId] : null;
   const currentItem = selectedThread?.items[currentIndex] ?? null;
   const totalItems = selectedThread?.items.length ?? 0;
 
-  // Load full email bodies for ALL gmail items in the selected thread
   useEffect(() => {
     setShowReply(false);
     setReplyBody("");
     setReplyCc("");
-
     if (!selectedThread) return;
-
-    // Expand the most recent item (index 0) by default, collapse others
     setExpandedItems(new Set(selectedThread.items.length > 0 ? [selectedThread.items[0].id] : []));
-
     const gmailItems = selectedThread.items.filter((item) => item.email_data);
     if (gmailItems.length === 0) return;
-
-    // Mark unread items as read (fire-and-forget)
     (async () => {
       try {
         const token = await getToken();
@@ -370,11 +341,8 @@ export default function CommunicationPage() {
         queryClient.invalidateQueries({ queryKey: ["gmail-emails"] });
       } catch { /* ignore */ }
     })();
-
-    // Load full bodies for uncached emails
     const uncached = gmailItems.filter((item) => item.email_data && !emailCacheRef.current[item.email_data.id]);
     if (uncached.length === 0) return;
-
     let cancelled = false;
     setLoadingEmail(true);
     (async () => {
@@ -404,7 +372,6 @@ export default function CommunicationPage() {
     setShowReply(false);
     setReplyBody("");
   }
-
 
   const logMutation = useMutation({
     mutationFn: async () => {
@@ -479,10 +446,8 @@ export default function CommunicationPage() {
     return "Email";
   }
 
-  // Force re-render when email cache updates
   void cacheVersion;
 
-  // Thread-level navigation: one entry per thread
   const flatItems = useMemo(() => {
     return threads.map((t) => ({ groupKey: t.groupKey, index: 0 }));
   }, [threads]);
@@ -509,45 +474,22 @@ export default function CommunicationPage() {
   function toggleExpanded(itemId: string) {
     setExpandedItems((prev) => {
       const next = new Set(prev);
-      if (next.has(itemId)) {
-        next.delete(itemId);
-      } else {
-        next.add(itemId);
-      }
+      if (next.has(itemId)) next.delete(itemId);
+      else next.add(itemId);
       return next;
     });
   }
 
-  // Keyboard shortcuts
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       const tag = (document.activeElement?.tagName ?? "").toLowerCase();
       if (tag === "input" || tag === "textarea" || tag === "select") return;
-
       switch (e.key) {
-        case "j":
-        case "ArrowDown":
-          e.preventDefault();
-          goOlder();
-          break;
-        case "k":
-        case "ArrowUp":
-          e.preventDefault();
-          goNewer();
-          break;
-        case "r":
-          e.preventDefault();
-          setShowReply(true);
-          break;
-        case "c":
-          e.preventDefault();
-          setShowCompose(true);
-          break;
-        case "Escape":
-          setShowReply(false);
-          setShowCompose(false);
-          setShowLog(false);
-          break;
+        case "j": case "ArrowDown": e.preventDefault(); goOlder(); break;
+        case "k": case "ArrowUp": e.preventDefault(); goNewer(); break;
+        case "r": e.preventDefault(); setShowReply(true); break;
+        case "c": e.preventDefault(); setShowCompose(true); break;
+        case "Escape": setShowReply(false); setShowCompose(false); setShowLog(false); break;
       }
     }
     window.addEventListener("keydown", handleKeyDown);
@@ -555,20 +497,17 @@ export default function CommunicationPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentFlatIndex, flatItems]);
 
-  // Auto-scroll selected thread into view
   useEffect(() => {
     if (!selectedGroupKey || !sidebarRef.current) return;
     const el = sidebarRef.current.querySelector(`[data-group-key="${CSS.escape(selectedGroupKey)}"]`);
-    if (el) {
-      el.scrollIntoView({ block: "nearest", behavior: "smooth" });
-    }
+    if (el) el.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [selectedGroupKey]);
 
   if (activitiesError) {
     return (
-      <div className="flex flex-col items-center justify-center h-full min-h-[400px] gap-4 p-6 text-center font-[family-name:var(--font-dm-sans)]" style={{ backgroundColor: "#FAFAF8" }}>
-        <p className="text-[#1A2E44] font-medium font-[family-name:var(--font-sora)]">Failed to load communications</p>
-        <button onClick={() => refetchActivities()} className="px-4 py-2 rounded-xl text-white text-sm font-semibold shadow-sm hover:shadow-md transition-all duration-200" style={{ backgroundColor: "#2563EB" }}>
+      <div className="flex flex-col items-center justify-center h-full min-h-[400px] gap-4 p-6 text-center font-[family-name:var(--font-dm-sans)]" style={{ backgroundColor: "#f8fafc" }}>
+        <p className="text-slate-900 font-semibold font-[family-name:var(--font-sora)]">Failed to load communications</p>
+        <button onClick={() => refetchActivities()} className="px-4 py-2 rounded-lg bg-sky-500 text-white text-sm font-semibold hover:bg-sky-600 transition-colors">
           Try again
         </button>
       </div>
@@ -576,52 +515,52 @@ export default function CommunicationPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] bg-[#FAFAF8] font-[family-name:var(--font-dm-sans)]">
-      {/* Left sidebar */}
-      <div className="w-80 border-r border-[#E8E6E1] bg-white flex flex-col shrink-0">
-        <div className="p-4 border-b border-[#E8E6E1]">
+    <div className="flex h-[calc(100vh-4rem)] bg-slate-50 font-[family-name:var(--font-dm-sans)]">
+      {/* Left sidebar — thread list */}
+      <div className="w-80 border-r border-slate-200 bg-white flex flex-col shrink-0">
+        <div className="p-4 border-b border-slate-100">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="font-[family-name:var(--font-sora)] text-xl font-semibold tracking-tight" style={{ color: "#1A2E44" }}>Communication</h2>
+            <h2 className="font-[family-name:var(--font-sora)] text-lg font-bold tracking-tight text-slate-900">Inbox</h2>
             <div className="flex items-center gap-1">
               {gmailConnected && (
                 <button onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending}
-                  className="w-8 h-8 rounded-lg flex items-center justify-center text-[#9CA3AF] hover:bg-[#F8F9FC] hover:text-[#2563EB] transition-colors" title="Sync Gmail">
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-sky-500 transition-colors" title="Sync Gmail">
                   <RefreshCw size={14} className={syncMutation.isPending ? "animate-spin" : ""} />
                 </button>
               )}
               {gmailConnected && (
                 <button onClick={() => setShowCompose(true)}
-                  className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#DC2626]/10 text-[#DC2626] hover:bg-[#DC2626]/20 transition-colors" title="Compose Email">
+                  className="w-8 h-8 rounded-lg flex items-center justify-center bg-red-50 text-red-500 hover:bg-red-100 transition-colors" title="Compose Email">
                   <Send size={14} />
                 </button>
               )}
               <button onClick={() => setShowLog(true)}
-                className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#2563EB]/10 text-[#2563EB] hover:bg-[#2563EB]/20 transition-colors">
+                className="w-8 h-8 rounded-lg flex items-center justify-center bg-sky-50 text-sky-500 hover:bg-sky-100 transition-colors" title="Log Communication">
                 <Plus size={16} />
               </button>
             </div>
           </div>
 
           {gmailConnected && gmailStatusData?.last_synced_at && (
-            <div className="flex items-center gap-1.5 mb-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-600">
+            <div className="flex items-center gap-1.5 mb-2.5 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-600 w-fit">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              <span className="text-[10px] font-medium">Gmail synced {timeAgo(gmailStatusData.last_synced_at)}</span>
+              <span className="text-[10px] font-semibold">Gmail synced {timeAgo(gmailStatusData.last_synced_at)}</span>
             </div>
           )}
 
           <div className="relative mb-3">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search..."
-              className="comm-input pl-9 pr-3" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search conversations..."
+              className="w-full pl-9 pr-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-900 outline-none transition-all focus:border-sky-500 focus:ring-2 focus:ring-sky-500/10 placeholder:text-slate-400" />
           </div>
 
           <div className="flex gap-1">
             {(["all", "call", "email", ...(gmailConnected ? ["gmail" as const] : []), ...(leadSuggestions.length > 0 ? ["leads" as const] : [])] as const).map((f) => (
               <button key={f} onClick={() => setFilter(f as typeof filter)}
-                className={`flex-1 py-2 rounded-lg text-xs font-medium tracking-wide uppercase transition-all duration-200 ${
+                className={`flex-1 py-1.5 rounded-md text-xs font-semibold tracking-wide uppercase transition-all duration-150 ${
                   filter === f
-                    ? f === "leads" ? "bg-green-600 text-white shadow-sm" : "bg-[#2563EB] text-white shadow-sm"
-                    : "text-[#6B7280] hover:text-[#1A2E44] hover:bg-[#F8F9FC]"
+                    ? f === "leads" ? "bg-emerald-500 text-white" : "bg-sky-500 text-white"
+                    : "text-slate-400 hover:text-slate-600 hover:bg-slate-50"
                 }`}>
                 {f === "all" ? "All" : f === "call" ? "Calls" : f === "email" ? "Manual" : f === "gmail" ? "Gmail" : `Leads (${leadSuggestions.length})`}
               </button>
@@ -631,66 +570,58 @@ export default function CommunicationPage() {
 
         <div ref={sidebarRef} className="flex-1 overflow-y-auto">
           {filter === "leads" ? (
-            <div className="divide-y divide-gray-100">
+            <div className="divide-y divide-slate-100">
               {leadSuggestions.length === 0 ? (
                 <div className="p-8 text-center">
-                  <UserPlus size={24} className="mx-auto text-gray-300 mb-2" />
-                  <p className="text-sm text-gray-400">No lead suggestions</p>
-                  <p className="text-xs text-gray-300 mt-1">AI will detect potential leads from your incoming emails</p>
+                  <UserPlus size={24} className="mx-auto text-slate-300 mb-2" />
+                  <p className="text-sm text-slate-400 font-medium">No lead suggestions</p>
+                  <p className="text-xs text-slate-300 mt-1">AI will detect potential leads from your incoming emails</p>
                 </div>
               ) : (
                 leadSuggestions.map((s) => (
-                  <div key={s.id} className="px-4 py-3.5">
+                  <div key={s.id} className="px-4 py-3.5 hover:bg-slate-50 transition-colors">
                     <div className="flex items-start gap-3">
-                      <div className="w-9 h-9 rounded-full bg-green-100 flex items-center justify-center shrink-0">
-                        <UserPlus size={16} className="text-green-600" />
+                      <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                        <UserPlus size={16} className="text-emerald-600" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-gray-900 truncate">
+                          <span className="text-sm font-semibold text-slate-900 truncate">
                             {s.suggested_first_name || s.from_name || s.from_address}
                             {s.suggested_last_name ? ` ${s.suggested_last_name}` : ""}
                           </span>
                           {s.confidence > 0 && (
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
-                              s.confidence >= 0.7 ? "bg-green-100 text-green-700" :
-                              s.confidence >= 0.4 ? "bg-yellow-100 text-yellow-700" :
-                              "bg-gray-100 text-gray-500"
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
+                              s.confidence >= 0.7 ? "bg-emerald-100 text-emerald-700" :
+                              s.confidence >= 0.4 ? "bg-amber-100 text-amber-700" :
+                              "bg-slate-100 text-slate-500"
                             }`}>
                               {Math.round(s.confidence * 100)}%
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-gray-500 truncate">{s.from_address}</p>
-                        {s.subject && <p className="text-xs text-gray-700 mt-1 truncate font-medium">{s.subject}</p>}
-                        {s.snippet && <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">{s.snippet}</p>}
+                        <p className="text-xs text-slate-500 truncate">{s.from_address}</p>
+                        {s.subject && <p className="text-xs text-slate-700 mt-1 truncate font-medium">{s.subject}</p>}
+                        {s.snippet && <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">{s.snippet}</p>}
                         {s.suggested_intent && (
-                          <span className="inline-block mt-1.5 text-[10px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 font-medium capitalize">
+                          <span className="inline-block mt-1.5 text-[10px] px-2 py-0.5 rounded-full bg-sky-50 text-sky-600 font-semibold capitalize">
                             {s.suggested_intent}
                           </span>
                         )}
                         <div className="flex gap-2 mt-2">
-                          <button
-                            onClick={() => acceptMutation.mutate(s.id)}
-                            disabled={acceptMutation.isPending}
-                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-500 text-white text-xs font-semibold hover:bg-green-600 transition-colors disabled:opacity-50"
-                          >
-                            <Check size={12} />
-                            Accept
+                          <button onClick={() => acceptMutation.mutate(s.id)} disabled={acceptMutation.isPending}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-500 text-white text-xs font-semibold hover:bg-emerald-600 transition-colors disabled:opacity-50">
+                            <Check size={12} /> Accept
                           </button>
-                          <button
-                            onClick={() => dismissMutation.mutate(s.id)}
-                            disabled={dismissMutation.isPending}
-                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-xs font-semibold hover:bg-gray-200 transition-colors disabled:opacity-50"
-                          >
-                            <XCircle size={12} />
-                            Dismiss
+                          <button onClick={() => dismissMutation.mutate(s.id)} disabled={dismissMutation.isPending}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-xs font-semibold hover:bg-slate-200 transition-colors disabled:opacity-50">
+                            <XCircle size={12} /> Dismiss
                           </button>
                         </div>
                       </div>
                     </div>
                     {s.gmail_date && (
-                      <p className="text-[10px] text-gray-300 mt-1 text-right">{timeAgo(s.gmail_date)}</p>
+                      <p className="text-[10px] text-slate-300 mt-1 text-right">{timeAgo(s.gmail_date)}</p>
                     )}
                   </div>
                 ))
@@ -698,9 +629,9 @@ export default function CommunicationPage() {
             </div>
           ) : threads.length === 0 ? (
             <div className="p-8 text-center">
-              <Mail size={32} className="mx-auto text-[#E8E6E1] mb-3" />
-              <p className="text-sm text-[#1A2E44] font-medium font-[family-name:var(--font-sora)]">No communications yet</p>
-              <p className="text-xs text-[#6B7280] mt-1">{gmailConnected ? "Sync Gmail or log a call/email" : "Log a call or email to get started"}</p>
+              <Mail size={32} className="mx-auto text-slate-300 mb-3" />
+              <p className="text-sm text-slate-900 font-semibold font-[family-name:var(--font-sora)]">No communications yet</p>
+              <p className="text-xs text-slate-400 mt-1">{gmailConnected ? "Sync Gmail or log a call/email" : "Log a call or email to get started"}</p>
             </div>
           ) : (
             threads.map((thread) => {
@@ -711,34 +642,36 @@ export default function CommunicationPage() {
               const initials = isEmailGroup
                 ? (thread.groupName[0] ?? "?").toUpperCase()
                 : thread.groupName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
-              const colors = getItemColors(lastItem.type);
               const Icon = lastItem.type === "call" ? Phone : Mail;
+              const colors = getItemColors(lastItem.type);
               return (
                 <button key={thread.groupKey} data-group-key={thread.groupKey} onClick={() => selectThread(thread.groupKey)}
-                  className={`w-full flex items-start gap-3 px-4 py-3.5 text-left transition-all duration-150 mb-0.5 ${isSelected ? "bg-[#F0F4FA] border-l-2 border-l-[#2563EB]" : "hover:bg-[#F8F9FC] border-l-2 border-l-transparent"}`}>
-                  {hasUnread && <div className="w-2.5 h-2.5 rounded-full bg-[#2563EB] shrink-0 mt-4" />}
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 mt-0.5 ring-2 ring-white shadow-sm"
-                    style={{ background: isEmailGroup ? "linear-gradient(135deg, #6B7280, #9CA3AF)" : "linear-gradient(135deg, #1A2E44, #2D4A6F)" }}>
+                  className={`w-full flex items-start gap-3 px-4 py-3 text-left transition-all duration-150 ${isSelected ? "bg-sky-50 border-l-[3px] border-l-sky-500" : "hover:bg-slate-50 border-l-[3px] border-l-transparent"}`}>
+                  {hasUnread && <div className="w-2 h-2 rounded-full bg-sky-500 shrink-0 mt-4" />}
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 mt-0.5 shadow-sm"
+                    style={{ background: isEmailGroup ? "linear-gradient(135deg, #64748b, #94a3b8)" : "linear-gradient(135deg, #0f172a, #1e3a5f)" }}>
                     {initials || "?"}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
-                      <p className={`text-sm text-[#1A2E44] truncate font-[family-name:var(--font-sora)] ${hasUnread ? "font-bold" : "font-medium"}`}>{thread.groupName}</p>
+                      <p className={`text-sm text-slate-900 truncate font-[family-name:var(--font-sora)] ${hasUnread ? "font-bold" : "font-medium"}`}>{thread.groupName}</p>
                       <div className="flex items-center gap-1 shrink-0">
                         {lastItem.email_data?.labels && emailIsStarred(lastItem.email_data.labels) && (
-                          <Star size={11} className="text-[#F59E0B] fill-[#F59E0B]" />
+                          <Star size={11} className="text-amber-400 fill-amber-400" />
                         )}
                         {lastItem.email_data?.labels && emailHasAttachment(lastItem.email_data.labels) && (
-                          <Paperclip size={11} className="text-[#9CA3AF]" />
+                          <Paperclip size={11} className="text-slate-400" />
                         )}
-                        <span className="text-[11px] text-[#9CA3AF] font-medium">{timeAgo(thread.lastDate)}</span>
+                        <span className="text-[11px] text-slate-400 font-medium">{timeAgo(thread.lastDate)}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5 mt-0.5">
                       <Icon size={11} style={{ color: colors.color }} className="shrink-0" />
-                      <p className="text-xs text-[#6B7280] truncate">{lastItem.subject || lastItem.body}</p>
+                      <p className="text-xs text-slate-500 truncate">{lastItem.subject || lastItem.body}</p>
                     </div>
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#F0F4FA] text-[#2563EB]">{thread.items.length} item{thread.items.length !== 1 ? "s" : ""}</span>
+                    {thread.items.length > 1 && (
+                      <span className="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-500 text-white">{thread.items.length}</span>
+                    )}
                   </div>
                 </button>
               );
@@ -747,31 +680,33 @@ export default function CommunicationPage() {
         </div>
       </div>
 
-      {/* Center — full email view with arrow nav */}
-      <div className="flex-1 flex flex-col bg-[#FAFAF8] min-w-0">
+      {/* Center — thread view */}
+      <div className="flex-1 flex flex-col bg-slate-50 min-w-0">
         {selectedThread && currentItem ? (
           <>
-            {/* Header bar with nav arrows */}
-            <div className="px-6 py-3 bg-white/80 backdrop-blur-sm border-b border-[#E8E6E1] flex items-center justify-between">
+            <div className="px-6 py-3.5 bg-white border-b border-slate-200 flex items-center justify-between">
               <div className="flex-1 min-w-0">
-                <h3 className="font-[family-name:var(--font-sora)] text-base font-semibold text-[#1A2E44] truncate">
-                  {selectedThread.groupName}{totalItems > 1 ? ` — ${totalItems} ${totalItems === 1 ? "item" : "items"}` : ""}
+                <h3 className="font-[family-name:var(--font-sora)] text-base font-bold text-slate-900 truncate">
+                  {selectedThread.groupName}
                 </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {totalItems} {totalItems === 1 ? "message" : "messages"}{currentItem.subject ? ` · ${currentItem.subject}` : ""}
+                </p>
               </div>
-              <div className="flex items-center gap-1">
-                {/* Nav arrows */}
-                <button onClick={goNewer} disabled={currentFlatIndex <= 0}
-                  className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#F0F4FA] transition-colors disabled:opacity-30 disabled:cursor-default"
-                  title="Newer">
-                  <ChevronUp size={16} className="text-[#6B7280]" />
-                </button>
-                <button onClick={goOlder} disabled={currentFlatIndex < 0 || currentFlatIndex >= flatItems.length - 1}
-                  className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#F0F4FA] transition-colors disabled:opacity-30 disabled:cursor-default"
-                  title="Older">
-                  <ChevronDown size={16} className="text-[#6B7280]" />
-                </button>
-
-                <div className="w-px h-6 bg-[#E8E6E1] mx-1" />
+              <div className="flex items-center gap-2">
+                <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden">
+                  <button onClick={goNewer} disabled={currentFlatIndex <= 0}
+                    className="w-8 h-8 flex items-center justify-center hover:bg-slate-100 transition-colors disabled:opacity-30 disabled:cursor-default"
+                    title="Newer">
+                    <ChevronUp size={15} className="text-slate-500" />
+                  </button>
+                  <div className="w-px h-5 bg-slate-200" />
+                  <button onClick={goOlder} disabled={currentFlatIndex < 0 || currentFlatIndex >= flatItems.length - 1}
+                    className="w-8 h-8 flex items-center justify-center hover:bg-slate-100 transition-colors disabled:opacity-30 disabled:cursor-default"
+                    title="Older">
+                    <ChevronDown size={15} className="text-slate-500" />
+                  </button>
+                </div>
 
                 {gmailConnected && (
                   <button onClick={() => {
@@ -779,73 +714,78 @@ export default function CommunicationPage() {
                     if (lastGmail?.email_data) {
                       const e = lastGmail.email_data;
                       setComposeTo(e.is_outbound ? (e.to_addresses?.[0] ?? "") : (e.from_address ?? ""));
-                    } else if (selectedContact?.email) {
-                      setComposeTo(selectedContact.email);
+                    } else if (selectedThread.contactId) {
+                      const c = contactMap[selectedThread.contactId];
+                      if (c?.email) setComposeTo(c.email);
                     }
                     setShowCompose(true);
                   }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-[#DC2626]/10 text-[#DC2626] hover:bg-[#DC2626]/20 hover:shadow-sm transition-all duration-200">
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-50 text-red-500 hover:bg-red-100 transition-colors">
                     <Send size={12} /> Email
                   </button>
                 )}
                 <button onClick={() => { setShowLog(true); if (selectedThread.contactId) setLogContactId(selectedThread.contactId); }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-[#2563EB]/10 text-[#2563EB] hover:bg-[#2563EB]/20 hover:shadow-sm transition-all duration-200">
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors">
                   <Plus size={14} /> Log
                 </button>
               </div>
             </div>
 
-            {/* Thread conversation view — all items inline */}
             <div className="flex-1 overflow-y-auto p-6">
               <div className="max-w-2xl mx-auto flex flex-col gap-3">
                 {selectedThread.items.map((item) => {
                   const isExpanded = expandedItems.has(item.id);
                   const itemIsGmail = item.type === "gmail_in" || item.type === "gmail_out";
                   const itemFullBody = item.email_data ? emailCacheRef.current[item.email_data.id] : null;
+                  const isSent = item.type === "gmail_out";
 
                   return (
-                    <div key={item.id} className="comm-card hover:shadow-md transition-shadow duration-200 border border-[#F0EEEA]">
-                      {/* Clickable header — always visible */}
+                    <div key={item.id} className={`bg-white rounded-xl border border-slate-200 hover:shadow-md transition-shadow duration-200 ${isSent ? "border-l-[3px] border-l-emerald-400" : ""}`}>
                       <button
                         onClick={() => toggleExpanded(item.id)}
-                        className={`w-full px-6 pt-5 pb-4 text-left flex items-start gap-3 hover:bg-[#F8F9FC]/50 transition-colors ${isExpanded ? "rounded-t-2xl" : "rounded-2xl"}`}
+                        className={`w-full px-5 pt-4 pb-3 text-left flex items-start gap-3 hover:bg-slate-50/50 transition-colors ${isExpanded ? "rounded-t-xl" : "rounded-xl"}`}
                       >
-                        <div className="mt-0.5 shrink-0 text-[#9CA3AF] hover:text-[#2563EB] transition-all duration-150" style={{ transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)" }}>
+                        <div className="mt-0.5 shrink-0 text-slate-400 transition-transform duration-150" style={{ transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)" }}>
                           <ChevronRight size={14} />
                         </div>
+                        <div className="flex items-center gap-2.5 shrink-0 mt-0.5">
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold"
+                            style={{ background: isSent ? "linear-gradient(135deg, #059669, #10b981)" : "linear-gradient(135deg, #0f172a, #1e3a5f)" }}>
+                            {isSent ? "You" : (item.contact_name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2))}
+                          </div>
+                        </div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center justify-between mb-0.5">
                             <div className="flex items-center gap-2 min-w-0">
-                              <span className="rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-wide uppercase shrink-0"
+                              <span className="font-semibold text-sm text-slate-900">{isSent ? "You" : (item.from_name || item.contact_name)}</span>
+                              {itemIsGmail && (
+                                <span className="text-xs text-slate-400">
+                                  {isSent ? `→ ${item.to_addresses?.join(", ") ?? ""}` : ""}
+                                </span>
+                              )}
+                              <span className="rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase shrink-0"
                                 style={{ backgroundColor: getItemColors(item.type).bg, color: getItemColors(item.type).color }}>
                                 {getItemLabel(item.type)}
                               </span>
-                              {itemIsGmail && (
-                                <span className="text-xs text-[#6B7280] truncate">
-                                  {item.type === "gmail_out"
-                                    ? `To: ${item.to_addresses?.join(", ") ?? ""}`
-                                    : `From: ${item.from_name || item.from_address || ""}`}
-                                </span>
-                              )}
                               {itemIsGmail && item.email_data?.labels && emailIsStarred(item.email_data.labels) && (
-                                <Star size={12} className="text-[#F59E0B] fill-[#F59E0B] shrink-0" />
+                                <Star size={12} className="text-amber-400 fill-amber-400 shrink-0" />
                               )}
                               {itemIsGmail && item.email_data?.labels && emailHasAttachment(item.email_data.labels) && (
-                                <Paperclip size={12} className="text-[#9CA3AF] shrink-0" />
+                                <Paperclip size={12} className="text-slate-400 shrink-0" />
                               )}
                             </div>
-                            <span className="text-[11px] text-[#9CA3AF] font-medium shrink-0 ml-2">{formatDate(item.date)}</span>
+                            <span className="text-[11px] text-slate-400 font-medium shrink-0 ml-2">{formatDate(item.date)}</span>
                           </div>
                           {item.subject && (
-                            <h4 className="font-[family-name:var(--font-sora)] text-sm font-semibold text-[#1A2E44] truncate">{item.subject}</h4>
+                            <h4 className="font-[family-name:var(--font-sora)] text-sm font-semibold text-slate-800 truncate">{item.subject}</h4>
                           )}
                           {!isExpanded && (
-                            <p className="text-xs text-[#9CA3AF] mt-0.5 truncate">{item.body}</p>
+                            <p className="text-xs text-slate-400 mt-0.5 truncate">{item.body}</p>
                           )}
                           {!isExpanded && itemIsGmail && item.email_data?.labels && getUserLabels(item.email_data.labels).length > 0 && (
                             <div className="flex items-center gap-1 mt-1 flex-wrap">
                               {getUserLabels(item.email_data.labels).map((label) => (
-                                <span key={label} className="bg-indigo-50 text-indigo-600 rounded-full px-2.5 py-0.5 text-[10px] font-semibold">
+                                <span key={label} className="bg-sky-50 text-sky-600 rounded-full px-2 py-0.5 text-[10px] font-semibold">
                                   {label}
                                 </span>
                               ))}
@@ -854,33 +794,34 @@ export default function CommunicationPage() {
                         </div>
                       </button>
 
-                      {/* Collapsible body */}
                       {isExpanded && (
-                        <div className="px-8 py-6 border-t border-[#E8E6E1]">
+                        <div className="px-7 py-5 border-t border-slate-100">
                           {itemIsGmail && item.email_data?.labels && (
                             <div className="flex items-center gap-1.5 mb-3 flex-wrap">
                               {emailHasAttachment(item.email_data.labels) && (
-                                <span className="flex items-center gap-0.5 text-[10px] px-2 py-0.5 rounded-full bg-[#F0F4FA] text-[#6B7280] font-medium">
+                                <span className="flex items-center gap-0.5 text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 font-medium">
                                   <Paperclip size={10} /> Attachment
                                 </span>
                               )}
                               {getUserLabels(item.email_data.labels).map((label) => (
-                                <span key={label} className="bg-indigo-50 text-indigo-600 rounded-full px-2.5 py-0.5 text-[10px] font-semibold">
+                                <span key={label} className="bg-sky-50 text-sky-600 rounded-full px-2.5 py-0.5 text-[10px] font-semibold">
                                   {label}
                                 </span>
                               ))}
                             </div>
                           )}
                           {itemIsGmail && loadingEmail && !itemFullBody ? (
-                            <p className="text-sm text-[#9CA3AF]">Loading...</p>
+                            <div className="flex items-center gap-2 text-sm text-slate-400">
+                              <RefreshCw size={14} className="animate-spin" /> Loading email...
+                            </div>
                           ) : itemIsGmail && itemFullBody?.body_html ? (
                             <EmailHtmlFrame html={itemFullBody.body_html} />
                           ) : itemIsGmail && itemFullBody?.body_text ? (
-                            <pre className="text-sm text-[#1A2E44] leading-relaxed whitespace-pre-wrap font-sans">
+                            <pre className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap font-sans">
                               {itemFullBody.body_text}
                             </pre>
                           ) : (
-                            <p className="text-sm text-[#1A2E44] leading-relaxed">{item.body}</p>
+                            <p className="text-sm text-slate-700 leading-relaxed">{item.body}</p>
                           )}
                         </div>
                       )}
@@ -888,12 +829,11 @@ export default function CommunicationPage() {
                   );
                 })}
 
-                {/* Inline reply for threads with gmail items */}
                 {selectedThread.items.some((i) => i.type === "gmail_in" || i.type === "gmail_out") && (
                   <div>
                     {showReply ? (
-                      <div className="comm-card-elevated p-5">
-                        <p className="text-xs text-[#9CA3AF] mb-2">
+                      <div className="bg-white rounded-xl border border-slate-200 shadow-lg p-5">
+                        <p className="text-xs text-slate-400 mb-2 font-medium">
                           Replying to {(() => {
                             const lastGmail = selectedThread.items.find((i) => i.email_data);
                             if (!lastGmail) return "...";
@@ -903,16 +843,16 @@ export default function CommunicationPage() {
                           })()}
                         </p>
                         <input value={replyCc} onChange={(e) => setReplyCc(e.target.value)} placeholder="Cc (optional)"
-                          className="comm-input text-xs mb-2" />
+                          className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-900 outline-none mb-2 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/10 placeholder:text-slate-400" />
                         <textarea ref={replyRef} value={replyBody} onChange={(e) => setReplyBody(e.target.value)}
                           placeholder="Write your reply..." rows={4}
-                          className="comm-input resize-none" />
+                          className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-900 outline-none resize-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/10 placeholder:text-slate-400" />
                         <div className="flex items-center justify-between mt-3">
                           <button onClick={() => { setShowReply(false); setReplyBody(""); }}
-                            className="text-xs text-[#9CA3AF] hover:text-[#1A2E44] transition-colors">Cancel</button>
+                            className="text-xs text-slate-400 hover:text-slate-600 font-medium transition-colors">Cancel</button>
                           <button onClick={() => replyMutation.mutate()}
                             disabled={!replyBody.trim() || replyMutation.isPending}
-                            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-50 bg-[#2563EB] hover:bg-[#1D4ED8] shadow-sm hover:shadow-md transition-all duration-200">
+                            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-50 bg-sky-500 hover:bg-sky-600 transition-colors">
                             <Send size={12} />
                             {replyMutation.isPending ? "Sending..." : "Send"}
                           </button>
@@ -921,7 +861,7 @@ export default function CommunicationPage() {
                       </div>
                     ) : (
                       <button onClick={() => { setShowReply(true); setTimeout(() => replyRef.current?.focus(), 100); }}
-                        className="comm-card flex items-center gap-2 px-4 py-3 border border-[#E8E6E1] text-sm text-[#6B7280] hover:border-[#2563EB] hover:text-[#2563EB] hover:shadow-sm transition-all duration-200 w-full">
+                        className="bg-white flex items-center gap-2 px-4 py-3 border border-slate-200 rounded-xl text-sm text-slate-500 hover:border-sky-500 hover:text-sky-500 hover:shadow-sm transition-all duration-200 w-full">
                         <Reply size={14} /> Reply
                       </button>
                     )}
@@ -933,89 +873,54 @@ export default function CommunicationPage() {
         ) : (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
-              <div className="w-20 h-20 rounded-full mx-auto mb-4 flex items-center justify-center" style={{ background: "linear-gradient(135deg, #F0F4FA, #E8E6E1)" }}>
-                <Mail size={32} className="text-[#2563EB]/40" />
+              <div className="w-20 h-20 rounded-2xl mx-auto mb-4 flex items-center justify-center bg-gradient-to-br from-sky-100 to-slate-100">
+                <Mail size={32} className="text-sky-500/50" />
               </div>
-              <p className="text-[#1A2E44] text-sm font-medium font-[family-name:var(--font-sora)]">Select a conversation</p>
-              <p className="text-[#9CA3AF] text-xs mt-1">Choose a contact to view their communication history</p>
+              <p className="text-slate-900 text-sm font-semibold font-[family-name:var(--font-sora)]">Select a conversation</p>
+              <p className="text-slate-400 text-xs mt-1">Choose a contact to view their communication history</p>
             </div>
           </div>
         )}
       </div>
 
-      {/* Right panel — contact details */}
-      {selectedContact && (
-        <div className="w-72 border-l border-[#E8E6E1] bg-white p-6 shrink-0">
-          <div className="text-center mb-5">
-            <div className="w-20 h-20 rounded-full flex items-center justify-center text-white text-xl font-bold mx-auto mb-3 ring-4 ring-[#F0F4FA] shadow-lg" style={{ background: "linear-gradient(135deg, #1A2E44, #2D4A6F)" }}>
-              {`${selectedContact.first_name[0]}${selectedContact.last_name[0]}`.toUpperCase()}
-            </div>
-            <p className="font-[family-name:var(--font-sora)] text-base font-bold text-[#1A2E44]">{selectedContact.first_name} {selectedContact.last_name}</p>
-            {selectedContact.source && (
-              <span className="bg-[#F0F4FA] text-[#2563EB] rounded-full px-3 py-1 text-[11px] font-semibold tracking-wide uppercase mt-2 inline-block">{selectedContact.source}</span>
-            )}
-          </div>
-          <div className="flex flex-col gap-4">
-            {selectedContact.email && (
-              <div className="pb-4 border-b border-[#F0EEEA]">
-                <p className="text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-widest mb-1">Email</p>
-                <p className="text-sm text-[#1A2E44] font-medium">{selectedContact.email}</p>
-              </div>
-            )}
-            {selectedContact.phone && (
-              <div className="pb-4 border-b border-[#F0EEEA]">
-                <p className="text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-widest mb-1">Phone</p>
-                <p className="text-sm text-[#1A2E44] font-medium">{selectedContact.phone}</p>
-              </div>
-            )}
-            <div>
-              <p className="text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-widest mb-1">Added</p>
-              <p className="text-sm text-[#1A2E44] font-medium">
-                {new Date(selectedContact.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Log modal */}
       {showLog && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center">
-          <div className="comm-card-elevated w-full max-w-md p-7">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md p-7">
             <div className="flex items-center justify-between mb-5">
-              <h3 className="font-[family-name:var(--font-sora)] text-lg font-bold text-[#1A2E44]">Log Communication</h3>
-              <button onClick={() => setShowLog(false)} className="text-[#9CA3AF] hover:text-[#1A2E44] hover:bg-[#F8F9FC] rounded-lg w-8 h-8 flex items-center justify-center transition-colors"><X size={18} /></button>
+              <h3 className="font-[family-name:var(--font-sora)] text-lg font-bold text-slate-900">Log Communication</h3>
+              <button onClick={() => setShowLog(false)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg w-8 h-8 flex items-center justify-center transition-colors"><X size={18} /></button>
             </div>
             <div className="flex gap-2 mb-4">
               <button onClick={() => setLogType("call")}
-                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${logType === "call" ? "bg-[#2563EB] text-white shadow-sm" : "bg-[#FAFAF8] text-[#6B7280] border border-[#E8E6E1]"}`}>
+                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all duration-150 ${logType === "call" ? "bg-sky-500 text-white" : "bg-slate-50 text-slate-500 border border-slate-200"}`}>
                 <Phone size={14} /> Call
               </button>
               <button onClick={() => setLogType("email")}
-                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${logType === "email" ? "bg-[#16A34A] text-white shadow-sm" : "bg-[#FAFAF8] text-[#6B7280] border border-[#E8E6E1]"}`}>
+                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all duration-150 ${logType === "email" ? "bg-emerald-500 text-white" : "bg-slate-50 text-slate-500 border border-slate-200"}`}>
                 <Mail size={14} /> Email
               </button>
             </div>
             <div className="mb-4">
-              <label className="text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-widest block mb-1.5">Contact</label>
+              <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1.5">Contact</label>
               <div className="relative">
-                <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
+                <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <select value={logContactId} onChange={(e) => setLogContactId(e.target.value)}
-                  className="comm-input pl-9 pr-3 appearance-none">
+                  className="w-full pl-9 pr-8 py-2.5 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-900 outline-none appearance-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/10">
                   <option value="">Select contact...</option>
                   {contacts.map((c) => <option key={c.id} value={c.id}>{c.first_name} {c.last_name}</option>)}
                 </select>
-                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9CA3AF] pointer-events-none" />
+                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
               </div>
             </div>
             <div className="mb-5">
-              <label className="text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-widest block mb-1.5">Details</label>
+              <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1.5">Details</label>
               <textarea value={logBody} onChange={(e) => setLogBody(e.target.value)}
                 placeholder={logType === "call" ? "Call notes..." : "Email summary..."} rows={3}
-                className="comm-input resize-none" />
+                className="w-full px-3 py-2.5 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-900 outline-none resize-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/10 placeholder:text-slate-400" />
             </div>
             <button onClick={() => logMutation.mutate()} disabled={!logContactId || !logBody || logMutation.isPending}
-              className="w-full py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 bg-[#2563EB] hover:bg-[#1D4ED8] shadow-sm hover:shadow-md transition-all duration-200">
+              className="w-full py-2.5 rounded-lg text-white text-sm font-semibold disabled:opacity-50 bg-sky-500 hover:bg-sky-600 transition-colors">
               {logMutation.isPending ? "Saving..." : `Log ${logType === "call" ? "Call" : "Email"}`}
             </button>
           </div>
@@ -1025,36 +930,36 @@ export default function CommunicationPage() {
       {/* Compose modal */}
       {showCompose && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center">
-          <div className="comm-card-elevated w-full max-w-lg p-7">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg p-7">
             <div className="flex items-center justify-between mb-5">
-              <h3 className="font-[family-name:var(--font-sora)] text-lg font-bold text-[#1A2E44]">New Email</h3>
-              <button onClick={() => setShowCompose(false)} className="text-[#9CA3AF] hover:text-[#1A2E44] hover:bg-[#F8F9FC] rounded-lg w-8 h-8 flex items-center justify-center transition-colors"><X size={18} /></button>
+              <h3 className="font-[family-name:var(--font-sora)] text-lg font-bold text-slate-900">New Email</h3>
+              <button onClick={() => setShowCompose(false)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg w-8 h-8 flex items-center justify-center transition-colors"><X size={18} /></button>
             </div>
             <div className="flex flex-col gap-4 mb-5">
               <div>
-                <label className="text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-widest block mb-1.5">To</label>
+                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1.5">To</label>
                 <input value={composeTo} onChange={(e) => setComposeTo(e.target.value)} placeholder="recipient@email.com"
-                  className="comm-input" />
+                  className="w-full px-3 py-2.5 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-900 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/10 placeholder:text-slate-400" />
               </div>
               <div>
-                <label className="text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-widest block mb-1.5">Cc</label>
+                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1.5">Cc</label>
                 <input value={composeCc} onChange={(e) => setComposeCc(e.target.value)} placeholder="cc@email.com (optional)"
-                  className="comm-input" />
+                  className="w-full px-3 py-2.5 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-900 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/10 placeholder:text-slate-400" />
               </div>
               <div>
-                <label className="text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-widest block mb-1.5">Subject</label>
+                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1.5">Subject</label>
                 <input value={composeSubject} onChange={(e) => setComposeSubject(e.target.value)} placeholder="Email subject"
-                  className="comm-input" />
+                  className="w-full px-3 py-2.5 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-900 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/10 placeholder:text-slate-400" />
               </div>
               <div>
-                <label className="text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-widest block mb-1.5">Message</label>
+                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1.5">Message</label>
                 <textarea value={composeBody} onChange={(e) => setComposeBody(e.target.value)} placeholder="Write your email..." rows={6}
-                  className="comm-input resize-none" />
+                  className="w-full px-3 py-2.5 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-900 outline-none resize-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/10 placeholder:text-slate-400" />
               </div>
             </div>
             <button onClick={() => composeMutation.mutate()}
               disabled={!composeTo || !composeSubject || !composeBody || composeMutation.isPending}
-              className="w-full py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2 bg-[#DC2626] hover:bg-[#B91C1C] shadow-sm hover:shadow-md transition-all duration-200">
+              className="w-full py-2.5 rounded-lg text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 transition-colors">
               <Send size={14} /> {composeMutation.isPending ? "Sending..." : "Send Email"}
             </button>
             {composeMutation.isError && <p className="text-xs text-red-500 mt-2">Failed to send. Try again.</p>}
