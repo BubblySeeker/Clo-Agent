@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Twilio Voice Calling
-status: completed
-stopped_at: Completed 04-02-PLAN.md (Phase 4 complete)
-last_updated: "2026-03-24T15:10:04.395Z"
-last_activity: "2026-03-24 — Completed 04-02 (Core Call Flow: Two-Leg Bridge, Inbound, Settings)"
+status: in-progress
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-03-24T18:05:18Z"
+last_activity: "2026-03-24 — Completed 05-01 (Recording Infrastructure: Encryption, TwiML, Webhook, Download)"
 progress:
   total_phases: 5
   completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
-  percent: 20
+  total_plans: 4
+  completed_plans: 3
+  percent: 75
 ---
 
 # Project State
@@ -21,32 +21,33 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-23)
 
 **Core value:** AI-powered voice calling that automatically transcribes conversations and updates the CRM, so real estate agents never miss a follow-up.
-**Current focus:** Phase 4 — Core Call Flow
+**Current focus:** Phase 5 — Recording Infrastructure
 
 ## Current Position
 
-Phase: 4 of 8 (Core Call Flow)
-Plan: 2 of 2 in current phase (PHASE COMPLETE)
-Status: Phase 4 Complete
-Last activity: 2026-03-24 — Completed 04-02 (Core Call Flow: Two-Leg Bridge, Inbound, Settings)
+Phase: 5 of 8 (Recording Infrastructure)
+Plan: 1 of 2 in current phase
+Status: In Progress
+Last activity: 2026-03-24 — Completed 05-01 (Recording Infrastructure: Encryption, TwiML, Webhook, Download)
 
-Progress: [##........] 20%
+Progress: [########..] 75%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2 (v2.0)
-- Average duration: 3m59s
-- Total execution time: 7m58s
+- Total plans completed: 3 (v2.0)
+- Average duration: 4m57s
+- Total execution time: 14m50s
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 4 | 2 | 7m58s | 3m59s |
+| 5 | 1 | 6m52s | 6m52s |
 
 **Recent Trend:**
-- Last 5 plans: 04-01 (3m17s), 04-02 (4m41s)
+- Last 5 plans: 04-01 (3m17s), 04-02 (4m41s), 05-01 (6m52s)
 - Trend: Consistent
 
 *Updated after each plan completion*
@@ -58,6 +59,10 @@ Progress: [##........] 20%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
+- Backward-compatible decrypt: if decryption fails, treat auth_token as plaintext (supports migration from unencrypted)
+- getTwilioConfig as single gateway for all Twilio credential reads across calls.go and sms.go
+- 3-second delay before recording download to avoid Twilio 404 race condition
+- Non-fatal Twilio recording delete: local copy is safe even if Twilio API delete fails
 - Used twilio-go SDK instead of raw HTTP for call creation (cleaner, typed params)
 - Personal phone update reuses /sms/configure endpoint with empty credentials to avoid new endpoint
 - TwiML bridge validates signature only on POST (Twilio may hit via GET initially)
@@ -81,5 +86,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-24
-Stopped at: Completed 04-02-PLAN.md (Phase 4 complete)
+Stopped at: Completed 05-01-PLAN.md
 Resume file: None

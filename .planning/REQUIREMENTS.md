@@ -17,11 +17,11 @@
 
 ### Recording
 
-- [ ] **REC-01**: Outbound and inbound calls are recorded in dual-channel format (agent/client on separate channels)
-- [ ] **REC-02**: Recording webhook receives notification when recording is ready and stores metadata in call_logs
+- [x] **REC-01**: Outbound and inbound calls are recorded in dual-channel format (agent/client on separate channels)
+- [x] **REC-02**: Recording webhook receives notification when recording is ready and stores metadata in call_logs
 - [ ] **REC-03**: Agent can play back call recordings in the communication page via a proxy endpoint
-- [ ] **REC-04**: Recordings are downloaded from Twilio and stored locally/S3, then deleted from Twilio
-- [ ] **REC-05**: Twilio auth tokens are encrypted at rest in the database
+- [x] **REC-04**: Recordings are downloaded from Twilio and stored locally/S3, then deleted from Twilio
+- [x] **REC-05**: Twilio auth tokens are encrypted at rest in the database
 
 ### AI Intelligence
 
@@ -83,11 +83,11 @@
 | CALL-05 | Phase 4 | Complete (04-02) |
 | CALL-06 | Phase 4 | Complete (04-01) |
 | CALL-07 | Phase 4 | Complete (04-01) |
-| REC-01 | Phase 5 | Pending |
-| REC-02 | Phase 5 | Pending |
+| REC-01 | Phase 5 | Complete |
+| REC-02 | Phase 5 | Complete |
 | REC-03 | Phase 5 | Pending |
-| REC-04 | Phase 5 | Pending |
-| REC-05 | Phase 5 | Pending |
+| REC-04 | Phase 5 | Complete |
+| REC-05 | Phase 5 | Complete |
 | AI-01 | Phase 6 | Pending |
 | AI-02 | Phase 6 | Pending |
 | AI-03 | Phase 6 | Pending |
