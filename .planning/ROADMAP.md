@@ -47,7 +47,7 @@ Build end-to-end voice calling where the agent makes/receives calls through Twil
 **Plans:** 2 plans
 
 Plans:
-- [ ] 04-01-PLAN.md — Backend foundation: bug fixes, shared Twilio utils, migration, config, personal_phone support
+- [x] 04-01-PLAN.md — Backend foundation: bug fixes, shared Twilio utils, migration, config, personal_phone support
 - [ ] 04-02-PLAN.md — Two-leg bridge call flow, inbound forwarding, TwiML endpoints, frontend settings + dynamic polling
 
 ### Phase 5: Recording Infrastructure
@@ -120,7 +120,7 @@ Phases execute in numeric order: 4 -> 5 -> 6 -> 7 -> 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 4. Core Call Flow | 0/2 | Planning complete | - |
+| 4. Core Call Flow | 1/2 | In progress | - |
 | 5. Recording Infrastructure | 0/? | Not started | - |
 | 6. AI Transcription & Intelligence | 0/? | Not started | - |
 | 7. Frontend Call Experience | 0/? | Not started | - |

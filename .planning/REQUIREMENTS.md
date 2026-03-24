@@ -7,13 +7,13 @@
 
 ### Call Foundation
 
-- [ ] **CALL-01**: Agent can configure their personal phone number in Settings (stored in twilio_config)
+- [x] **CALL-01**: Agent can configure their personal phone number in Settings (stored in twilio_config)
 - [ ] **CALL-02**: Agent can initiate an outbound call that rings their real phone first, then bridges to the client (two-leg bridge)
 - [ ] **CALL-03**: Inbound calls to the Twilio number are forwarded to the agent's personal phone with caller ID matching
 - [ ] **CALL-04**: All calls include a recording consent announcement before the conversation begins
 - [ ] **CALL-05**: Call status (ringing, in-progress, completed, no-answer, busy, failed) updates in real-time via StatusCallback
-- [ ] **CALL-06**: All call webhook endpoints validate Twilio signature (X-Twilio-Signature)
-- [ ] **CALL-07**: Existing bugs are fixed: RLS in call handlers, SMS activity type logged as 'call' instead of 'sms'
+- [x] **CALL-06**: All call webhook endpoints validate Twilio signature (X-Twilio-Signature)
+- [x] **CALL-07**: Existing bugs are fixed: RLS in call handlers, SMS activity type logged as 'call' instead of 'sms'
 
 ### Recording
 
@@ -76,13 +76,13 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CALL-01 | Phase 4 | Pending |
+| CALL-01 | Phase 4 | Complete (04-01) |
 | CALL-02 | Phase 4 | Pending |
 | CALL-03 | Phase 4 | Pending |
 | CALL-04 | Phase 4 | Pending |
 | CALL-05 | Phase 4 | Pending |
-| CALL-06 | Phase 4 | Pending |
-| CALL-07 | Phase 4 | Pending |
+| CALL-06 | Phase 4 | Complete (04-01) |
+| CALL-07 | Phase 4 | Complete (04-01) |
 | REC-01 | Phase 5 | Pending |
 | REC-02 | Phase 5 | Pending |
 | REC-03 | Phase 5 | Pending |

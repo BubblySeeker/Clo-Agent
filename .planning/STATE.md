@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-03-23)
 ## Current Position
 
 Phase: 4 of 8 (Core Call Flow)
-Plan: 0 of ? in current phase
-Status: Ready to plan
-Last activity: 2026-03-23 — Roadmap created for v2.0 Twilio Voice Calling
+Plan: 1 of 2 in current phase
+Status: Executing
+Last activity: 2026-03-24 — Completed 04-01 (Foundation, Bug Fixes, Shared Infrastructure)
 
-Progress: [..........] 0%
+Progress: [#.........] 10%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0 (v2.0)
-- Average duration: —
-- Total execution time: —
+- Total plans completed: 1 (v2.0)
+- Average duration: 3m17s
+- Total execution time: 3m17s
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 4 | 1 | 3m17s | 3m17s |
 
 **Recent Trend:**
-- Last 5 plans: —
-- Trend: —
+- Last 5 plans: 04-01 (3m17s)
+- Trend: Starting
 
 *Updated after each plan completion*
 
@@ -42,6 +42,8 @@ Progress: [..........] 0%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
+- Activity logging moved from call initiation to terminal status webhook for accuracy
+- personal_phone uses COALESCE to preserve existing value when not provided
 - Post-call recording chosen over real-time streaming (simpler, more reliable)
 - Two-leg bridge call flow (agent phone rings first, then bridges to client)
 - API-triggered calls for mobile (no VoIP SDK needed in v2.0)
@@ -59,6 +61,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-23
-Stopped at: Roadmap created, ready to plan Phase 4
+Last session: 2026-03-24
+Stopped at: Completed 04-01-PLAN.md
 Resume file: None
