@@ -7,18 +7,20 @@ import { listAllActivities, createActivity, type Activity } from "@/lib/api/acti
 import { listContacts } from "@/lib/api/contacts";
 import { getGmailStatus, syncGmail, listEmails, getEmail, sendEmail, markEmailRead, type Email } from "@/lib/api/gmail";
 import { getSMSStatus, syncSMS, listSMSMessages, sendSMS, type SMSMessage } from "@/lib/api/sms";
-import { Phone, Mail, Search, Plus, X, User, ChevronDown, ChevronUp, ChevronRight, RefreshCw, Send, Reply, Star, Paperclip, MessageSquare } from "lucide-react";
+import { listCallLogs, initiateCall, syncCallLogs, type CallLog } from "@/lib/api/calls";
+import { Phone, Mail, Search, Plus, X, User, ChevronDown, ChevronUp, ChevronRight, RefreshCw, Send, Reply, Star, Paperclip, MessageSquare, PhoneCall } from "lucide-react";
 
 const typeColors: Record<string, { bg: string; color: string }> = {
   call: { bg: "#EFF6FF", color: "#0EA5E9" },
   email: { bg: "#F0FDF4", color: "#22C55E" },
   gmail: { bg: "#FEF2F2", color: "#EA4335" },
   sms: { bg: "#FFF7ED", color: "#F22F46" },
+  twilio_call: { bg: "#F3E8FF", color: "#7C3AED" },
 };
 
 interface CommItem {
   id: string;
-  type: "call" | "email" | "gmail_in" | "gmail_out" | "sms_in" | "sms_out";
+  type: "call" | "email" | "gmail_in" | "gmail_out" | "sms_in" | "sms_out" | "twilio_call_in" | "twilio_call_out";
   contact_id: string | null;
   contact_name: string;
   body: string;
@@ -29,6 +31,7 @@ interface CommItem {
   to_addresses?: string[];
   email_data?: Email;
   sms_data?: SMSMessage;
+  call_data?: CallLog;
   groupKey: string;
   groupName: string;
 }
@@ -140,7 +143,7 @@ export default function CommunicationPage() {
   const { getToken } = useAuth();
   const queryClient = useQueryClient();
 
-  const [filter, setFilter] = useState<"all" | "call" | "email" | "gmail" | "sms">("all");
+  const [filter, setFilter] = useState<"all" | "call" | "email" | "gmail" | "sms" | "twilio_call">("all");
   const [search, setSearch] = useState("");
   const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -169,6 +172,10 @@ export default function CommunicationPage() {
   const [showSMSCompose, setShowSMSCompose] = useState(false);
   const [smsTo, setSmsTo] = useState("");
   const [smsBody, setSmsBody] = useState("");
+
+  // Call initiate
+  const [showCallModal, setShowCallModal] = useState(false);
+  const [callTo, setCallTo] = useState("");
 
   // Track which thread items are expanded (by item id); most recent is expanded by default
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
@@ -271,6 +278,23 @@ export default function CommunicationPage() {
     refetchInterval: 30000,
   });
 
+  const { data: callLogsData } = useQuery({
+    queryKey: ["call-logs"],
+    queryFn: async () => {
+      const token = await getToken();
+      if (!token) return { calls: [], total: 0 };
+      return listCallLogs(token, { limit: 100 });
+    },
+    enabled: smsConfigured,
+    refetchInterval: (query) => {
+      const calls = (query.state.data as { calls: CallLog[] } | undefined)?.calls;
+      const hasActiveCalls = calls?.some(
+        (c) => ['initiated', 'ringing', 'in-progress'].includes(c.status)
+      );
+      return hasActiveCalls ? 5000 : 30000;
+    },
+  });
+
   const { data: contactsData } = useQuery({
     queryKey: ["contacts-list"],
     queryFn: async () => {
@@ -359,8 +383,38 @@ export default function CommunicationPage() {
       });
     }
 
+    // Twilio call logs
+    const callLogs = callLogsData?.calls ?? [];
+    for (const cl of callLogs) {
+      const contact = cl.contact_id ? contactMap[cl.contact_id] : null;
+      const isOut = cl.direction === "outbound";
+      const otherNumber = isOut ? cl.to_number : cl.from_number;
+
+      let groupKey: string;
+      let groupName: string;
+      if (cl.contact_id && contact) {
+        groupKey = cl.contact_id;
+        groupName = `${contact.first_name} ${contact.last_name}`;
+      } else if (cl.contact_name) {
+        groupKey = cl.contact_id || `call-${otherNumber}`;
+        groupName = cl.contact_name;
+      } else {
+        groupKey = `call-${otherNumber}`;
+        groupName = otherNumber;
+      }
+
+      const durationStr = cl.duration > 0 ? ` (${Math.floor(cl.duration / 60)}m ${cl.duration % 60}s)` : "";
+      items.push({
+        id: `tcall-${cl.id}`, type: isOut ? "twilio_call_out" : "twilio_call_in",
+        contact_id: cl.contact_id, contact_name: groupName,
+        body: `${isOut ? "Outbound" : "Inbound"} call — ${cl.status}${durationStr}`,
+        date: cl.started_at,
+        call_data: cl, groupKey, groupName,
+      });
+    }
+
     return items;
-  }, [activitiesData, emailsData, smsData, contactMap]);
+  }, [activitiesData, emailsData, smsData, callLogsData, contactMap]);
 
   const filteredItems = useMemo(() => {
     return allItems.filter((item) => {
@@ -368,6 +422,7 @@ export default function CommunicationPage() {
       if (filter === "email") return item.type === "email";
       if (filter === "gmail") return item.type === "gmail_in" || item.type === "gmail_out";
       if (filter === "sms") return item.type === "sms_in" || item.type === "sms_out";
+      if (filter === "twilio_call") return item.type === "twilio_call_in" || item.type === "twilio_call_out";
       return true;
     });
   }, [allItems, filter]);
@@ -523,6 +578,21 @@ export default function CommunicationPage() {
     },
   });
 
+  const callInitiateMutation = useMutation({
+    mutationFn: async () => {
+      const token = await getToken();
+      if (!token) throw new Error("No token");
+      const contactMatch = contacts.find((c) => c.phone && c.phone.replace(/\D/g, "").slice(-10) === callTo.replace(/\D/g, "").slice(-10));
+      return initiateCall(token, { to: callTo, contact_id: contactMatch?.id });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["call-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["comm-activities"] });
+      setShowCallModal(false);
+      setCallTo("");
+    },
+  });
+
   const smsSendMutation = useMutation({
     mutationFn: async () => {
       const token = await getToken();
@@ -542,6 +612,7 @@ export default function CommunicationPage() {
     if (type === "call") return typeColors.call;
     if (type === "gmail_in" || type === "gmail_out") return typeColors.gmail;
     if (type === "sms_in" || type === "sms_out") return typeColors.sms;
+    if (type === "twilio_call_in" || type === "twilio_call_out") return typeColors.twilio_call;
     return typeColors.email;
   }
 
@@ -552,6 +623,8 @@ export default function CommunicationPage() {
     if (type === "gmail_out") return "Sent";
     if (type === "sms_in") return "SMS In";
     if (type === "sms_out") return "SMS Out";
+    if (type === "twilio_call_in") return "Incoming";
+    if (type === "twilio_call_out") return "Outgoing";
     return "Email";
   }
 
@@ -661,6 +734,12 @@ export default function CommunicationPage() {
                 </button>
               )}
               {smsConfigured && (
+                <button onClick={() => setShowCallModal(true)}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#7C3AED]/10 text-[#7C3AED] hover:bg-[#7C3AED]/20 transition-colors" title="Initiate Call">
+                  <PhoneCall size={14} />
+                </button>
+              )}
+              {smsConfigured && (
                 <button onClick={() => setShowSMSCompose(true)}
                   className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#F22F46]/10 text-[#F22F46] hover:bg-[#F22F46]/20 transition-colors" title="New SMS">
                   <MessageSquare size={14} />
@@ -687,10 +766,10 @@ export default function CommunicationPage() {
           </div>
 
           <div className="flex gap-1">
-            {(["all", "call", "email", ...(gmailConnected ? ["gmail" as const] : []), ...(smsConfigured ? ["sms" as const] : [])] as const).map((f) => (
+            {(["all", "call", "email", ...(gmailConnected ? ["gmail" as const] : []), ...(smsConfigured ? ["sms" as const] : []), ...(smsConfigured ? ["twilio_call" as const] : [])] as const).map((f) => (
               <button key={f} onClick={() => setFilter(f as typeof filter)}
                 className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors ${filter === f ? "bg-[#0EA5E9]/10 text-[#0EA5E9]" : "text-gray-400 hover:text-gray-600"}`}>
-                {f === "all" ? "All" : f === "call" ? "Calls" : f === "email" ? "Manual" : f === "gmail" ? "Gmail" : "SMS"}
+                {f === "all" ? "All" : f === "call" ? "Logged" : f === "email" ? "Manual" : f === "gmail" ? "Gmail" : f === "sms" ? "SMS" : "Calls"}
               </button>
             ))}
           </div>
@@ -713,7 +792,7 @@ export default function CommunicationPage() {
                 ? (thread.groupName[0] ?? "?").toUpperCase()
                 : thread.groupName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
               const colors = getItemColors(lastItem.type);
-              const Icon = lastItem.type === "call" ? Phone : Mail;
+              const Icon = (lastItem.type === "twilio_call_in" || lastItem.type === "twilio_call_out") ? PhoneCall : lastItem.type === "call" ? Phone : Mail;
               return (
                 <button key={thread.groupKey} data-group-key={thread.groupKey} onClick={() => selectThread(thread.groupKey)}
                   className={`w-full flex items-start gap-3 px-4 py-3.5 text-left transition-colors border-b border-gray-50 ${isSelected ? "bg-blue-50" : "hover:bg-gray-50"}`}>
@@ -1059,6 +1138,33 @@ export default function CommunicationPage() {
               <Send size={14} /> {composeMutation.isPending ? "Sending..." : "Send Email"}
             </button>
             {composeMutation.isError && <p className="text-xs text-red-500 mt-2">Failed to send. Try again.</p>}
+          </div>
+        </div>
+      )}
+
+      {/* Call Initiate modal */}
+      {showCallModal && (
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="font-bold text-gray-800">Initiate Call</h3>
+              <button onClick={() => setShowCallModal(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+            </div>
+            <div className="flex flex-col gap-4 mb-5">
+              <div>
+                <label className="text-xs font-semibold text-gray-500 block mb-1">Phone Number</label>
+                <input value={callTo} onChange={(e) => setCallTo(e.target.value)} placeholder="+15551234567"
+                  className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#7C3AED] bg-gray-50" />
+              </div>
+              <p className="text-xs text-gray-400">This will initiate an outbound call via Twilio using your configured phone number.</p>
+            </div>
+            <button onClick={() => callInitiateMutation.mutate()}
+              disabled={!callTo || callInitiateMutation.isPending}
+              className="w-full py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2"
+              style={{ backgroundColor: "#7C3AED" }}>
+              <PhoneCall size={14} /> {callInitiateMutation.isPending ? "Calling..." : "Start Call"}
+            </button>
+            {callInitiateMutation.isError && <p className="text-xs text-red-500 mt-2">Failed to initiate call. Try again.</p>}
           </div>
         </div>
       )}

@@ -304,6 +304,7 @@ function IntegrationsSection() {
   const [twilioToken, setTwilioToken] = useState("");
   const [twilioPhone, setTwilioPhone] = useState("");
   const [twilioToast, setTwilioToast] = useState<string | null>(null);
+  const [personalPhone, setPersonalPhone] = useState("");
 
   const { data: smsStatus, isLoading: smsLoading } = useQuery({
     queryKey: ["sms-status"],
@@ -320,12 +321,12 @@ function IntegrationsSection() {
     mutationFn: async () => {
       const token = await getToken();
       if (!token) throw new Error("No token");
-      return configureSMS(token, { account_sid: twilioSid, auth_token: twilioToken, phone_number: twilioPhone });
+      return configureSMS(token, { account_sid: twilioSid, auth_token: twilioToken, phone_number: twilioPhone, personal_phone: personalPhone || undefined });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sms-status"] });
       setTwilioToast("Twilio SMS configured!");
-      setTwilioSid(""); setTwilioToken(""); setTwilioPhone("");
+      setTwilioSid(""); setTwilioToken(""); setTwilioPhone(""); setPersonalPhone("");
       setTimeout(() => setTwilioToast(null), 4000);
     },
     onError: () => {
@@ -496,50 +497,88 @@ function IntegrationsSection() {
         </div>
 
         {/* Twilio SMS — dynamic */}
-        <div className="flex items-center justify-between p-4 rounded-2xl border border-gray-100 bg-gray-50">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm" style={{ backgroundColor: "#F22F46" }}>
-              T
+        <div className="p-4 rounded-2xl border border-gray-100 bg-gray-50">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm" style={{ backgroundColor: "#F22F46" }}>
+                T
+              </div>
+              <div>
+                <p className="text-sm font-bold text-gray-800">Twilio SMS</p>
+                {smsLoading ? (
+                  <p className="text-xs text-gray-400">Checking status...</p>
+                ) : smsConfigured ? (
+                  <div>
+                    <p className="text-xs text-green-600 font-medium">{smsStatus?.phone_number}</p>
+                    {smsStatus?.last_synced_at && <p className="text-[10px] text-gray-400">Last synced: {new Date(smsStatus.last_synced_at).toLocaleString()}</p>}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-400">Connect to send and receive SMS</p>
+                )}
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-bold text-gray-800">Twilio SMS</p>
-              {smsLoading ? (
-                <p className="text-xs text-gray-400">Checking status...</p>
-              ) : smsConfigured ? (
-                <div>
-                  <p className="text-xs text-green-600 font-medium">{smsStatus?.phone_number}</p>
-                  {smsStatus?.last_synced_at && <p className="text-[10px] text-gray-400">Last synced: {new Date(smsStatus.last_synced_at).toLocaleString()}</p>}
-                </div>
-              ) : (
-                <p className="text-xs text-gray-400">Connect to send and receive SMS</p>
+            <div className="flex items-center gap-2">
+              {smsConfigured ? (
+                <>
+                  <button
+                    onClick={() => smsSyncMutation.mutate()}
+                    disabled={smsSyncMutation.isPending}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#F22F46]/10 text-[#F22F46] hover:bg-[#F22F46]/20 transition-colors disabled:opacity-50"
+                  >
+                    <RefreshCw size={12} className={smsSyncMutation.isPending ? "animate-spin" : ""} />
+                    {smsSyncMutation.isPending ? "Syncing..." : "Sync"}
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (confirm("Disconnect Twilio? This will remove all SMS messages.")) {
+                        smsDisconnectMutation.mutate();
+                      }
+                    }}
+                    disabled={smsDisconnectMutation.isPending}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
+                  >
+                    {smsDisconnectMutation.isPending ? "Disconnecting..." : "Disconnect"}
+                  </button>
+                </>
+              ) : null}
+            </div>
+          </div>
+          {smsConfigured && (
+            <div className="mt-3 space-y-2">
+              <label className="text-xs font-semibold text-gray-500 block">Your Personal Phone Number</label>
+              <p className="text-xs text-gray-400">The phone that rings when you make/receive calls through the CRM</p>
+              <div className="flex gap-2">
+                <input
+                  value={personalPhone}
+                  onChange={(e) => setPersonalPhone(e.target.value)}
+                  placeholder={smsStatus?.personal_phone || "+15551234567"}
+                  className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+                />
+                <button
+                  onClick={async () => {
+                    if (!personalPhone.trim()) return;
+                    const token = await getToken();
+                    if (!token) return;
+                    try {
+                      await configureSMS(token, {
+                        account_sid: "", auth_token: "", phone_number: "",
+                        personal_phone: personalPhone.trim()
+                      });
+                      setPersonalPhone("");
+                      queryClient.invalidateQueries({ queryKey: ["sms-status"] });
+                    } catch { /* ignore */ }
+                  }}
+                  disabled={!personalPhone.trim()}
+                  className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Save
+                </button>
+              </div>
+              {smsStatus?.personal_phone && (
+                <p className="text-xs text-green-600">Current: {smsStatus.personal_phone}</p>
               )}
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {smsConfigured ? (
-              <>
-                <button
-                  onClick={() => smsSyncMutation.mutate()}
-                  disabled={smsSyncMutation.isPending}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#F22F46]/10 text-[#F22F46] hover:bg-[#F22F46]/20 transition-colors disabled:opacity-50"
-                >
-                  <RefreshCw size={12} className={smsSyncMutation.isPending ? "animate-spin" : ""} />
-                  {smsSyncMutation.isPending ? "Syncing..." : "Sync"}
-                </button>
-                <button
-                  onClick={() => {
-                    if (confirm("Disconnect Twilio? This will remove all SMS messages.")) {
-                      smsDisconnectMutation.mutate();
-                    }
-                  }}
-                  disabled={smsDisconnectMutation.isPending}
-                  className="px-3 py-1.5 rounded-lg text-xs font-semibold text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
-                >
-                  {smsDisconnectMutation.isPending ? "Disconnecting..." : "Disconnect"}
-                </button>
-              </>
-            ) : null}
-          </div>
+          )}
         </div>
 
         {/* Twilio config form (when not configured) */}
@@ -559,6 +598,11 @@ function IntegrationsSection() {
               <div>
                 <label className="text-xs font-semibold text-gray-500 block mb-1">Twilio Phone Number</label>
                 <input value={twilioPhone} onChange={(e) => setTwilioPhone(e.target.value)} placeholder="+15551234567"
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm outline-none focus:border-[#F22F46] bg-gray-50" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-500 block mb-1">Your Personal Phone Number</label>
+                <input value={personalPhone} onChange={(e) => setPersonalPhone(e.target.value)} placeholder="+15551234567 (your cell)"
                   className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm outline-none focus:border-[#F22F46] bg-gray-50" />
               </div>
               <button

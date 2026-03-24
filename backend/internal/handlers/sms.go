@@ -38,7 +38,21 @@ func SMSConfigure(pool *pgxpool.Pool) http.HandlerFunc {
 			respondError(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
-		if body.AccountSID == "" || body.AuthToken == "" || body.PhoneNumber == "" {
+		// Allow personal_phone-only updates when Twilio is already configured
+		if body.AccountSID == "" && body.AuthToken == "" && body.PhoneNumber == "" {
+			if body.PersonalPhone != nil && *body.PersonalPhone != "" {
+				// Personal phone only update
+				_, err := pool.Exec(r.Context(),
+					`UPDATE twilio_config SET personal_phone = $1, updated_at = now() WHERE agent_id = $2`,
+					*body.PersonalPhone, agentID,
+				)
+				if err != nil {
+					respondError(w, http.StatusInternalServerError, "failed to save personal phone")
+					return
+				}
+				respondJSON(w, http.StatusOK, map[string]string{"message": "Personal phone updated"})
+				return
+			}
 			respondError(w, http.StatusBadRequest, "account_sid, auth_token, and phone_number are required")
 			return
 		}

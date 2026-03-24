@@ -4,6 +4,7 @@ export interface SMSStatus {
   configured: boolean;
   phone_number: string | null;
   last_synced_at: string | null;
+  personal_phone: string | null;
 }
 
 export interface SMSMessage {
@@ -46,7 +47,7 @@ export function getSMSStatus(token: string): Promise<SMSStatus> {
 
 export function configureSMS(
   token: string,
-  config: { account_sid: string; auth_token: string; phone_number: string }
+  config: { account_sid: string; auth_token: string; phone_number: string; personal_phone?: string }
 ): Promise<{ message: string }> {
   return apiRequest("/sms/configure", token, {
     method: "POST",
