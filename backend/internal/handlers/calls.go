@@ -872,6 +872,264 @@ func downloadAndStoreRecording(pool *pgxpool.Pool, cfg *config.Config, agentID, 
 
 // triggerTranscription POSTs to the AI service to start the transcription pipeline.
 // Non-fatal: logs errors but does not block the recording cleanup.
+func nilIfEmpty(s string) interface{} {
+	if s == "" {
+		return nil
+	}
+	return s
+}
+
+// GetCallTranscript returns the transcript, AI summary, and AI actions for a call.
+// GET /api/calls/{id}/transcript
+func GetCallTranscript(pool *pgxpool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		agentID := middleware.AgentUUIDFromContext(r.Context())
+		if agentID == "" {
+			respondError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		callID := chi.URLParam(r, "id")
+
+		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "database error")
+			return
+		}
+		defer tx.Rollback(r.Context())
+
+		type Transcript struct {
+			ID              string          `json:"id"`
+			CallID          string          `json:"call_id"`
+			FullText        string          `json:"full_text"`
+			SpeakerSegments json.RawMessage `json:"speaker_segments"`
+			AISummary       *string         `json:"ai_summary"`
+			AIActions       json.RawMessage `json:"ai_actions"`
+			Status          string          `json:"status"`
+			DurationSeconds *int            `json:"duration_seconds"`
+			WordCount       *int            `json:"word_count"`
+			CreatedAt       time.Time       `json:"created_at"`
+			CompletedAt     *time.Time      `json:"completed_at"`
+		}
+
+		var t Transcript
+		err = tx.QueryRow(r.Context(),
+			`SELECT id, call_id, full_text, speaker_segments, ai_summary,
+			        ai_actions, status, duration_seconds, word_count,
+			        created_at, completed_at
+			 FROM call_transcripts WHERE call_id = $1`, callID,
+		).Scan(
+			&t.ID, &t.CallID, &t.FullText, &t.SpeakerSegments, &t.AISummary,
+			&t.AIActions, &t.Status, &t.DurationSeconds, &t.WordCount,
+			&t.CreatedAt, &t.CompletedAt,
+		)
+		if err != nil {
+			respondError(w, http.StatusNotFound, "transcript not found")
+			return
+		}
+
+		tx.Commit(r.Context())
+		respondJSON(w, http.StatusOK, t)
+	}
+}
+
+// ConfirmTranscriptAction executes an AI-suggested action and updates its status to "confirmed".
+// POST /api/calls/{id}/transcript/actions/{index}/confirm
+func ConfirmTranscriptAction(pool *pgxpool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		agentID := middleware.AgentUUIDFromContext(r.Context())
+		if agentID == "" {
+			respondError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		callID := chi.URLParam(r, "id")
+		indexStr := chi.URLParam(r, "index")
+		index, err := strconv.Atoi(indexStr)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, "invalid action index")
+			return
+		}
+
+		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "database error")
+			return
+		}
+		defer tx.Rollback(r.Context())
+
+		// Load current ai_actions
+		var actionsRaw json.RawMessage
+		err = tx.QueryRow(r.Context(),
+			`SELECT ai_actions FROM call_transcripts WHERE call_id = $1`, callID,
+		).Scan(&actionsRaw)
+		if err != nil {
+			respondError(w, http.StatusNotFound, "transcript not found")
+			return
+		}
+
+		var actions []map[string]interface{}
+		if err := json.Unmarshal(actionsRaw, &actions); err != nil {
+			respondError(w, http.StatusInternalServerError, "invalid actions data")
+			return
+		}
+		if index < 0 || index >= len(actions) {
+			respondError(w, http.StatusBadRequest, "action index out of range")
+			return
+		}
+		if actions[index]["status"] != "pending" {
+			respondError(w, http.StatusConflict, "action already processed")
+			return
+		}
+
+		// Execute the action based on type
+		actionType, _ := actions[index]["type"].(string)
+		params, _ := actions[index]["params"].(map[string]interface{})
+
+		switch actionType {
+		case "create_task":
+			body, _ := params["body"].(string)
+			contactID, _ := params["contact_id"].(string)
+			dueDate, _ := params["due_date"].(string)
+			priority, _ := params["priority"].(string)
+			if priority == "" {
+				priority = "medium"
+			}
+			_, err = tx.Exec(r.Context(),
+				`INSERT INTO activities (agent_id, type, body, due_date, priority, contact_id)
+				 VALUES ($1, 'task', $2, $3::date, $4, NULLIF($5, '')::uuid)`,
+				agentID, body, nilIfEmpty(dueDate), priority, contactID,
+			)
+
+		case "update_buyer_profile":
+			contactID, _ := params["contact_id"].(string)
+			if contactID == "" {
+				respondError(w, http.StatusBadRequest, "missing contact_id for buyer profile update")
+				return
+			}
+			// Build dynamic SET clause from params (excluding contact_id)
+			setCols := []string{}
+			setVals := []interface{}{}
+			paramIdx := 1
+			for k, v := range params {
+				if k == "contact_id" {
+					continue
+				}
+				setCols = append(setCols, fmt.Sprintf("%s = $%d", k, paramIdx))
+				setVals = append(setVals, v)
+				paramIdx++
+			}
+			if len(setCols) > 0 {
+				setVals = append(setVals, contactID)
+				query := fmt.Sprintf(
+					`UPDATE buyer_profiles SET %s WHERE contact_id = $%d`,
+					strings.Join(setCols, ", "), paramIdx,
+				)
+				_, err = tx.Exec(r.Context(), query, setVals...)
+			}
+
+		case "update_deal_stage":
+			contactID, _ := params["contact_id"].(string)
+			stageName, _ := params["stage_name"].(string)
+			if contactID == "" || stageName == "" {
+				respondError(w, http.StatusBadRequest, "missing contact_id or stage_name")
+				return
+			}
+			_, err = tx.Exec(r.Context(),
+				`UPDATE deals SET stage_id = (SELECT id FROM deal_stages WHERE name = $1)
+				 WHERE contact_id = $2::uuid AND agent_id = $3`,
+				stageName, contactID, agentID,
+			)
+
+		default:
+			respondError(w, http.StatusBadRequest, "unknown action type: "+actionType)
+			return
+		}
+
+		if err != nil {
+			slog.Error("confirm action: exec failed", "type", actionType, "error", err)
+			respondError(w, http.StatusInternalServerError, "failed to execute action")
+			return
+		}
+
+		// Update action status to "confirmed"
+		actions[index]["status"] = "confirmed"
+		updatedJSON, _ := json.Marshal(actions)
+		_, err = tx.Exec(r.Context(),
+			`UPDATE call_transcripts SET ai_actions = $1 WHERE call_id = $2`,
+			updatedJSON, callID,
+		)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "failed to update action status")
+			return
+		}
+
+		tx.Commit(r.Context())
+		respondJSON(w, http.StatusOK, map[string]string{"status": "confirmed"})
+	}
+}
+
+// DismissTranscriptAction marks an AI-suggested action as dismissed.
+// POST /api/calls/{id}/transcript/actions/{index}/dismiss
+func DismissTranscriptAction(pool *pgxpool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		agentID := middleware.AgentUUIDFromContext(r.Context())
+		if agentID == "" {
+			respondError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		callID := chi.URLParam(r, "id")
+		indexStr := chi.URLParam(r, "index")
+		index, err := strconv.Atoi(indexStr)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, "invalid action index")
+			return
+		}
+
+		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "database error")
+			return
+		}
+		defer tx.Rollback(r.Context())
+
+		var actionsRaw json.RawMessage
+		err = tx.QueryRow(r.Context(),
+			`SELECT ai_actions FROM call_transcripts WHERE call_id = $1`, callID,
+		).Scan(&actionsRaw)
+		if err != nil {
+			respondError(w, http.StatusNotFound, "transcript not found")
+			return
+		}
+
+		var actions []map[string]interface{}
+		if err := json.Unmarshal(actionsRaw, &actions); err != nil {
+			respondError(w, http.StatusInternalServerError, "invalid actions data")
+			return
+		}
+		if index < 0 || index >= len(actions) {
+			respondError(w, http.StatusBadRequest, "action index out of range")
+			return
+		}
+		if actions[index]["status"] != "pending" {
+			respondError(w, http.StatusConflict, "action already processed")
+			return
+		}
+
+		actions[index]["status"] = "dismissed"
+		updatedJSON, _ := json.Marshal(actions)
+		_, err = tx.Exec(r.Context(),
+			`UPDATE call_transcripts SET ai_actions = $1 WHERE call_id = $2`,
+			updatedJSON, callID,
+		)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "failed to update action status")
+			return
+		}
+
+		tx.Commit(r.Context())
+		respondJSON(w, http.StatusOK, map[string]string{"status": "dismissed"})
+	}
+}
+
 func triggerTranscription(cfg *config.Config, pool *pgxpool.Pool, callSID, agentID, localPath string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

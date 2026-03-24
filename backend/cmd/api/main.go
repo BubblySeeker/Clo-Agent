@@ -199,6 +199,9 @@ func run() error {
 		r.Get("/api/calls", handlers.ListCallLogs(pool))
 		r.Get("/api/calls/{id}", handlers.GetCallLog(pool))
 		r.Get("/api/calls/{id}/recording", handlers.ProxyRecording(pool))
+		r.Get("/api/calls/{id}/transcript", handlers.GetCallTranscript(pool))
+		r.Post("/api/calls/{id}/transcript/actions/{index}/confirm", handlers.ConfirmTranscriptAction(pool))
+		r.Post("/api/calls/{id}/transcript/actions/{index}/dismiss", handlers.DismissTranscriptAction(pool))
 		r.Post("/api/calls/sync", handlers.SyncCallLogs(pool, cfg))
 	})
 
