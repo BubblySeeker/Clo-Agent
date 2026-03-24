@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { usePathname } from "next/navigation";
-import { Bot, Send, Minimize2, Check, XCircle, Loader2 } from "lucide-react";
+import { Bot, Send, Minimize2, Check, XCircle, Loader2, Bookmark } from "lucide-react";
 import {
   createConversation,
   getMessages,
@@ -13,6 +13,15 @@ import { useSSEStream } from "@/hooks/useSSEStream";
 import { useUIStore } from "@/store/ui-store";
 import { toolLabel, confirmLabel, formatPreview } from "@/lib/ai-chat-helpers";
 import MessageContent from "./MessageContent";
+
+const WRITE_TOOLS = new Set([
+  "create_contact", "update_contact", "delete_contact",
+  "create_deal", "update_deal", "delete_deal",
+  "log_activity", "create_task", "complete_task", "reschedule_task",
+  "create_buyer_profile", "update_buyer_profile",
+  "create_property", "update_property", "delete_property",
+  "send_email",
+]);
 
 export default function AIChatBubble() {
   const { getToken } = useAuth();
@@ -31,6 +40,7 @@ export default function AIChatBubble() {
 
   const [input, setInput] = useState("");
   const [activeToolName, setActiveToolName] = useState<string | null>(null);
+  const [hasWriteTools, setHasWriteTools] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const { isStreaming, startStream } = useSSEStream();
 
@@ -120,8 +130,11 @@ export default function AIChatBubble() {
             ]);
           }
         },
-        onToolResult: () => {
+        onToolResult: (name) => {
           setActiveToolName(null);
+          if (WRITE_TOOLS.has(name)) {
+            setHasWriteTools(true);
+          }
         },
         onConfirmation: (tool, preview, pendingId) => {
           updateLastMessage({
@@ -340,6 +353,19 @@ export default function AIChatBubble() {
         ))}
         <div ref={bottomRef} />
       </div>
+
+      {/* Save as Workflow */}
+      {hasWriteTools && !isStreaming && (
+        <div className="px-3 pt-2 bg-white shrink-0">
+          <button
+            onClick={() => handleSend("Save what we just did as a reusable workflow. Use the save_conversation_as_workflow tool.")}
+            className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-[#0EA5E9]/30 text-[#0EA5E9] hover:bg-[#0EA5E9]/5 transition-colors"
+          >
+            <Bookmark size={12} />
+            Save as Workflow
+          </button>
+        </div>
+      )}
 
       {/* Input */}
       <div className="px-3 py-2.5 border-t border-gray-100 bg-white shrink-0">
