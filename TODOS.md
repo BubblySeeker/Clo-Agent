@@ -14,18 +14,6 @@
 **Priority:** P2
 **Depends on:** None
 
-### React error boundaries for dashboard
-
-**What:** Add an ErrorBoundary component that wraps dashboard pages and shows a fallback UI ("Something went wrong. Reload?") instead of a white screen when a component throws.
-
-**Why:** If any dashboard component throws a JavaScript error (bad API data, undefined property access), the entire page goes blank with no recovery. User must manually refresh.
-
-**Context:** No error boundary exists anywhere in `frontend/src/app/dashboard/`. Create a single `ErrorBoundary` class component in `components/shared/`, wrap it around the dashboard layout in `layout.tsx`. TanStack Query error states are also unchecked in most pages — the `error` return from `useQuery` is ignored.
-
-**Effort:** S
-**Priority:** P2
-**Depends on:** None
-
 ### Refactor tool dispatchers to dict-based routing
 
 **What:** Convert the `execute_read_tool` and `execute_write_tool` if/elif chains in `ai-service/app/tools.py` to dict-based dispatchers (e.g., `READ_DISPATCHERS = {"search_contacts": _search_contacts, ...}`).
@@ -76,17 +64,17 @@
 **Priority:** P3
 **Depends on:** None (reuses existing AI profile pattern)
 
-### Smart follow-up suggestions on contacts
+### Smart follow-up suggestions on contacts (Basic version done)
 
 **What:** Show an AI-generated suggestion at the top of each contact's activity timeline: "It's been 12 days since your last interaction. Suggested action: Follow-up call about the condo tour."
 
-**Why:** Agents shouldn't have to calculate when they last talked to someone. The system should proactively surface the next best action.
+**Done:** Basic version implemented — frontend-computed follow-up banner with priority chain: no activities → stale (>7 days) → last was showing. Dismissible with 24h localStorage TTL.
 
-**Context:** Frontend-only computation from existing data: compare `last_activity_at` to now, read buyer profile for context, generate a suggestion string. No new backend needed for the basic version. For the AI-powered version, could use the existing chat tool `get_contact_activities` to inform a Claude call. Start with the simple computed version.
+**Future:** AI-powered version using Claude to analyze full contact context and generate personalized coaching suggestions.
 
-**Effort:** S
+**Effort:** S (basic done), M (AI version)
 **Priority:** P3
-**Depends on:** None
+**Depends on:** None (AI version depends on Claude integration)
 
 ### Keyboard shortcuts across dashboard
 
@@ -100,18 +88,13 @@
 **Priority:** P3
 **Depends on:** None
 
-### Deal health scores / close probability
-
-**What:** Show an AI-estimated close probability on each deal card in the pipeline — a "health score" based on buyer profile completeness, activity frequency, and time in current stage.
-
-**Why:** Agents can visually prioritize which deals need attention. A deal that's been in "Touring" for 30 days with no recent activity is at risk.
-
-**Context:** Could be a simple heuristic (no AI needed): score = f(days_in_stage, days_since_activity, buyer_profile_completeness). Display as a colored badge (green/yellow/red) on pipeline deal cards. For the AI version, use Claude to analyze the full context and estimate probability. Start with the heuristic version — it's faster, cheaper, and more predictable.
-
-**Effort:** M
-**Priority:** P3
-**Depends on:** None
 
 ## Completed
 
-(none yet)
+### React error boundaries for dashboard
+
+ErrorBoundary component in `components/shared/ErrorBoundary.tsx` wraps dashboard layout. TanStack Query `isError` states handled across 8+ dashboard pages with user-facing error UI.
+
+### Deal health scores (heuristic version)
+
+Green/yellow/red health dots on pipeline Kanban deal cards. Heuristic based on days-in-stage (`stage_entered_at` column) and days-since-last-activity. Accurate stage tracking via `stage_entered_at` that only resets on actual stage changes.

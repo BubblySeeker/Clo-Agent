@@ -28,8 +28,9 @@ function daysSince(dateStr: string) {
 
 type HealthStatus = "green" | "yellow" | "red";
 
-function getDealHealth(deal: { updated_at: string; last_activity_at: string | null }): HealthStatus {
-  const daysInStage = daysSince(deal.updated_at);
+function getDealHealth(deal: { stage_entered_at: string | null; created_at: string; last_activity_at: string | null }): HealthStatus {
+  const stageDate = deal.stage_entered_at ?? deal.created_at;
+  const daysInStage = daysSince(stageDate);
   const daysNoActivity = deal.last_activity_at ? daysSince(deal.last_activity_at) : Infinity;
   if (daysInStage > 14 || daysNoActivity >= 14) return "red";
   if (daysInStage >= 7 || daysNoActivity >= 7) return "yellow";

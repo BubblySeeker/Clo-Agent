@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -50,8 +50,24 @@ import {
   Download,
   Loader2,
   AlertCircle,
+  AlertTriangle,
   FolderOpen,
 } from "lucide-react";
+
+function getFollowUpSuggestion(activities: any[]): string | null {
+  if (!activities || activities.length === 0) {
+    return "No activities recorded yet. Consider reaching out to make a first impression.";
+  }
+  const lastActivity = activities[0]; // sorted DESC by API
+  const daysSinceLast = Math.floor((Date.now() - new Date(lastActivity.created_at).getTime()) / 86400000);
+  if (daysSinceLast > 7) {
+    return `It\u2019s been ${daysSinceLast} days since your last interaction. Time for a follow-up.`;
+  }
+  if (lastActivity.type === "showing") {
+    return "Last activity was a showing. Follow up to get their thoughts on the property.";
+  }
+  return null;
+}
 
 const typeIconColors: Record<string, { bg: string; color: string }> = {
   call: { bg: "#EFF6FF", color: "#0EA5E9" },
@@ -166,6 +182,33 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
   const [showDocUpload, setShowDocUpload] = useState(false);
   const [docFile, setDocFile] = useState<File | null>(null);
   const [isDraggingDoc, setIsDraggingDoc] = useState(false);
+
+  // Follow-up suggestion banner
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(`followup-dismiss-${id}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed.dismissed && parsed.expiresAt > Date.now()) {
+          setBannerDismissed(true);
+        } else {
+          localStorage.removeItem(`followup-dismiss-${id}`);
+        }
+      }
+    } catch {}
+  }, [id]);
+
+  const dismissBanner = () => {
+    setBannerDismissed(true);
+    try {
+      localStorage.setItem(`followup-dismiss-${id}`, JSON.stringify({
+        dismissed: true,
+        expiresAt: Date.now() + 86400000,
+      }));
+    } catch {}
+  };
 
   // --- Queries ---
   const { data: contact, isLoading: contactLoading, isError: contactError, refetch: refetchContact } = useQuery({
@@ -1212,6 +1255,22 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
               </button>
             ))}
           </div>
+
+          {/* Follow-up Suggestion Banner */}
+          {(() => {
+            const suggestion = getFollowUpSuggestion(activities);
+            const isActivityTab = !["Buyer Profile", "AI Profile", "Documents"].includes(activeTab);
+            if (!suggestion || bannerDismissed || !isActivityTab) return null;
+            return (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3">
+                <AlertTriangle size={16} className="text-amber-500 mt-0.5 shrink-0" />
+                <p className="text-sm text-amber-800 flex-1">{suggestion}</p>
+                <button onClick={dismissBanner} className="text-amber-400 hover:text-amber-600 shrink-0">
+                  <X size={14} />
+                </button>
+              </div>
+            );
+          })()}
 
           {/* Tab Content */}
           {activeTab === "Buyer Profile" ? (
