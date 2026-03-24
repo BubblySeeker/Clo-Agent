@@ -44,11 +44,11 @@ Build end-to-end voice calling where the agent makes/receives calls through Twil
   3. When someone calls the Twilio number, the agent's personal phone rings with the caller's number displayed
   4. Call status (ringing, in-progress, completed, failed) updates in the communication page without manual refresh
   5. The SMS activity type bug is fixed (SMS logs as 'sms', not 'call') and all call webhook endpoints validate Twilio signatures
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 04-01: TBD
-- [ ] 04-02: TBD
+- [ ] 04-01-PLAN.md — Backend foundation: bug fixes, shared Twilio utils, migration, config, personal_phone support
+- [ ] 04-02-PLAN.md — Two-leg bridge call flow, inbound forwarding, TwiML endpoints, frontend settings + dynamic polling
 
 ### Phase 5: Recording Infrastructure
 **Goal**: All calls are automatically recorded in dual-channel format, recordings are stored securely, and agents can play back any call recording in the web UI
@@ -120,7 +120,7 @@ Phases execute in numeric order: 4 -> 5 -> 6 -> 7 -> 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 4. Core Call Flow | 0/? | Not started | - |
+| 4. Core Call Flow | 0/2 | Planning complete | - |
 | 5. Recording Infrastructure | 0/? | Not started | - |
 | 6. AI Transcription & Intelligence | 0/? | Not started | - |
 | 7. Frontend Call Experience | 0/? | Not started | - |
