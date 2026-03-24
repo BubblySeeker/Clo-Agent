@@ -24,6 +24,7 @@ packaging==26.0
 pgvector==0.4.2
 psycopg2-binary==2.9.11
 pydantic==2.12.5
+pydub==0.25.1
 pydantic_core==2.41.5
 python-dotenv==1.2.2
 PyYAML==6.0.3
