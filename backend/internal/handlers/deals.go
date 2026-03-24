@@ -14,20 +14,21 @@ import (
 )
 
 type Deal struct {
-	ID              string    `json:"id"`
-	ContactID       string    `json:"contact_id"`
-	AgentID         string    `json:"agent_id"`
-	StageID         *string   `json:"stage_id"`
-	Title           string    `json:"title"`
-	Value           *float64  `json:"value"`
-	Notes           *string   `json:"notes"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
-	ContactName     string    `json:"contact_name"`
-	StageName       string    `json:"stage_name"`
-	StageColor      string    `json:"stage_color"`
-	PropertyID      *string   `json:"property_id"`
-	PropertyAddress string    `json:"property_address"`
+	ID              string     `json:"id"`
+	ContactID       string     `json:"contact_id"`
+	AgentID         string     `json:"agent_id"`
+	StageID         *string    `json:"stage_id"`
+	Title           string     `json:"title"`
+	Value           *float64   `json:"value"`
+	Notes           *string    `json:"notes"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+	ContactName     string     `json:"contact_name"`
+	StageName       string     `json:"stage_name"`
+	StageColor      string     `json:"stage_color"`
+	PropertyID      *string    `json:"property_id"`
+	PropertyAddress string     `json:"property_address"`
+	LastActivityAt  *time.Time `json:"last_activity_at"`
 }
 
 const dealSelectSQL = `
@@ -36,7 +37,8 @@ SELECT d.id, d.contact_id, d.agent_id, d.stage_id, d.title, d.value, d.notes, d.
        COALESCE(ds.name, '')              AS stage_name,
        COALESCE(ds.color, '')             AS stage_color,
        d.property_id,
-       COALESCE(p.address, '')            AS property_address
+       COALESCE(p.address, '')            AS property_address,
+       (SELECT MAX(a.created_at) FROM activities a WHERE a.contact_id = d.contact_id) AS last_activity_at
 FROM deals d
 JOIN contacts c ON c.id = d.contact_id
 LEFT JOIN deal_stages ds ON ds.id = d.stage_id
@@ -44,7 +46,7 @@ LEFT JOIN properties p ON p.id = d.property_id`
 
 func scanDeal(row interface{ Scan(...any) error }) (Deal, error) {
 	var d Deal
-	err := row.Scan(&d.ID, &d.ContactID, &d.AgentID, &d.StageID, &d.Title, &d.Value, &d.Notes, &d.CreatedAt, &d.UpdatedAt, &d.ContactName, &d.StageName, &d.StageColor, &d.PropertyID, &d.PropertyAddress)
+	err := row.Scan(&d.ID, &d.ContactID, &d.AgentID, &d.StageID, &d.Title, &d.Value, &d.Notes, &d.CreatedAt, &d.UpdatedAt, &d.ContactName, &d.StageName, &d.StageColor, &d.PropertyID, &d.PropertyAddress, &d.LastActivityAt)
 	return d, err
 }
 
