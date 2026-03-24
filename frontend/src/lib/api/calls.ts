@@ -13,6 +13,9 @@ export interface CallLog {
   ended_at: string | null;
   created_at: string;
   contact_name?: string;
+  recording_sid: string | null;
+  recording_duration: number;
+  has_recording: boolean;
 }
 
 export interface CallLogsResponse {
@@ -49,4 +52,9 @@ export function initiateCall(
 
 export function syncCallLogs(token: string): Promise<{ synced: number }> {
   return apiRequest("/calls/sync", token, { method: "POST" });
+}
+
+export function getRecordingUrl(callId: string): string {
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+  return `${API_URL}/api/calls/${callId}/recording`;
 }

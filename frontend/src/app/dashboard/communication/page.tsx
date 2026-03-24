@@ -8,7 +8,7 @@ import { listContacts } from "@/lib/api/contacts";
 import { getGmailStatus, syncGmail, listEmails, getEmail, sendEmail, markEmailRead, type Email } from "@/lib/api/gmail";
 import { getSMSStatus, syncSMS, listSMSMessages, sendSMS, type SMSMessage } from "@/lib/api/sms";
 import { listCallLogs, initiateCall, syncCallLogs, type CallLog } from "@/lib/api/calls";
-import { Phone, Mail, Search, Plus, X, User, ChevronDown, ChevronUp, ChevronRight, RefreshCw, Send, Reply, Star, Paperclip, MessageSquare, PhoneCall } from "lucide-react";
+import { Phone, Mail, Search, Plus, X, User, ChevronDown, ChevronUp, ChevronRight, RefreshCw, Send, Reply, Star, Paperclip, MessageSquare, PhoneCall, Play, Loader2 } from "lucide-react";
 
 const typeColors: Record<string, { bg: string; color: string }> = {
   call: { bg: "#EFF6FF", color: "#0EA5E9" },
@@ -77,6 +77,56 @@ function emailHasAttachment(labels: string[]): boolean {
 /** Check if the labels list contains IMPORTANT or STARRED. */
 function emailIsStarred(labels: string[]): boolean {
   return labels.includes("STARRED") || labels.includes("IMPORTANT");
+}
+
+function RecordingPlayer({ callId }: { callId: string }) {
+  const { getToken } = useAuth();
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const loadAudio = async () => {
+    if (audioUrl) return;
+    setLoading(true);
+    try {
+      const token = await getToken();
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+      const resp = await fetch(`${API_URL}/api/calls/${callId}/recording`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) return;
+      const blob = await resp.blob();
+      setAudioUrl(URL.createObjectURL(blob));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (audioUrl) URL.revokeObjectURL(audioUrl);
+    };
+  }, [audioUrl]);
+
+  if (!audioUrl) {
+    return (
+      <button
+        onClick={loadAudio}
+        disabled={loading}
+        className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 mt-1"
+      >
+        {loading ? (
+          <Loader2 className="w-3 h-3 animate-spin" />
+        ) : (
+          <Play className="w-3 h-3" />
+        )}
+        {loading ? "Loading..." : "Play Recording"}
+      </button>
+    );
+  }
+
+  return (
+    <audio controls src={audioUrl} className="w-full h-8 mt-1" />
+  );
 }
 
 function EmailHtmlFrame({ html }: { html: string }) {
@@ -961,6 +1011,9 @@ export default function CommunicationPage() {
                             </pre>
                           ) : (
                             <p className="text-sm text-gray-700 leading-relaxed">{item.body}</p>
+                          )}
+                          {item.call_data?.has_recording && (
+                            <RecordingPlayer callId={item.call_data.id} />
                           )}
                         </div>
                       )}
