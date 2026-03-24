@@ -2,8 +2,8 @@ package handlers
 
 import (
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -13,14 +13,19 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	twilio "github.com/twilio/twilio-go"
+	api "github.com/twilio/twilio-go/rest/api/v2010"
 
+	"crm-api/internal/config"
 	"crm-api/internal/database"
 	"crm-api/internal/middleware"
 )
 
-// InitiateCall starts an outbound call via Twilio REST API.
+// InitiateCall starts an outbound call via the two-leg bridge pattern.
+// Twilio calls the agent's personal phone first. When the agent answers,
+// TwiMLBridge plays a consent announcement and bridges to the client.
 // POST /api/calls/initiate
-func InitiateCall(pool *pgxpool.Pool) http.HandlerFunc {
+func InitiateCall(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		agentID := middleware.AgentUUIDFromContext(r.Context())
 		if agentID == "" {
@@ -41,61 +46,12 @@ func InitiateCall(pool *pgxpool.Pool) http.HandlerFunc {
 			return
 		}
 
-		// Fetch Twilio config (shared with SMS)
-		var accountSID, authToken, fromNumber string
-		err := pool.QueryRow(r.Context(),
-			`SELECT account_sid, auth_token, phone_number FROM twilio_config WHERE agent_id = $1`,
-			agentID,
-		).Scan(&accountSID, &authToken, &fromNumber)
-		if err != nil {
-			respondError(w, http.StatusBadRequest, "Twilio not configured. Please add your Twilio credentials in Settings.")
+		if cfg.WebhookBaseURL == "" {
+			respondError(w, http.StatusInternalServerError, "WEBHOOK_BASE_URL not configured")
 			return
 		}
 
-		// Call Twilio Calls API
-		twilioURL := fmt.Sprintf("https://api.twilio.com/2010-04-01/Accounts/%s/Calls.json", accountSID)
-		data := url.Values{}
-		data.Set("To", body.To)
-		data.Set("From", fromNumber)
-		// Twiml says: play a short message — agent should pick up from their phone
-		data.Set("Twiml", "<Response><Say>Connecting your call now.</Say><Dial>"+body.To+"</Dial></Response>")
-
-		req, err := http.NewRequestWithContext(r.Context(), "POST", twilioURL, strings.NewReader(data.Encode()))
-		if err != nil {
-			respondError(w, http.StatusInternalServerError, "failed to create request")
-			return
-		}
-		req.SetBasicAuth(accountSID, authToken)
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			slog.Error("twilio call failed", "error", err)
-			respondError(w, http.StatusInternalServerError, "failed to initiate call")
-			return
-		}
-		defer resp.Body.Close()
-
-		respBody, _ := io.ReadAll(resp.Body)
-		if resp.StatusCode >= 400 {
-			slog.Error("twilio Calls API error", "status", resp.StatusCode, "body", string(respBody))
-			respondError(w, http.StatusBadGateway, "Twilio API error: "+string(respBody))
-			return
-		}
-
-		var twilioResp struct {
-			SID    string `json:"sid"`
-			Status string `json:"status"`
-		}
-		json.Unmarshal(respBody, &twilioResp)
-
-		// Auto-match contact by phone if contact_id not provided
-		contactID := body.ContactID
-		if contactID == nil {
-			contactID = matchContactByPhone(r.Context(), pool, agentID, body.To)
-		}
-
-		now := time.Now()
+		// Fetch Twilio config INCLUDING personal_phone
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "database error")
@@ -103,22 +59,207 @@ func InitiateCall(pool *pgxpool.Pool) http.HandlerFunc {
 		}
 		defer tx.Rollback(r.Context())
 
+		var accountSID, authToken, fromNumber string
+		var personalPhone *string
+		err = tx.QueryRow(r.Context(),
+			`SELECT account_sid, auth_token, phone_number, personal_phone
+			 FROM twilio_config WHERE agent_id = $1`, agentID,
+		).Scan(&accountSID, &authToken, &fromNumber, &personalPhone)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, "Twilio not configured. Please add your Twilio credentials in Settings.")
+			return
+		}
+
+		if personalPhone == nil || *personalPhone == "" {
+			respondError(w, http.StatusBadRequest, "Personal phone number not configured. Please add it in Settings.")
+			return
+		}
+
+		// Auto-match contact by phone if contact_id not provided
+		contactID := body.ContactID
+		if contactID == nil {
+			contactID = matchContactByPhone(r.Context(), pool, agentID, body.To)
+		}
+
+		// Insert call_logs FIRST to get call_id
+		now := time.Now()
 		var callID string
-		tx.QueryRow(r.Context(),
-			`INSERT INTO call_logs (agent_id, twilio_sid, contact_id, from_number, to_number, direction, status, started_at)
-			 VALUES ($1, $2, $3, $4, $5, 'outbound', $6, $7)
-			 RETURNING id`,
-			agentID, twilioResp.SID, contactID, fromNumber, body.To, twilioResp.Status, now,
+		err = tx.QueryRow(r.Context(),
+			`INSERT INTO call_logs (agent_id, contact_id, from_number, to_number, direction, status, started_at)
+			 VALUES ($1, $2, $3, $4, 'outbound', 'initiated', $5) RETURNING id`,
+			agentID, contactID, fromNumber, body.To, now,
 		).Scan(&callID)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "failed to create call record")
+			return
+		}
 		tx.Commit(r.Context())
+
+		// Create two-leg call: Twilio calls AGENT's personal phone first
+		client := twilio.NewRestClientWithParams(twilio.ClientParams{
+			Username: accountSID,
+			Password: authToken,
+		})
+		params := &api.CreateCallParams{}
+		params.SetTo(*personalPhone)
+		params.SetFrom(fromNumber)
+		bridgeURL := cfg.WebhookBaseURL + "/api/calls/twiml/bridge?to=" +
+			url.QueryEscape(body.To) + "&call_id=" + callID
+		params.SetUrl(bridgeURL)
+		params.SetStatusCallback(cfg.WebhookBaseURL + "/api/calls/webhook")
+		params.SetStatusCallbackEvent([]string{"initiated", "ringing", "answered", "completed"})
+
+		call, err := client.Api.CreateCall(params)
+		if err != nil {
+			slog.Error("twilio call failed", "error", err)
+			// Update call_logs to failed
+			pool.Exec(r.Context(),
+				`UPDATE call_logs SET status = 'failed' WHERE id = $1`, callID)
+			respondError(w, http.StatusBadGateway, "Failed to initiate call via Twilio")
+			return
+		}
+
+		// Update call_logs with twilio_sid
+		pool.Exec(r.Context(),
+			`UPDATE call_logs SET twilio_sid = $1, status = $2 WHERE id = $3`,
+			*call.Sid, *call.Status, callID)
 
 		respondJSON(w, http.StatusOK, map[string]interface{}{
 			"id":      callID,
-			"sid":     twilioResp.SID,
-			"status":  twilioResp.Status,
-			"message": "Call initiated",
+			"sid":     *call.Sid,
+			"status":  *call.Status,
+			"message": "Call initiated — your phone will ring shortly",
 		})
 	}
+}
+
+// TwiMLBridge returns TwiML to bridge the agent to the client.
+// GET/POST /api/calls/twiml/bridge?to=+15551234567&call_id=uuid
+// PUBLIC — Twilio hits this when agent answers their phone.
+func TwiMLBridge(pool *pgxpool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		clientPhone := r.URL.Query().Get("to")
+		callID := r.URL.Query().Get("call_id")
+
+		if clientPhone == "" || callID == "" {
+			w.Header().Set("Content-Type", "text/xml")
+			w.Write([]byte(`<Response><Say>An error occurred. Goodbye.</Say><Hangup/></Response>`))
+			return
+		}
+
+		// Look up the Twilio number (callerId for the client leg) via call_id
+		var fromNumber, agentID, authToken string
+		err := pool.QueryRow(r.Context(),
+			`SELECT cl.from_number, cl.agent_id, tc.auth_token
+			 FROM call_logs cl
+			 JOIN twilio_config tc ON tc.agent_id = cl.agent_id
+			 WHERE cl.id = $1`, callID,
+		).Scan(&fromNumber, &agentID, &authToken)
+		if err != nil {
+			slog.Error("twiml bridge: call_id lookup failed", "call_id", callID, "error", err)
+			w.Header().Set("Content-Type", "text/xml")
+			w.Write([]byte(`<Response><Say>Call not found. Goodbye.</Say><Hangup/></Response>`))
+			return
+		}
+
+		// Validate Twilio signature
+		if r.Method == "POST" {
+			r.ParseForm()
+			requestURL := "https://" + r.Host + r.URL.String()
+			if !validateTwilioSignature(authToken, requestURL, r.PostForm, r.Header.Get("X-Twilio-Signature")) {
+				respondError(w, http.StatusForbidden, "invalid Twilio signature")
+				return
+			}
+		}
+
+		// Return TwiML: consent announcement then bridge to client
+		twimlXML := fmt.Sprintf(
+			`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say>This call may be recorded for quality purposes.</Say>
+  <Dial callerId="%s">
+    <Number>%s</Number>
+  </Dial>
+</Response>`, xmlEscape(fromNumber), xmlEscape(clientPhone))
+
+		w.Header().Set("Content-Type", "text/xml")
+		w.Write([]byte(twimlXML))
+	}
+}
+
+// InboundCallWebhook handles incoming calls to the Twilio number.
+// POST /api/calls/inbound-webhook
+// PUBLIC — Twilio hits this when someone calls the Twilio number.
+func InboundCallWebhook(pool *pgxpool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			w.Header().Set("Content-Type", "text/xml")
+			w.Write([]byte(`<Response><Say>An error occurred.</Say><Hangup/></Response>`))
+			return
+		}
+
+		calledNumber := r.FormValue("To")   // The Twilio number that was called
+		callerNumber := r.FormValue("From")  // The person calling in
+		callSID := r.FormValue("CallSid")
+
+		// Look up agent by Twilio phone number (same pattern as SMSWebhook)
+		var agentID, authToken string
+		var personalPhone *string
+		err := pool.QueryRow(r.Context(),
+			`SELECT agent_id, auth_token, personal_phone FROM twilio_config WHERE phone_number = $1`,
+			calledNumber,
+		).Scan(&agentID, &authToken, &personalPhone)
+		if err != nil {
+			slog.Warn("inbound call: no agent found for number", "to", calledNumber)
+			w.Header().Set("Content-Type", "text/xml")
+			w.Write([]byte(`<Response><Say>This number is not configured. Goodbye.</Say><Hangup/></Response>`))
+			return
+		}
+
+		// Validate Twilio signature
+		requestURL := "https://" + r.Host + r.URL.String()
+		if !validateTwilioSignature(authToken, requestURL, r.PostForm, r.Header.Get("X-Twilio-Signature")) {
+			respondError(w, http.StatusForbidden, "invalid Twilio signature")
+			return
+		}
+
+		if personalPhone == nil || *personalPhone == "" {
+			w.Header().Set("Content-Type", "text/xml")
+			w.Write([]byte(`<Response><Say>The agent has not configured call forwarding. Goodbye.</Say><Hangup/></Response>`))
+			return
+		}
+
+		// Match caller to contact
+		contactID := matchContactByPhone(r.Context(), pool, agentID, callerNumber)
+
+		// Insert inbound call_logs row
+		pool.Exec(r.Context(),
+			`INSERT INTO call_logs (agent_id, twilio_sid, contact_id, from_number, to_number, direction, status, started_at)
+			 VALUES ($1, $2, $3, $4, $5, 'inbound', 'ringing', NOW())`,
+			agentID, callSID, contactID, callerNumber, calledNumber,
+		)
+
+		// Return TwiML: consent announcement then forward to agent's personal phone
+		// callerId = callerNumber so agent sees who is calling
+		twimlXML := fmt.Sprintf(
+			`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say>This call may be recorded for quality purposes.</Say>
+  <Dial callerId="%s">
+    <Number>%s</Number>
+  </Dial>
+</Response>`, xmlEscape(callerNumber), xmlEscape(*personalPhone))
+
+		w.Header().Set("Content-Type", "text/xml")
+		w.Write([]byte(twimlXML))
+	}
+}
+
+// xmlEscape escapes a string for safe inclusion in XML attributes/content.
+func xmlEscape(s string) string {
+	var buf strings.Builder
+	xml.EscapeText(&buf, []byte(s))
+	return buf.String()
 }
 
 // ListCallLogs returns paginated call history.

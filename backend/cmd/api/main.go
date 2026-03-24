@@ -84,6 +84,10 @@ func run() error {
 	r.Get("/health", handlers.Health)
 	r.Get("/api/auth/google/callback", handlers.GmailAuthCallback(pool, cfg))
 	r.Post("/api/sms/webhook", handlers.SMSWebhook(pool))
+	r.Post("/api/calls/webhook", handlers.CallStatusWebhook(pool))
+	r.Get("/api/calls/twiml/bridge", handlers.TwiMLBridge(pool))
+	r.Post("/api/calls/twiml/bridge", handlers.TwiMLBridge(pool))
+	r.Post("/api/calls/inbound-webhook", handlers.InboundCallWebhook(pool))
 
 	// Protected — Clerk JWT + user sync required
 	r.Group(func(r chi.Router) {
@@ -188,6 +192,12 @@ func run() error {
 		r.Get("/api/sms/messages/{id}", handlers.GetSMSMessage(pool))
 		r.Get("/api/sms/conversations", handlers.ListSMSConversations(pool))
 		r.Post("/api/sms/sync", handlers.SMSSync(pool))
+
+		// Calls / Twilio Voice
+		r.Post("/api/calls/initiate", handlers.InitiateCall(pool, cfg))
+		r.Get("/api/calls", handlers.ListCallLogs(pool))
+		r.Get("/api/calls/{id}", handlers.GetCallLog(pool))
+		r.Post("/api/calls/sync", handlers.SyncCallLogs(pool))
 	})
 
 	// -------------------------------------------------------------------------
