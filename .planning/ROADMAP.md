@@ -59,11 +59,11 @@ Plans:
   2. Agent can click play on any call in the communication page and hear the recording through an audio player
   3. Recordings are downloaded from Twilio and stored locally (or S3), and the Twilio copy is deleted after confirmed download
   4. Twilio auth tokens are encrypted at rest in the database (not stored as plaintext)
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 05-01: TBD
-- [ ] 05-02: TBD
+- [ ] 05-01-PLAN.md — Backend: encryption helpers, getTwilioConfig, recording migration, TwiML recording attributes, recording webhook + async download
+- [ ] 05-02-PLAN.md — Recording proxy endpoint with Range headers, frontend audio player in communication page
 
 ### Phase 6: AI Transcription & Intelligence
 **Goal**: Every completed call is automatically transcribed with speaker labels, analyzed by AI for summaries and action items, and the results are searchable and available in AI chat context
@@ -120,8 +120,8 @@ Phases execute in numeric order: 4 -> 5 -> 6 -> 7 -> 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 4. Core Call Flow | 1/2 | In progress | - |
-| 5. Recording Infrastructure | 0/? | Not started | - |
+| 4. Core Call Flow | 2/2 | Complete | 2026-03-24 |
+| 5. Recording Infrastructure | 0/2 | Planned | - |
 | 6. AI Transcription & Intelligence | 0/? | Not started | - |
 | 7. Frontend Call Experience | 0/? | Not started | - |
 | 8. React Native Mobile Dialer | 0/? | Not started | - |
