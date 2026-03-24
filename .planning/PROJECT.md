@@ -18,14 +18,15 @@ When a user references a contact by any natural description (name, partial name,
 - ✓ AI tool calling with 34 tools — existing
 - ✓ System prompt with action-oriented guidelines — existing
 - ✓ Contact-scoped conversations with pre-loaded context — existing
+- ✓ AI always searches for contacts before passing IDs to other tools — Validated in Phase 1: Core Resolution Protocol
+- ✓ AI splits multi-word names into searchable terms — Validated in Phase 1: Core Resolution Protocol
+- ✓ AI resolves "my last contact" via limit=1 sorted DESC — Validated in Phase 1: Core Resolution Protocol
+- ✓ AI resolves partial names by searching and selecting best match — Validated in Phase 1: Core Resolution Protocol
+- ✓ AI handles ambiguous matches (presents candidates, asks user to clarify) — Validated in Phase 1: Core Resolution Protocol
 
 ### Active
 
-- [ ] AI splits multi-word names into first/last before searching (e.g. "Rohan Batre" → search "Rohan", then confirm match)
-- [ ] AI resolves "my last contact" / "most recent contact" to the contact with the latest created_at or last_activity_at
-- [ ] AI resolves partial names ("email Rohan") by searching and selecting the best match
-- [ ] AI always searches for contacts before passing IDs to other tools (no guessing UUIDs)
-- [ ] AI handles ambiguous matches gracefully (multiple "John" contacts → asks user to clarify)
+(No active requirements — Phase 2 items pending)
 
 ### Out of Scope
 
@@ -56,8 +57,8 @@ Key files:
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Fix via system prompt + tool descriptions first | Cheapest, fastest approach; search SQL already works | — Pending |
-| Keep Haiku 4.5 model | Cost/speed constraints for real-time chat | — Pending |
+| Fix via system prompt + tool descriptions first | Cheapest, fastest approach; search SQL already works | ✓ Validated in Phase 1 |
+| Keep Haiku 4.5 model | Cost/speed constraints for real-time chat | ✓ Confirmed |
 
 ## Evolution
 
@@ -77,4 +78,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-24 after initialization*
+*Last updated: 2026-03-24 after Phase 1 completion — Core Resolution Protocol shipped*
