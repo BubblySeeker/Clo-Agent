@@ -213,6 +213,7 @@ export default function ContactsPage() {
   const filteredFolders = folderSearch
     ? folders.filter((f) => f.name.toLowerCase().includes(folderSearch.toLowerCase()))
     : folders;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const totalFolderContacts = folders.reduce((sum, f) => sum + f.contact_count, 0);
 
   // Mutations
