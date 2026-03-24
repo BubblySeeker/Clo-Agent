@@ -221,7 +221,14 @@ def _build_system_prompt(agent_name: str, contact_context: str = "", gmail_statu
             synced = gmail_status.get("last_synced_at")
             sync_info = f", last synced {synced.strftime('%b %d %H:%M')}" if synced else ""
             base += f"\n\nGmail: Connected ({gmail_status.get('gmail_address', 'unknown')}{sync_info}). "
-            base += "You can search emails, read threads, draft emails, and send emails."
+            base += (
+                "You can search emails, read threads, draft emails, and send emails. "
+                "IMPORTANT EMAIL RULES:\n"
+                "- When asked about emails from contacts, ALWAYS use search_emails with contacts_only=true. "
+                "This filters to only emails linked to CRM contacts and skips spam/marketing.\n"
+                "- When asked about specific topics or senders, use the query parameter.\n"
+                "- Never assume — always call the tool first."
+            )
         else:
             base += "\n\nGmail: Not connected. If the user asks about emails, tell them to connect Gmail in Settings first."
 

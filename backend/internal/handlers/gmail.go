@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -139,7 +140,17 @@ func GmailAuthCallback(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc 
 		}
 
 		// Upsert gmail_tokens row (encrypt tokens at rest)
-		_, err = pool.Exec(r.Context(),
+		// Use BeginWithRLS because this is a public callback endpoint (no Clerk auth)
+		// and RLS requires app.current_agent_id to be set for the INSERT to succeed.
+		tx, txErr := database.BeginWithRLS(r.Context(), pool, agentID)
+		if txErr != nil {
+			slog.Error("gmail token save: begin tx failed", "error", txErr)
+			http.Redirect(w, r, frontendURL+"/dashboard/settings?section=integrations&gmail=error&reason=db_error", http.StatusFound)
+			return
+		}
+		defer tx.Rollback(r.Context())
+
+		_, err = tx.Exec(r.Context(),
 			`INSERT INTO gmail_tokens (agent_id, gmail_address, access_token, refresh_token, token_expiry)
 			 VALUES ($1, $2, $3, $4, $5)
 			 ON CONFLICT (agent_id) DO UPDATE SET
@@ -152,6 +163,12 @@ func GmailAuthCallback(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc 
 		)
 		if err != nil {
 			slog.Error("gmail token save failed", "error", err)
+			http.Redirect(w, r, frontendURL+"/dashboard/settings?section=integrations&gmail=error&reason=db_error", http.StatusFound)
+			return
+		}
+
+		if err := tx.Commit(r.Context()); err != nil {
+			slog.Error("gmail token save: commit failed", "error", err)
 			http.Redirect(w, r, frontendURL+"/dashboard/settings?section=integrations&gmail=error&reason=db_error", http.StatusFound)
 			return
 		}
@@ -178,12 +195,21 @@ func GmailStatus(pool *pgxpool.Pool) http.HandlerFunc {
 			return
 		}
 
+		tx, txErr := database.BeginWithRLS(r.Context(), pool, agentID)
+		if txErr != nil {
+			respondError(w, http.StatusInternalServerError, "database error")
+			return
+		}
+		defer tx.Rollback(r.Context())
+
 		var gmailAddress string
 		var lastSynced *time.Time
-		err := pool.QueryRow(r.Context(),
+		err := tx.QueryRow(r.Context(),
 			`SELECT gmail_address, last_synced_at FROM gmail_tokens WHERE agent_id = $1`,
 			agentID,
 		).Scan(&gmailAddress, &lastSynced)
+
+		tx.Commit(r.Context())
 
 		if err != nil {
 			respondJSON(w, http.StatusOK, map[string]interface{}{
@@ -213,7 +239,7 @@ func GmailDisconnect(pool *pgxpool.Pool) http.HandlerFunc {
 		}
 
 		// Delete emails first (FK), then tokens
-		tx, err := pool.Begin(r.Context())
+		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "database error")
 			return
@@ -233,10 +259,17 @@ func GmailDisconnect(pool *pgxpool.Pool) http.HandlerFunc {
 }
 
 // getGmailService reads tokens from DB, refreshes if expired, and returns a Gmail service.
+// Uses BeginWithRLS to ensure RLS context is set for the token query.
 func getGmailService(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config, agentID string) (*gmail.Service, error) {
+	tx, txErr := database.BeginWithRLS(ctx, pool, agentID)
+	if txErr != nil {
+		return nil, fmt.Errorf("database error: %w", txErr)
+	}
+	defer tx.Rollback(ctx)
+
 	var encAccessToken, encRefreshToken string
 	var expiry time.Time
-	err := pool.QueryRow(ctx,
+	err := tx.QueryRow(ctx,
 		`SELECT access_token, refresh_token, token_expiry FROM gmail_tokens WHERE agent_id = $1`,
 		agentID,
 	).Scan(&encAccessToken, &encRefreshToken, &expiry)
@@ -271,17 +304,232 @@ func getGmailService(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config
 
 	// If token was refreshed, persist the new one
 	if newTok.AccessToken != accessToken {
-		pool.Exec(ctx,
+		tx.Exec(ctx,
 			`UPDATE gmail_tokens SET access_token = $1, token_expiry = $2, updated_at = now() WHERE agent_id = $3`,
 			encryptToken(newTok.AccessToken), newTok.Expiry, agentID,
 		)
 	}
+
+	tx.Commit(ctx)
 
 	svc, err := gmail.NewService(ctx, option.WithHTTPClient(oauth2.NewClient(ctx, ts)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create gmail service: %w", err)
 	}
 	return svc, nil
+}
+
+// SyncResult holds the results of a Gmail sync operation.
+type SyncResult struct {
+	Synced        int
+	TotalFound    int
+	UnmatchedIDs  []string // email IDs without contact match (for lead triage)
+	MatchedIDs    []string // email IDs with contact match (for embedding)
+	Skipped       bool     // true if sync was skipped (rate limit)
+	SkipMessage   string
+}
+
+// SyncAgentGmail performs a Gmail sync for a single agent.
+// Extracted from the HTTP handler so it can be called by both the API and background worker.
+func SyncAgentGmail(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config, agentID string) (*SyncResult, error) {
+	// Check rate limit: skip if synced < 5 min ago
+	tx, txErr := database.BeginWithRLS(ctx, pool, agentID)
+	if txErr != nil {
+		return nil, fmt.Errorf("database error: %w", txErr)
+	}
+	defer tx.Rollback(ctx)
+
+	var lastSynced *time.Time
+	tx.QueryRow(ctx,
+		`SELECT last_synced_at FROM gmail_tokens WHERE agent_id = $1`, agentID,
+	).Scan(&lastSynced)
+
+	if lastSynced != nil && time.Since(*lastSynced) < 5*time.Minute {
+		tx.Commit(ctx)
+		return &SyncResult{Skipped: true, SkipMessage: "recently synced, skipping"}, nil
+	}
+
+	tx.Commit(ctx) // release tx before long Gmail API calls
+
+	svc, err := getGmailService(ctx, pool, cfg, agentID)
+	if err != nil {
+		return nil, fmt.Errorf("gmail service error: %w", err)
+	}
+
+	// Build query — first sync gets last 50, subsequent gets newer messages
+	query := ""
+	if lastSynced != nil {
+		query = "after:" + lastSynced.Format("2006/01/02")
+	}
+
+	// Paginate through all matching messages (up to 500 max)
+	const maxMessages = 500
+	var allMsgRefs []*gmail.Message
+	pageToken := ""
+
+	for {
+		listCall := svc.Users.Messages.List("me").MaxResults(50)
+		if query != "" {
+			listCall = listCall.Q(query)
+		}
+		if pageToken != "" {
+			listCall = listCall.PageToken(pageToken)
+		}
+
+		msgList, err := listCall.Do()
+		if err != nil {
+			return nil, fmt.Errorf("gmail list failed: %w", err)
+		}
+
+		allMsgRefs = append(allMsgRefs, msgList.Messages...)
+
+		if len(allMsgRefs) >= maxMessages {
+			allMsgRefs = allMsgRefs[:maxMessages]
+			slog.Warn("gmail sync: hit max message cap", "cap", maxMessages)
+			break
+		}
+		if msgList.NextPageToken == "" {
+			break
+		}
+		pageToken = msgList.NextPageToken
+	}
+
+	slog.Info("gmail sync: listing complete", "agent_id", agentID, "total_refs", len(allMsgRefs))
+
+	// Open a new RLS tx for DB writes
+	tx2, txErr2 := database.BeginWithRLS(ctx, pool, agentID)
+	if txErr2 != nil {
+		return nil, fmt.Errorf("database error: %w", txErr2)
+	}
+	defer tx2.Rollback(ctx)
+
+	// Build a map of contact emails for matching
+	contactEmailMap := map[string]string{} // email -> contact_id
+	rows, err := tx2.Query(ctx,
+		`SELECT id, email FROM contacts WHERE agent_id = $1 AND email IS NOT NULL AND email != ''`,
+		agentID,
+	)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var cid, cemail string
+			rows.Scan(&cid, &cemail)
+			contactEmailMap[strings.ToLower(cemail)] = cid
+		}
+	}
+
+	result := &SyncResult{TotalFound: len(allMsgRefs)}
+
+	for _, msgRef := range allMsgRefs {
+		msg, err := svc.Users.Messages.Get("me", msgRef.Id).Format("full").Do()
+		if err != nil {
+			slog.Warn("gmail get message failed", "msg_id", msgRef.Id, "error", err)
+			continue
+		}
+
+		// Parse headers
+		var from, subject string
+		var to, cc []string
+		for _, h := range msg.Payload.Headers {
+			switch strings.ToLower(h.Name) {
+			case "from":
+				from = h.Value
+			case "to":
+				to = parseAddressList(h.Value)
+			case "cc":
+				cc = parseAddressList(h.Value)
+			case "subject":
+				subject = h.Value
+			}
+		}
+
+		fromAddr, fromName := parseEmailAddress(from)
+		isOutbound := false
+
+		for _, lbl := range msg.LabelIds {
+			if lbl == "SENT" {
+				isOutbound = true
+				break
+			}
+		}
+
+		isRead := true
+		for _, lbl := range msg.LabelIds {
+			if lbl == "UNREAD" {
+				isRead = false
+				break
+			}
+		}
+
+		bodyText, bodyHTML := extractBody(msg.Payload)
+
+		// Match contact
+		var contactID *string
+		if isOutbound {
+			for _, addr := range to {
+				if cid, ok := contactEmailMap[strings.ToLower(addr)]; ok {
+					contactID = &cid
+					break
+				}
+			}
+		} else {
+			if cid, ok := contactEmailMap[strings.ToLower(fromAddr)]; ok {
+				contactID = &cid
+			}
+		}
+
+		gmailDate := time.Unix(0, msg.InternalDate*int64(time.Millisecond))
+
+		labelIds := msg.LabelIds
+		if hasAttachments(msg.Payload) {
+			labelIds = append(labelIds, "HAS_ATTACHMENT")
+		}
+
+		toJSON, _ := json.Marshal(to)
+		ccJSON, _ := json.Marshal(cc)
+		labelsJSON, _ := json.Marshal(labelIds)
+
+		// Use RETURNING to detect newly inserted rows
+		var insertedID *string
+		var insertedContactID *string
+		err = tx2.QueryRow(ctx,
+			`INSERT INTO emails (agent_id, gmail_message_id, thread_id, contact_id, from_address, from_name,
+			  to_addresses, cc_addresses, subject, snippet, body_text, body_html, labels, is_read, is_outbound, gmail_date)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+			 ON CONFLICT (agent_id, gmail_message_id) DO NOTHING
+			 RETURNING id, contact_id`,
+			agentID, msg.Id, msg.ThreadId, contactID, fromAddr, fromName,
+			toJSON, ccJSON, subject, msg.Snippet, bodyText, bodyHTML, labelsJSON, isRead, isOutbound, gmailDate,
+		).Scan(&insertedID, &insertedContactID)
+
+		if err != nil && err != pgx.ErrNoRows {
+			slog.Warn("gmail insert email failed", "msg_id", msg.Id, "error", err)
+			continue
+		}
+
+		// Track newly inserted emails
+		if insertedID != nil {
+			result.Synced++
+			if insertedContactID != nil {
+				result.MatchedIDs = append(result.MatchedIDs, *insertedID)
+			} else if !isOutbound {
+				// Only triage inbound unmatched emails for lead detection
+				result.UnmatchedIDs = append(result.UnmatchedIDs, *insertedID)
+			}
+		}
+	}
+
+	// Update last_synced_at
+	tx2.Exec(ctx,
+		`UPDATE gmail_tokens SET last_synced_at = now(), updated_at = now() WHERE agent_id = $1`,
+		agentID,
+	)
+
+	tx2.Commit(ctx)
+
+	slog.Info("gmail sync: complete", "agent_id", agentID, "synced", result.Synced, "unmatched", len(result.UnmatchedIDs), "matched", len(result.MatchedIDs))
+
+	return result, nil
 }
 
 // GmailSync fetches emails from Gmail and stores them.
@@ -294,157 +542,24 @@ func GmailSync(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 			return
 		}
 
-		// Check rate limit: skip if synced < 5 min ago
-		var lastSynced *time.Time
-		pool.QueryRow(r.Context(),
-			`SELECT last_synced_at FROM gmail_tokens WHERE agent_id = $1`, agentID,
-		).Scan(&lastSynced)
+		result, err := SyncAgentGmail(r.Context(), pool, cfg, agentID)
+		if err != nil {
+			slog.Error("gmail sync failed", "error", err)
+			respondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 
-		if lastSynced != nil && time.Since(*lastSynced) < 5*time.Minute {
+		if result.Skipped {
 			respondJSON(w, http.StatusOK, map[string]interface{}{
-				"synced": 0,
-				"message": "recently synced, skipping",
+				"synced":  0,
+				"message": result.SkipMessage,
 			})
 			return
 		}
 
-		svc, err := getGmailService(r.Context(), pool, cfg, agentID)
-		if err != nil {
-			respondError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-
-		// Build query — first sync gets last 50, subsequent gets newer messages
-		query := ""
-		if lastSynced != nil {
-			// Fetch messages after last sync
-			query = "after:" + lastSynced.Format("2006/01/02")
-		}
-
-		listCall := svc.Users.Messages.List("me").MaxResults(50)
-		if query != "" {
-			listCall = listCall.Q(query)
-		}
-
-		msgList, err := listCall.Do()
-		if err != nil {
-			slog.Error("gmail list messages failed", "error", err)
-			respondError(w, http.StatusInternalServerError, "failed to list messages")
-			return
-		}
-
-		// Build a map of contact emails for matching
-		contactEmailMap := map[string]string{} // email -> contact_id
-		rows, err := pool.Query(r.Context(),
-			`SELECT id, email FROM contacts WHERE agent_id = $1 AND email IS NOT NULL AND email != ''`,
-			agentID,
-		)
-		if err == nil {
-			defer rows.Close()
-			for rows.Next() {
-				var cid, cemail string
-				rows.Scan(&cid, &cemail)
-				contactEmailMap[strings.ToLower(cemail)] = cid
-			}
-		}
-
-		synced := 0
-		for _, msgRef := range msgList.Messages {
-			msg, err := svc.Users.Messages.Get("me", msgRef.Id).Format("full").Do()
-			if err != nil {
-				slog.Warn("gmail get message failed", "msg_id", msgRef.Id, "error", err)
-				continue
-			}
-
-			// Parse headers
-			var from, subject string
-			var to, cc []string
-			for _, h := range msg.Payload.Headers {
-				switch strings.ToLower(h.Name) {
-				case "from":
-					from = h.Value
-				case "to":
-					to = parseAddressList(h.Value)
-				case "cc":
-					cc = parseAddressList(h.Value)
-				case "subject":
-					subject = h.Value
-				}
-			}
-
-			fromAddr, fromName := parseEmailAddress(from)
-			isOutbound := false
-
-			// Check if this is an outbound email by checking gmail labels
-			for _, lbl := range msg.LabelIds {
-				if lbl == "SENT" {
-					isOutbound = true
-					break
-				}
-			}
-
-			isRead := true
-			for _, lbl := range msg.LabelIds {
-				if lbl == "UNREAD" {
-					isRead = false
-					break
-				}
-			}
-
-			// Extract body
-			bodyText, bodyHTML := extractBody(msg.Payload)
-
-			// Match contact
-			var contactID *string
-			// For outbound, match against to addresses; for inbound, match from address
-			if isOutbound {
-				for _, addr := range to {
-					if cid, ok := contactEmailMap[strings.ToLower(addr)]; ok {
-						contactID = &cid
-						break
-					}
-				}
-			} else {
-				if cid, ok := contactEmailMap[strings.ToLower(fromAddr)]; ok {
-					contactID = &cid
-				}
-			}
-
-			gmailDate := time.Unix(0, msg.InternalDate*int64(time.Millisecond))
-
-			// Detect attachments and add a synthetic label
-			labelIds := msg.LabelIds
-			if hasAttachments(msg.Payload) {
-				labelIds = append(labelIds, "HAS_ATTACHMENT")
-			}
-
-			toJSON, _ := json.Marshal(to)
-			ccJSON, _ := json.Marshal(cc)
-			labelsJSON, _ := json.Marshal(labelIds)
-
-			_, err = pool.Exec(r.Context(),
-				`INSERT INTO emails (agent_id, gmail_message_id, thread_id, contact_id, from_address, from_name,
-				  to_addresses, cc_addresses, subject, snippet, body_text, body_html, labels, is_read, is_outbound, gmail_date)
-				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-				 ON CONFLICT (agent_id, gmail_message_id) DO NOTHING`,
-				agentID, msg.Id, msg.ThreadId, contactID, fromAddr, fromName,
-				toJSON, ccJSON, subject, msg.Snippet, bodyText, bodyHTML, labelsJSON, isRead, isOutbound, gmailDate,
-			)
-			if err != nil {
-				slog.Warn("gmail insert email failed", "msg_id", msg.Id, "error", err)
-				continue
-			}
-			synced++
-		}
-
-		// Update last_synced_at
-		pool.Exec(r.Context(),
-			`UPDATE gmail_tokens SET last_synced_at = now(), updated_at = now() WHERE agent_id = $1`,
-			agentID,
-		)
-
 		respondJSON(w, http.StatusOK, map[string]interface{}{
-			"synced": synced,
+			"synced":      result.Synced,
+			"total_found": result.TotalFound,
 		})
 	}
 }
@@ -666,9 +781,17 @@ func SendEmail(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 			return
 		}
 
+		// Use RLS transaction for DB reads before sending
+		txRead, txReadErr := database.BeginWithRLS(r.Context(), pool, agentID)
+		if txReadErr != nil {
+			respondError(w, http.StatusInternalServerError, "database error")
+			return
+		}
+		defer txRead.Rollback(r.Context())
+
 		// Get sender email
 		var senderEmail string
-		pool.QueryRow(r.Context(),
+		txRead.QueryRow(r.Context(),
 			`SELECT gmail_address FROM gmail_tokens WHERE agent_id = $1`, agentID,
 		).Scan(&senderEmail)
 
@@ -692,7 +815,7 @@ func SendEmail(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 		// If replying, set thread ID
 		if body.ReplyToMessageID != nil {
 			var threadID string
-			pool.QueryRow(r.Context(),
+			txRead.QueryRow(r.Context(),
 				`SELECT thread_id FROM emails WHERE gmail_message_id = $1 AND agent_id = $2`,
 				*body.ReplyToMessageID, agentID,
 			).Scan(&threadID)
@@ -701,6 +824,8 @@ func SendEmail(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 			}
 		}
 
+		txRead.Commit(r.Context())
+
 		sent, err := svc.Users.Messages.Send("me", gmailMsg).Do()
 		if err != nil {
 			slog.Error("gmail send failed", "error", err)
@@ -708,10 +833,24 @@ func SendEmail(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 			return
 		}
 
+		// Use RLS transaction for DB writes after sending
+		txWrite, txWriteErr := database.BeginWithRLS(r.Context(), pool, agentID)
+		if txWriteErr != nil {
+			// Email was sent but DB write failed — log but still return success
+			slog.Error("gmail send: post-send db error", "error", txWriteErr)
+			respondJSON(w, http.StatusOK, map[string]interface{}{
+				"id":         sent.Id,
+				"thread_id":  sent.ThreadId,
+				"message":    "email sent (db save failed)",
+			})
+			return
+		}
+		defer txWrite.Rollback(r.Context())
+
 		// Insert into emails table
 		toJSON, _ := json.Marshal([]string{body.To})
 		now := time.Now()
-		pool.Exec(r.Context(),
+		txWrite.Exec(r.Context(),
 			`INSERT INTO emails (agent_id, gmail_message_id, thread_id, contact_id, from_address, from_name,
 			  to_addresses, subject, body_text, is_read, is_outbound, gmail_date)
 			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, true, $10)
@@ -722,12 +861,14 @@ func SendEmail(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 
 		// Log an activity if contact_id is provided
 		if body.ContactID != nil && *body.ContactID != "" {
-			pool.Exec(r.Context(),
+			txWrite.Exec(r.Context(),
 				`INSERT INTO activities (agent_id, contact_id, type, body)
 				 VALUES ($1, $2, 'email', $3)`,
 				agentID, *body.ContactID, fmt.Sprintf("Sent email: %s", body.Subject),
 			)
 		}
+
+		txWrite.Commit(r.Context())
 
 		respondJSON(w, http.StatusOK, map[string]interface{}{
 			"id":         sent.Id,

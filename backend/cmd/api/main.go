@@ -16,6 +16,7 @@ import (
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/httprate"
 
+	"crm-api/internal/background"
 	"crm-api/internal/config"
 	"crm-api/internal/database"
 	"crm-api/internal/handlers"
@@ -236,7 +237,19 @@ func run() error {
 		r.Get("/api/gmail/emails/{id}", handlers.GetEmail(pool))
 		r.Post("/api/gmail/send", handlers.SendEmail(pool, cfg))
 		r.Patch("/api/gmail/emails/{id}/read", handlers.MarkEmailRead(pool, cfg))
+
+		// Lead suggestions
+		r.Get("/api/lead-suggestions", handlers.ListLeadSuggestions(pool))
+		r.Post("/api/lead-suggestions/{id}/accept", handlers.AcceptLeadSuggestion(pool))
+		r.Post("/api/lead-suggestions/{id}/dismiss", handlers.DismissLeadSuggestion(pool))
 	})
+
+	// -------------------------------------------------------------------------
+	// Background workers
+	// -------------------------------------------------------------------------
+	bgCtx, bgCancel := context.WithCancel(context.Background())
+	defer bgCancel()
+	go background.StartEmailSyncLoop(bgCtx, pool, cfg)
 
 	// -------------------------------------------------------------------------
 	// HTTP server
@@ -266,6 +279,9 @@ func run() error {
 	case sig := <-quit:
 		slog.Info("shutdown signal received", "signal", sig)
 	}
+
+	// Stop background workers
+	bgCancel()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

@@ -12,6 +12,7 @@ import { getBuyerProfile, createBuyerProfile, updateBuyerProfile } from "@/lib/a
 import type { CreateBuyerProfileBody } from "@/lib/api/buyer-profiles";
 import { getAIProfile, regenerateAIProfile } from "@/lib/api/ai-profiles";
 import { listDocuments, uploadDocument, deleteDocument, type Document as DocType } from "@/lib/api/documents";
+import { listEmails, type Email } from "@/lib/api/gmail";
 import { listContactFolders } from "@/lib/api/contact-folders";
 import { useUIStore } from "@/store/ui-store";
 import {
@@ -172,6 +173,17 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
       return listActivities(token!, id, typeFilter);
     },
   });
+
+  // Fetch Gmail emails for this contact
+  const { data: contactEmailsData } = useQuery({
+    queryKey: ["contact-gmail-emails", id],
+    queryFn: async () => {
+      const token = await getToken();
+      if (!token) return { emails: [], total: 0 };
+      return listEmails(token, { contact_id: id, limit: 50 });
+    },
+  });
+  const contactEmails = contactEmailsData?.emails ?? [];
 
   const { data: dealsData } = useQuery({
     queryKey: ["deals", { contact_id: id }],
@@ -1677,11 +1689,48 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
                 </div>
               </div>
 
+              {/* Gmail Emails (shown on Emails tab) */}
+              {activeTab === "Emails" && contactEmails.length > 0 && (
+                <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-4">
+                  <h4 className="font-bold mb-5" style={{ color: "#1E3A5F" }}>Gmail Emails</h4>
+                  <div className="flex flex-col gap-3">
+                    {contactEmails.map((email: Email) => (
+                      <div key={email.id} className="border border-gray-100 rounded-xl p-4 hover:bg-gray-50 transition-colors">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            email.is_outbound
+                              ? "bg-blue-50 text-blue-600"
+                              : "bg-green-50 text-green-600"
+                          }`}>
+                            {email.is_outbound ? "Sent" : "Received"}
+                          </span>
+                          <span className="text-xs text-gray-400">
+                            {email.gmail_date ? new Date(email.gmail_date).toLocaleDateString("en-US", {
+                              month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+                            }) : ""}
+                          </span>
+                          {!email.is_read && (
+                            <span className="w-2 h-2 rounded-full bg-blue-500" />
+                          )}
+                        </div>
+                        <p className="text-sm font-semibold text-gray-900">{email.subject || "(no subject)"}</p>
+                        <p className="text-xs text-gray-500 mt-1 line-clamp-2">{email.snippet || ""}</p>
+                        <p className="text-[10px] text-gray-400 mt-1">
+                          {email.is_outbound ? `To: ${email.to_addresses?.[0] || ""}` : `From: ${email.from_name || email.from_address || ""}`}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Timeline */}
               <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
                 <h4 className="font-bold mb-5" style={{ color: "#1E3A5F" }}>Activity Timeline</h4>
-                {activities.length === 0 ? (
+                {activities.length === 0 && !(activeTab === "Emails" && contactEmails.length > 0) ? (
                   <p className="text-sm text-gray-400 text-center py-8">No activities yet -- log one above!</p>
+                ) : activities.length === 0 ? (
+                  null
                 ) : (
                   <div className="flex flex-col gap-4">
                     {activities.map((item, i) => {
