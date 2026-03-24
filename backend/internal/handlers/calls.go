@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"bytes"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
@@ -854,6 +855,9 @@ func downloadAndStoreRecording(pool *pgxpool.Pool, cfg *config.Config, agentID, 
 		`UPDATE call_logs SET local_recording_path = $1 WHERE twilio_sid = $2`,
 		localPath, callSID)
 
+	// Trigger transcription pipeline in AI service (non-blocking)
+	go triggerTranscription(cfg, pool, callSID, agentID, localPath)
+
 	// Delete from Twilio
 	client := twilio.NewRestClientWithParams(twilio.ClientParams{
 		Username: accountSID,
@@ -864,4 +868,50 @@ func downloadAndStoreRecording(pool *pgxpool.Pool, cfg *config.Config, agentID, 
 	} else {
 		slog.Info("recording downloaded and deleted from Twilio", "recording_sid", recordingSID, "local_path", localPath)
 	}
+}
+
+// triggerTranscription POSTs to the AI service to start the transcription pipeline.
+// Non-fatal: logs errors but does not block the recording cleanup.
+func triggerTranscription(cfg *config.Config, pool *pgxpool.Pool, callSID, agentID, localPath string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Look up call_id from call_logs
+	var callID string
+	err := pool.QueryRow(ctx,
+		`SELECT id::text FROM call_logs WHERE twilio_sid = $1`, callSID,
+	).Scan(&callID)
+	if err != nil {
+		slog.Warn("triggerTranscription: call_id lookup failed", "twilio_sid", callSID, "error", err)
+		return
+	}
+
+	payload, _ := json.Marshal(map[string]string{
+		"call_id":    callID,
+		"agent_id":   agentID,
+		"local_path": localPath,
+	})
+
+	req, err := http.NewRequestWithContext(ctx, "POST", cfg.AIServiceURL+"/ai/calls/process-recording", bytes.NewReader(payload))
+	if err != nil {
+		slog.Warn("triggerTranscription: request build failed", "error", err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-AI-Service-Secret", cfg.AIServiceSecret)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		slog.Warn("triggerTranscription: request failed", "error", err, "call_id", callID)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		slog.Warn("triggerTranscription: AI service error", "status", resp.StatusCode, "body", string(body), "call_id", callID)
+		return
+	}
+
+	slog.Info("transcription triggered", "call_id", callID)
 }
