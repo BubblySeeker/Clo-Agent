@@ -274,6 +274,55 @@ func xmlEscape(s string) string {
 	return buf.String()
 }
 
+// ProxyRecording streams the recording MP3 file to the client.
+// GET /api/calls/{id}/recording (Protected - Clerk JWT)
+func ProxyRecording(pool *pgxpool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		agentID := middleware.AgentUUIDFromContext(r.Context())
+		if agentID == "" {
+			respondError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+
+		callID := chi.URLParam(r, "id")
+
+		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "database error")
+			return
+		}
+		defer tx.Rollback(r.Context())
+
+		var localPath *string
+		err = tx.QueryRow(r.Context(),
+			`SELECT local_recording_path FROM call_logs WHERE id = $1`, callID,
+		).Scan(&localPath)
+		if err != nil || localPath == nil || *localPath == "" {
+			respondError(w, http.StatusNotFound, "recording not found")
+			return
+		}
+		tx.Commit(r.Context())
+
+		// Open file and serve with Range header support
+		file, err := os.Open(*localPath)
+		if err != nil {
+			slog.Error("proxy recording: file open failed", "path", *localPath, "error", err)
+			respondError(w, http.StatusNotFound, "recording file not found")
+			return
+		}
+		defer file.Close()
+
+		stat, err := file.Stat()
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "file stat error")
+			return
+		}
+
+		w.Header().Set("Content-Type", "audio/mpeg")
+		http.ServeContent(w, r, stat.Name(), stat.ModTime(), file)
+	}
+}
+
 // ListCallLogs returns paginated call history.
 // GET /api/calls
 func ListCallLogs(pool *pgxpool.Pool) http.HandlerFunc {
@@ -329,7 +378,8 @@ func ListCallLogs(pool *pgxpool.Pool) http.HandlerFunc {
 		dataSQL := fmt.Sprintf(
 			`SELECT cl.id, cl.twilio_sid, cl.contact_id, cl.from_number, cl.to_number,
 			        cl.direction, cl.status, cl.duration, cl.started_at, cl.ended_at, cl.created_at,
-			        COALESCE(c.first_name || ' ' || c.last_name, '') as contact_name
+			        COALESCE(c.first_name || ' ' || c.last_name, '') as contact_name,
+			        cl.recording_sid, cl.recording_duration, cl.local_recording_path
 			 FROM call_logs cl
 			 LEFT JOIN contacts c ON c.id = cl.contact_id
 			 WHERE %s
@@ -346,31 +396,36 @@ func ListCallLogs(pool *pgxpool.Pool) http.HandlerFunc {
 		defer rows.Close()
 
 		type CallLog struct {
-			ID          string     `json:"id"`
-			TwilioSID   *string    `json:"twilio_sid"`
-			ContactID   *string    `json:"contact_id"`
-			FromNumber  string     `json:"from_number"`
-			ToNumber    string     `json:"to_number"`
-			Direction   string     `json:"direction"`
-			Status      string     `json:"status"`
-			Duration    int        `json:"duration"`
-			StartedAt   time.Time  `json:"started_at"`
-			EndedAt     *time.Time `json:"ended_at"`
-			CreatedAt   time.Time  `json:"created_at"`
-			ContactName string     `json:"contact_name"`
+			ID                string     `json:"id"`
+			TwilioSID         *string    `json:"twilio_sid"`
+			ContactID         *string    `json:"contact_id"`
+			FromNumber        string     `json:"from_number"`
+			ToNumber          string     `json:"to_number"`
+			Direction         string     `json:"direction"`
+			Status            string     `json:"status"`
+			Duration          int        `json:"duration"`
+			StartedAt         time.Time  `json:"started_at"`
+			EndedAt           *time.Time `json:"ended_at"`
+			CreatedAt         time.Time  `json:"created_at"`
+			ContactName       string     `json:"contact_name"`
+			RecordingSID      *string    `json:"recording_sid"`
+			RecordingDuration int        `json:"recording_duration"`
+			HasRecording      bool       `json:"has_recording"`
 		}
 
 		var calls []CallLog
 		for rows.Next() {
 			var cl CallLog
+			var localPath *string
 			err := rows.Scan(
 				&cl.ID, &cl.TwilioSID, &cl.ContactID, &cl.FromNumber, &cl.ToNumber,
 				&cl.Direction, &cl.Status, &cl.Duration, &cl.StartedAt, &cl.EndedAt, &cl.CreatedAt,
-				&cl.ContactName,
+				&cl.ContactName, &cl.RecordingSID, &cl.RecordingDuration, &localPath,
 			)
 			if err != nil {
 				continue
 			}
+			cl.HasRecording = cl.RecordingSID != nil && localPath != nil && *localPath != ""
 			calls = append(calls, cl)
 		}
 
@@ -407,25 +462,30 @@ func GetCallLog(pool *pgxpool.Pool) http.HandlerFunc {
 		defer tx.Rollback(r.Context())
 
 		type CallLog struct {
-			ID          string     `json:"id"`
-			TwilioSID   *string    `json:"twilio_sid"`
-			ContactID   *string    `json:"contact_id"`
-			FromNumber  string     `json:"from_number"`
-			ToNumber    string     `json:"to_number"`
-			Direction   string     `json:"direction"`
-			Status      string     `json:"status"`
-			Duration    int        `json:"duration"`
-			StartedAt   time.Time  `json:"started_at"`
-			EndedAt     *time.Time `json:"ended_at"`
-			CreatedAt   time.Time  `json:"created_at"`
-			ContactName string     `json:"contact_name"`
+			ID                string     `json:"id"`
+			TwilioSID         *string    `json:"twilio_sid"`
+			ContactID         *string    `json:"contact_id"`
+			FromNumber        string     `json:"from_number"`
+			ToNumber          string     `json:"to_number"`
+			Direction         string     `json:"direction"`
+			Status            string     `json:"status"`
+			Duration          int        `json:"duration"`
+			StartedAt         time.Time  `json:"started_at"`
+			EndedAt           *time.Time `json:"ended_at"`
+			CreatedAt         time.Time  `json:"created_at"`
+			ContactName       string     `json:"contact_name"`
+			RecordingSID      *string    `json:"recording_sid"`
+			RecordingDuration int        `json:"recording_duration"`
+			HasRecording      bool       `json:"has_recording"`
 		}
 
 		var cl CallLog
+		var localPath *string
 		err = tx.QueryRow(r.Context(),
 			`SELECT cl.id, cl.twilio_sid, cl.contact_id, cl.from_number, cl.to_number,
 			        cl.direction, cl.status, cl.duration, cl.started_at, cl.ended_at, cl.created_at,
-			        COALESCE(c.first_name || ' ' || c.last_name, '') as contact_name
+			        COALESCE(c.first_name || ' ' || c.last_name, '') as contact_name,
+			        cl.recording_sid, cl.recording_duration, cl.local_recording_path
 			 FROM call_logs cl
 			 LEFT JOIN contacts c ON c.id = cl.contact_id
 			 WHERE cl.id = $1`,
@@ -433,12 +493,13 @@ func GetCallLog(pool *pgxpool.Pool) http.HandlerFunc {
 		).Scan(
 			&cl.ID, &cl.TwilioSID, &cl.ContactID, &cl.FromNumber, &cl.ToNumber,
 			&cl.Direction, &cl.Status, &cl.Duration, &cl.StartedAt, &cl.EndedAt, &cl.CreatedAt,
-			&cl.ContactName,
+			&cl.ContactName, &cl.RecordingSID, &cl.RecordingDuration, &localPath,
 		)
 		if err != nil {
 			respondError(w, http.StatusNotFound, "call not found")
 			return
 		}
+		cl.HasRecording = cl.RecordingSID != nil && localPath != nil && *localPath != ""
 
 		tx.Commit(r.Context())
 		respondJSON(w, http.StatusOK, cl)
