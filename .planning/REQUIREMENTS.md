@@ -7,24 +7,24 @@
 
 ### Contact Resolution Protocol
 
-- [ ] **RES-01**: AI always calls search_contacts before using a contact_id in any other tool — never guesses or fabricates UUIDs
-- [ ] **RES-02**: AI splits multi-word name references into searchable terms (e.g. "Rohan Batre" → search query that matches first_name="Rohan" AND last_name="Batre")
-- [ ] **RES-03**: AI resolves recency references ("my last contact", "most recent contact") by searching with limit=1 sorted by created_at DESC
-- [ ] **RES-04**: AI resolves partial name references ("email Rohan") by searching the partial name and selecting the best match
-- [ ] **RES-05**: AI presents ranked candidates when search returns multiple matches — shows top 3 with name, email, and source so user can pick
-- [ ] **RES-06**: AI handles zero results gracefully — tells user no match was found and suggests checking the name spelling
+- [x] **RES-01**: AI always calls search_contacts before using a contact_id in any other tool — never guesses or fabricates UUIDs
+- [x] **RES-02**: AI splits multi-word name references into searchable terms (e.g. "Rohan Batre" → search query that matches first_name="Rohan" AND last_name="Batre")
+- [x] **RES-03**: AI resolves recency references ("my last contact", "most recent contact") by searching with limit=1 sorted by created_at DESC
+- [x] **RES-04**: AI resolves partial name references ("email Rohan") by searching the partial name and selecting the best match
+- [x] **RES-05**: AI presents ranked candidates when search returns multiple matches — shows top 3 with name, email, and source so user can pick
+- [x] **RES-06**: AI handles zero results gracefully — tells user no match was found and suggests checking the name spelling
 
 ### Context Awareness
 
 - [ ] **CTX-01**: AI resolves pronoun references ("email him", "call her") using the current conversation's contact context or most recently discussed contact
-- [ ] **CTX-02**: AI skips search_contacts when conversation is already contact-scoped (contact_id pre-loaded) and uses the known UUID directly
-- [ ] **CTX-03**: AI uses contact context from earlier in the conversation (e.g. if user searched for "Rohan" 2 messages ago, "create a deal for him" resolves to Rohan)
+- [x] **CTX-02**: AI skips search_contacts when conversation is already contact-scoped (contact_id pre-loaded) and uses the known UUID directly
+- [x] **CTX-03**: AI uses contact context from earlier in the conversation (e.g. if user searched for "Rohan" 2 messages ago, "create a deal for him" resolves to Rohan)
 
 ### Safety & Compatibility
 
-- [ ] **SAFE-01**: All existing AI interactions (deals, tasks, activities, morning briefing) continue working without regression
-- [ ] **SAFE-02**: Contact resolution adds at most 1 extra tool round — stays within the 5-round budget for typical operations
-- [ ] **SAFE-03**: System prompt changes are structured with XML tags and placed near the top for reliable Haiku 4.5 instruction-following
+- [x] **SAFE-01**: All existing AI interactions (deals, tasks, activities, morning briefing) continue working without regression
+- [x] **SAFE-02**: Contact resolution adds at most 1 extra tool round — stays within the 5-round budget for typical operations
+- [x] **SAFE-03**: System prompt changes are structured with XML tags and placed near the top for reliable Haiku 4.5 instruction-following
 
 ## v2 Requirements
 
@@ -49,18 +49,18 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| RES-01 | Phase 1 | Pending |
-| RES-02 | Phase 1 | Pending |
-| RES-03 | Phase 1 | Pending |
-| RES-04 | Phase 1 | Pending |
-| RES-05 | Phase 1 | Pending |
-| RES-06 | Phase 1 | Pending |
+| RES-01 | Phase 1 | Complete |
+| RES-02 | Phase 1 | Complete |
+| RES-03 | Phase 1 | Complete |
+| RES-04 | Phase 1 | Complete |
+| RES-05 | Phase 1 | Complete |
+| RES-06 | Phase 1 | Complete |
 | CTX-01 | Phase 2 | Pending |
-| CTX-02 | Phase 1 | Pending |
-| CTX-03 | Phase 1 | Pending |
-| SAFE-01 | Phase 1 | Pending |
-| SAFE-02 | Phase 1 | Pending |
-| SAFE-03 | Phase 1 | Pending |
+| CTX-02 | Phase 1 | Complete |
+| CTX-03 | Phase 1 | Complete |
+| SAFE-01 | Phase 1 | Complete |
+| SAFE-02 | Phase 1 | Complete |
+| SAFE-03 | Phase 1 | Complete |
 
 **Coverage:**
 - v1 requirements: 12 total

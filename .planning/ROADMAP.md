@@ -30,7 +30,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans:** 1 plan
 
 Plans:
-- [ ] 01-01-PLAN.md — Add contact resolution protocol to system prompt and sharpen search_contacts tool description
+- [x] 01-01-PLAN.md — Add contact resolution protocol to system prompt and sharpen search_contacts tool description
 
 ### Phase 2: Context Awareness and Hardening
 **Goal**: The AI resolves pronoun references ("follow up with him") using conversation context, and any edge cases exposed by Phase 1 real-world use are addressed
