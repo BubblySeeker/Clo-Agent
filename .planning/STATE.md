@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Twilio Voice Calling
 status: executing
-stopped_at: Completed 06-02-PLAN.md
+stopped_at: Completed 07-01-PLAN.md
 last_updated: "2026-03-24T23:36:31.667Z"
-last_activity: "2026-03-24 — Completed 06-02 (Frontend & AI Integration: Transcript Viewer, Action Cards, AI Tools)"
+last_activity: "2026-03-24 — Completed 07-01 (Backend Call Outcome, Whisper, and AMD)"
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 10
-  completed_plans: 7
-  percent: 60
+  completed_plans: 8
+  percent: 70
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-23)
 
 ## Current Position
 
-Phase: 6 of 8 (AI Transcription & Intelligence) -- COMPLETE
-Plan: 2 of 2 in current phase -- COMPLETE
-Status: Phase 6 Complete
-Last activity: 2026-03-24 — Completed 06-02 (Frontend & AI Integration: Transcript Viewer, Action Cards, AI Tools)
+Phase: 7 of 8 (Frontend Call Experience)
+Plan: 1 of 2 in current phase -- COMPLETE
+Status: Executing Phase 7
+Last activity: 2026-03-24 — Completed 07-01 (Backend Call Outcome, Whisper, and AMD)
 
-Progress: [██████░░░░] 60%
+Progress: [████████░░] 70%
 
 ## Performance Metrics
 
@@ -53,6 +53,7 @@ Progress: [██████░░░░] 60%
 
 *Updated after each plan completion*
 | Phase 06 P02 | 5m00s | 3 tasks | 7 files |
+| Phase 07 P01 | 3m00s | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -82,6 +83,9 @@ Recent decisions affecting current work:
 - Non-blocking triggerTranscription as separate goroutine so recording cleanup is not delayed
 - [Phase 06]: TranscriptSection returns null when no transcript found for graceful degradation
 - [Phase 06]: Index-based JSONB array confirm/dismiss for AI actions (not UUID per action)
+- [Phase 07]: SetAsyncAmd takes string "true" not bool in twilio-go SDK v1.30.3
+- [Phase 07]: Whisper queries contact name + deal stage + buyer profile for max agent context
+- [Phase 07]: AMD auto-sets outcome=voicemail via COALESCE to preserve manual overrides
 
 ### Pending Todos
 
@@ -94,6 +98,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-24T23:36:31.665Z
-Stopped at: Completed 06-02-PLAN.md
+Last session: 2026-03-24T23:41:08Z
+Stopped at: Completed 07-01-PLAN.md
 Resume file: None

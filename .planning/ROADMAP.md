@@ -91,7 +91,7 @@ Plans:
   3. AI action suggestion cards (tasks, deal updates, buyer profile updates) appear in call detail with confirm/dismiss buttons that execute real API calls
   4. Agent can tag call outcomes (Connected, Voicemail, No Answer) and the tag persists on the call record
   5. On inbound calls, the agent hears a whisper with the contact's name and key context before being connected; outbound calls detect voicemail automatically
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
 - [ ] 07-01-PLAN.md — Backend: migration (outcome + answered_by), PATCH endpoint, whisper TwiML endpoint, AMD webhook, InitiateCall AMD params
@@ -123,7 +123,7 @@ Phases execute in numeric order: 4 -> 5 -> 6 -> 7 -> 8
 | 4. Core Call Flow | 2/2 | Complete | 2026-03-24 |
 | 5. Recording Infrastructure | 2/2 | Complete   | 2026-03-24 |
 | 6. AI Transcription & Intelligence | 2/2 | Complete   | 2026-03-24 |
-| 7. Frontend Call Experience | 0/2 | Planning complete | - |
+| 7. Frontend Call Experience | 1/2 | In Progress|  |
 | 8. React Native Mobile Dialer | 0/2 | Planning complete | - |
 
 ---
