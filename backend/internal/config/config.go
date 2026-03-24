@@ -3,6 +3,7 @@ package config
 import (
 	"bufio"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 )
@@ -48,6 +49,7 @@ type Config struct {
 	GoogleClientSecret string
 	GoogleRedirectURI  string
 	FrontendURL        string
+	WebhookBaseURL     string
 }
 
 // Load reads configuration from environment variables (and a .env file if present)
@@ -67,6 +69,7 @@ func Load() (*Config, error) {
 		GoogleClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
 		GoogleRedirectURI:  os.Getenv("GOOGLE_REDIRECT_URI"),
 		FrontendURL:        os.Getenv("FRONTEND_URL"),
+		WebhookBaseURL:     os.Getenv("WEBHOOK_BASE_URL"),
 	}
 
 	if cfg.AIServiceURL == "" {
@@ -82,6 +85,10 @@ func Load() (*Config, error) {
 	}
 	if cfg.FrontendURL == "" {
 		cfg.FrontendURL = "http://localhost:3000"
+	}
+
+	if cfg.WebhookBaseURL == "" {
+		slog.Warn("WEBHOOK_BASE_URL not set — Twilio voice webhooks will not work")
 	}
 
 	if cfg.DatabaseURL == "" {
