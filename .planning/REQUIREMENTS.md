@@ -34,9 +34,9 @@
 
 ### Frontend
 
-- [ ] **FE-01**: Agent can view call transcripts with speaker labels in the communication page
-- [ ] **FE-02**: Agent can play call recordings with an audio player in call detail view
-- [ ] **FE-03**: AI action suggestion cards appear in call detail with confirm/dismiss buttons
+- [x] **FE-01**: Agent can view call transcripts with speaker labels in the communication page
+- [x] **FE-02**: Agent can play call recordings with an audio player in call detail view
+- [x] **FE-03**: AI action suggestion cards appear in call detail with confirm/dismiss buttons
 - [x] **FE-04**: Agent can tag call outcomes (Connected, Voicemail, No Answer)
 - [x] **FE-05**: Inbound calls include a whisper (agent hears contact name and key context before being connected)
 - [x] **FE-06**: Outbound calls detect voicemail automatically (MachineDetection)
@@ -94,9 +94,9 @@
 | AI-04 | Phase 6 | Complete |
 | AI-05 | Phase 6 | Complete |
 | AI-06 | Phase 6 | Complete |
-| FE-01 | Phase 7 | Pending |
-| FE-02 | Phase 7 | Pending |
-| FE-03 | Phase 7 | Pending |
+| FE-01 | Phase 7 | Complete |
+| FE-02 | Phase 7 | Complete |
+| FE-03 | Phase 7 | Complete |
 | FE-04 | Phase 7 | Complete |
 | FE-05 | Phase 7 | Complete |
 | FE-06 | Phase 7 | Complete |

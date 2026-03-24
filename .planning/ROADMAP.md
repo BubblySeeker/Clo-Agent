@@ -29,7 +29,7 @@ Build end-to-end voice calling where the agent makes/receives calls through Twil
 - [x] **Phase 4: Core Call Flow** - Fix broken call infrastructure; agent can make and receive real calls
 - [x] **Phase 5: Recording Infrastructure** - Calls are recorded, stored, and playable; credentials encrypted (completed 2026-03-24)
 - [x] **Phase 6: AI Transcription & Intelligence** - Recordings auto-transcribed, AI extracts summaries and CRM actions (completed 2026-03-24)
-- [ ] **Phase 7: Frontend Call Experience** - Full call lifecycle visible in web UI with AI action cards and inbound intelligence
+- [x] **Phase 7: Frontend Call Experience** - Full call lifecycle visible in web UI with AI action cards and inbound intelligence (completed 2026-03-24)
 - [ ] **Phase 8: React Native Mobile Dialer** - Thin mobile app for calling and viewing call history
 
 ## Phase Details
@@ -91,7 +91,7 @@ Plans:
   3. AI action suggestion cards (tasks, deal updates, buyer profile updates) appear in call detail with confirm/dismiss buttons that execute real API calls
   4. Agent can tag call outcomes (Connected, Voicemail, No Answer) and the tag persists on the call record
   5. On inbound calls, the agent hears a whisper with the contact's name and key context before being connected; outbound calls detect voicemail automatically
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [ ] 07-01-PLAN.md — Backend: migration (outcome + answered_by), PATCH endpoint, whisper TwiML endpoint, AMD webhook, InitiateCall AMD params
@@ -123,7 +123,7 @@ Phases execute in numeric order: 4 -> 5 -> 6 -> 7 -> 8
 | 4. Core Call Flow | 2/2 | Complete | 2026-03-24 |
 | 5. Recording Infrastructure | 2/2 | Complete   | 2026-03-24 |
 | 6. AI Transcription & Intelligence | 2/2 | Complete   | 2026-03-24 |
-| 7. Frontend Call Experience | 1/2 | In Progress|  |
+| 7. Frontend Call Experience | 2/2 | Complete   | 2026-03-24 |
 | 8. React Native Mobile Dialer | 0/2 | Planning complete | - |
 
 ---
