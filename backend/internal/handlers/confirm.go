@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
 
 	"crm-api/internal/config"
 	"crm-api/internal/middleware"
@@ -40,6 +41,7 @@ func ConfirmToolAction(cfg *config.Config) http.HandlerFunc {
 		}
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-AI-Service-Secret", cfg.AIServiceSecret)
+		req.Header.Set("X-Request-ID", chimiddleware.GetReqID(r.Context()))
 
 		client := &http.Client{Timeout: 30 * time.Second}
 		resp, err := client.Do(req)

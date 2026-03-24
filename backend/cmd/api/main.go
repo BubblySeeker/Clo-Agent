@@ -97,7 +97,7 @@ func run() error {
 	// Global middleware stack
 	r.Use(chimiddleware.RequestID)
 	r.Use(chimiddleware.RealIP)
-	r.Use(chimiddleware.Logger)
+	r.Use(middleware.StructuredLogger())
 	r.Use(chimiddleware.Recoverer)
 	r.Use(chimiddleware.Compress(5))
 	r.Use(middleware.CORSHandler([]string{cfg.FrontendURL}))

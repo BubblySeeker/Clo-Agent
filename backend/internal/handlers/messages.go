@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -136,6 +137,7 @@ func SendMessage(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 		}
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-AI-Service-Secret", cfg.AIServiceSecret)
+		req.Header.Set("X-Request-ID", chimiddleware.GetReqID(r.Context()))
 
 		aiClient := &http.Client{Timeout: 5 * time.Minute}
 		resp, err := aiClient.Do(req)
