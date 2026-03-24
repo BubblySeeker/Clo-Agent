@@ -48,6 +48,7 @@ type Config struct {
 	GoogleClientSecret string
 	GoogleRedirectURI  string
 	FrontendURL        string
+	EncryptionKey      string
 }
 
 // Load reads configuration from environment variables (and a .env file if present)
@@ -67,6 +68,7 @@ func Load() (*Config, error) {
 		GoogleClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
 		GoogleRedirectURI:  os.Getenv("GOOGLE_REDIRECT_URI"),
 		FrontendURL:        os.Getenv("FRONTEND_URL"),
+		EncryptionKey:      os.Getenv("ENCRYPTION_KEY"),
 	}
 
 	if cfg.AIServiceURL == "" {
@@ -90,6 +92,10 @@ func Load() (*Config, error) {
 
 	if cfg.ClerkSecretKey == "" {
 		return nil, fmt.Errorf("CLERK_SECRET_KEY environment variable is required")
+	}
+
+	if cfg.AIServiceSecret == "" {
+		return nil, fmt.Errorf("AI_SERVICE_SECRET environment variable is required")
 	}
 
 	return cfg, nil

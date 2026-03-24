@@ -15,6 +15,7 @@ import {
 import { Plus, Search, Send, Trash2, Sparkles, User, Loader2, Check, XCircle } from "lucide-react";
 import { type ChatMessage } from "@/store/ui-store";
 import { toolLabel, confirmLabel, formatPreview } from "@/lib/ai-chat-helpers";
+import MessageContent from "@/components/shared/MessageContent";
 
 const suggestedPrompts = [
   "Who hasn't heard from me in 2 weeks?",
@@ -465,17 +466,21 @@ export default function ChatPage() {
                         }`}
                         style={msg.role === "user" ? { backgroundColor: "#0EA5E9" } : {}}
                       >
-                        {msg.content || (
-                          <span className="flex items-center gap-1">
-                            {[0, 1, 2].map((i) => (
-                              <span
-                                key={i}
-                                className="w-2 h-2 rounded-full bg-gray-400 animate-bounce"
-                                style={{ animationDelay: `${i * 0.15}s` }}
-                              />
-                            ))}
-                          </span>
-                        )}
+                        {msg.content
+                          ? msg.role === "assistant"
+                            ? <MessageContent content={msg.content} isStreaming={!!msg.isStreaming} />
+                            : msg.content
+                          : (
+                            <span className="flex items-center gap-1">
+                              {[0, 1, 2].map((i) => (
+                                <span
+                                  key={i}
+                                  className="w-2 h-2 rounded-full bg-gray-400 animate-bounce"
+                                  style={{ animationDelay: `${i * 0.15}s` }}
+                                />
+                              ))}
+                            </span>
+                          )}
                         {msg.isStreaming && msg.content && (
                           <span className="inline-block w-1 h-3 ml-0.5 bg-gray-400 animate-pulse rounded-sm align-middle" />
                         )}

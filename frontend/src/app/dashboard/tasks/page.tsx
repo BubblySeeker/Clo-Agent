@@ -103,7 +103,7 @@ export default function TasksPage() {
   const [newPriority, setNewPriority] = useState<"high" | "medium" | "low">("medium");
   const [newDueDate, setNewDueDate] = useState("");
 
-  const { data: tasksData } = useQuery({
+  const { data: tasksData, isError: tasksError, refetch: refetchTasks } = useQuery({
     queryKey: ["tasks", filter],
     queryFn: async () => {
       const token = await getToken();
@@ -202,6 +202,17 @@ export default function TasksPage() {
       setNewDueDate("");
     },
   });
+
+  if (tasksError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full min-h-[400px] gap-4 p-6 text-center">
+        <p className="text-gray-600 font-medium">Failed to load tasks</p>
+        <button onClick={() => refetchTasks()} className="px-4 py-2 rounded-xl text-white text-sm font-semibold" style={{ backgroundColor: "#0EA5E9" }}>
+          Try again
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6">

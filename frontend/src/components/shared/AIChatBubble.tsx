@@ -13,6 +13,8 @@ import {
 } from "@/lib/api/conversations";
 import { useUIStore } from "@/store/ui-store";
 import { toolLabel, confirmLabel, formatPreview } from "@/lib/ai-chat-helpers";
+import MessageContent from "./MessageContent";
+import CitationBadge from "@/components/shared/CitationBadge";
 
 export default function AIChatBubble() {
   const { getToken } = useAuth();
@@ -284,7 +286,9 @@ export default function AIChatBubble() {
                 }`}
                 style={msg.role === "user" ? { backgroundColor: "#0EA5E9" } : {}}
               >
-                {msg.content}
+                {msg.role === "assistant"
+                  ? <MessageContent content={msg.content} isStreaming={!!msg.isStreaming} compact />
+                  : msg.content}
                 {msg.isStreaming && !msg.confirmationData && (
                   <span className="inline-block w-1 h-3 ml-0.5 bg-gray-400 animate-pulse rounded-sm" />
                 )}

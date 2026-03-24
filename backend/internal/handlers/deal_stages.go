@@ -22,7 +22,7 @@ func ListDealStages(pool *pgxpool.Pool) http.HandlerFunc {
 		// Use a short timeout to avoid blocking.
 		rows, err := pool.Query(ctx, `SELECT id, name, position, color FROM deal_stages ORDER BY position ASC`)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "query error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "query error", ErrCodeDatabase)
 			return
 		}
 		defer rows.Close()
@@ -31,7 +31,7 @@ func ListDealStages(pool *pgxpool.Pool) http.HandlerFunc {
 		for rows.Next() {
 			var s DealStage
 			if err := rows.Scan(&s.ID, &s.Name, &s.Position, &s.Color); err != nil {
-				respondError(w, http.StatusInternalServerError, "scan error")
+				respondErrorWithCode(w, http.StatusInternalServerError, "scan error", ErrCodeDatabase)
 				return
 			}
 			stages = append(stages, s)

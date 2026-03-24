@@ -3,22 +3,17 @@ AI profile generation routes.
 
 POST /ai/profiles/generate — generate a 3-5 sentence agent briefing for a contact
 """
-from fastapi import APIRouter, HTTPException, Header, Depends
+from fastapi import APIRouter, HTTPException, Depends
 
 import anthropic
 import psycopg2.extras
 from pydantic import BaseModel
 
-from app.config import AI_SERVICE_SECRET, ANTHROPIC_API_KEY, ANTHROPIC_MODEL
+from app.config import ANTHROPIC_API_KEY, ANTHROPIC_MODEL
 from app.database import get_conn, run_query
+from app.routes import verify_secret
 
 router = APIRouter(prefix="/ai")
-
-
-def verify_secret(x_ai_service_secret: str = Header(...)):
-    from app.config import AI_SERVICE_SECRET as SECRET
-    if x_ai_service_secret != SECRET:
-        raise HTTPException(status_code=403, detail="Invalid service secret")
 
 
 class GenerateProfileRequest(BaseModel):

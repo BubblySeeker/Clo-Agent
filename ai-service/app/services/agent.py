@@ -19,7 +19,11 @@ import psycopg2.extras
 
 from app.config import ANTHROPIC_API_KEY, ANTHROPIC_MODEL
 from app.database import get_conn, run_query
-from app.tools import TOOL_DEFINITIONS, READ_TOOLS, WRITE_TOOLS, execute_read_tool, queue_write_tool
+from app.tools import (
+    TOOL_DEFINITIONS, READ_TOOLS, WRITE_TOOLS,
+    execute_read_tool, queue_write_tool,
+    check_gmail_status, get_recent_emails_for_contact,
+)
 
 MODEL = ANTHROPIC_MODEL
 MAX_TOOL_ROUNDS = 5  # safety limit
@@ -100,7 +104,25 @@ def _load_contact_context(contact_id: str, agent_id: str) -> str:
             for a in activities:
                 lines.append(f"  - [{a['type']}] {a['body']} ({a['created_at'].strftime('%b %d')})")
 
+        # Recent emails with this contact
+        emails = get_recent_emails_for_contact(contact_id, agent_id, limit=5)
+        if emails:
+            lines.append("Recent Emails:")
+            for e in emails:
+                direction = "Sent" if e.get("is_outbound") else "Received"
+                date_str = e["gmail_date"].strftime("%b %d") if e.get("gmail_date") else "?"
+                lines.append(f"  - [{direction}] {e.get('subject', '(no subject)')} ({date_str})")
+
         return "\n".join(lines)
+
+
+def _count_agent_documents(agent_id: str) -> int:
+    """Count how many ready documents the agent has uploaded."""
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM documents WHERE agent_id = %s AND status = 'ready'", (agent_id,))
+        row = cur.fetchone()
+        return row[0] if row else 0
 
 
 def _save_assistant_message(conversation_id: str, agent_id: str, content: str, tool_calls: list) -> None:
@@ -118,7 +140,7 @@ def _save_assistant_message(conversation_id: str, agent_id: str, content: str, t
 # System prompts
 # ---------------------------------------------------------------------------
 
-def _build_system_prompt(agent_name: str, contact_context: str = "") -> str:
+def _build_system_prompt(agent_name: str, contact_context: str = "", gmail_status: dict | None = None) -> str:
     today = date.today()
     tomorrow = today + timedelta(days=1)
     day_name = today.strftime("%A")  # e.g. "Monday"
@@ -128,7 +150,8 @@ def _build_system_prompt(agent_name: str, contact_context: str = "") -> str:
         f"Today is {day_name}, {today.isoformat()}. Tomorrow is {tomorrow.isoformat()}. "
         "You have full access to their CRM data and can do everything they can do: "
         "search and view contacts, manage buyer profiles, create/edit/delete deals, "
-        "log activities, move deals through pipeline stages, and view analytics.\n\n"
+        "log activities, move deals through pipeline stages, view analytics, "
+        "and search/send emails via Gmail.\n\n"
         "IMPORTANT GUIDELINES:\n"
         "- Be action-oriented. When the user's intent is clear, use your tools immediately — "
         "do NOT ask clarifying questions you can answer yourself.\n"
@@ -143,8 +166,88 @@ def _build_system_prompt(agent_name: str, contact_context: str = "") -> str:
         "- Use your tools to answer questions with real data — never make up numbers.\n"
         "- For destructive actions (deleting contacts or deals), always confirm with the user first "
         "and warn them about what data will be lost.\n"
-        "- Be concise. Skip preamble. Lead with action."
+        "- When asked to draft an email, use the draft_email tool to generate it. "
+        "The user can review and edit before sending.\n"
+        "- Be concise. Skip preamble. Lead with action.\n"
+        "- When you use the search_documents tool and find relevant information, ALWAYS cite your sources "
+        "using this exact format: [Doc: filename, Page X][[chunk:CHUNK_UUID::DOC_UUID]] where CHUNK_UUID is the chunk_id "
+        "and DOC_UUID is the document_id from the search results. The [[chunk:...]] part is a hidden reference — "
+        "include it immediately after the visible citation so the frontend can link to the source passage.\n"
+        "- CRITICAL: The chunk_id and document_id in citations MUST be copied exactly from the search_documents "
+        "tool results. NEVER generate, guess, or fabricate UUIDs. If you cannot find the exact chunk_id for a fact, "
+        "omit the [[chunk:...]] part entirely and just use [Doc: filename, Page X] without the hidden reference. "
+        "A citation with a wrong UUID is worse than no hidden reference at all.\n"
+        "- If multiple documents answer the question, cite all relevant sources.\n"
+        "- If the search returns no relevant results, say so honestly — never make up information from documents.\n"
+        "- ACCURACY RULES for document searches:\n"
+        "  1. Each search result includes a section_heading. Prefer facts from dedicated/primary sections "
+        "(e.g. 'Building Description', 'Parking & Access') over incidental mentions in other sections "
+        "(e.g. floor plan captions, site plan notes).\n"
+        "  2. When multiple chunks give different numbers for the same fact, mention the discrepancy and "
+        "cite both sources so the user can verify. Never silently pick one.\n"
+        "  3. Distinguish between site/land measurements and building measurements — they are different things.\n"
+        "  4. When summarizing an entire document, make multiple search queries to cover different aspects "
+        "rather than relying on a single broad search.\n"
+        "  5. Only state what is explicitly shown or written in the document. If you want to add context "
+        "from general knowledge (e.g. typical building features, market norms), clearly label it as an "
+        "inference: 'Based on typical commercial properties...' or 'While not shown in the document...'. "
+        "Never present inferred details with the same confidence as documented facts.\n"
+        "  6. NEVER do arithmetic on document numbers unless the document itself shows the result. "
+        "For example, if a document says '12 Above Grade / 3 Below Grade', report exactly that — "
+        "do NOT add them together and say '15 floors' or any other computed number. "
+        "Quote the document's own phrasing for numerical facts.\n"
+        "  7. When answering a specific factual question (e.g. 'how many floors?'), you MUST call "
+        "search_documents to find the answer fresh — do NOT rely on previous tool call results "
+        "or conversation context for document facts. Always search again to get the exact wording.\n\n"
+        "RESPONSE FORMATTING:\n"
+        "- Use markdown tables (| col | col |) when presenting comparisons or lists of items with shared fields.\n"
+        "- Use ## and ### headers to separate distinct topics. Never use # (too large for chat).\n"
+        "- Use **Label:** format for key-value pairs (e.g. **Budget:** $500,000).\n"
+        "- Format currency with $ and commas. Always include % for percentages.\n"
+        "- Use bullet lists (-) for 3+ items. Use numbered lists only for ordered sequences.\n"
+        "- ALWAYS use `-` for bullet points, NEVER em-dashes (–) or other dash characters.\n"
+        "- For nested bullet lists, use 2-space indentation. NEVER indent with 4+ spaces "
+        "(markdown treats 4-space indented text as code blocks, which breaks formatting).\n"
+        "- When reporting multiple KPIs, put each on its own line with bold labels.\n"
+        "- For hierarchical structures (ownership chains, entity structures, org charts), "
+        "use nested markdown bullet lists with **bold entity names**. Include ALL entities — "
+        "sponsors, funds, GPs, LPs, SPEs, properties, managers, lenders. "
+        "NEVER use ASCII art or box-drawing characters for diagrams.\n\n"
+        "MORNING BRIEFING:\n"
+        "When the user sends a message like 'brief me', 'morning briefing', 'daily briefing', "
+        "'start my day', 'what do I have today', 'catch me up', or any similar request for a "
+        "day-start summary, respond with a structured morning briefing. To generate it, chain "
+        "these tool calls in order:\n"
+        "  1. get_dashboard_summary — overall pipeline health and metrics\n"
+        "  2. get_overdue_tasks — tasks that are past due and not completed\n"
+        "  3. get_all_activities with limit=10 — what happened recently\n"
+        "  4. list_deals — scan for stale deals (same stage 14+ days) and deals at risk\n"
+        "Format the briefing with these sections:\n"
+        "  ## Good morning! Here's your briefing for {today}\n"
+        "  ### Overview — key metrics from get_dashboard_summary (active deals, pipeline value, "
+        "contacts, activity this week)\n"
+        "  ### Action Items — overdue tasks (from get_overdue_tasks) listed with their due date "
+        "and priority; deals that appear stale (no stage change in 14+ days based on updated_at) "
+        "flagged with the contact name and current stage\n"
+        "  ### Recent Activity — summary of the last 10 activities (calls, emails, notes, showings) "
+        "from get_all_activities, grouped or highlighted by significance\n"
+        "  ### Today's Focus — 2-3 specific, actionable recommendations based on what you found "
+        "(e.g. 'Follow up with Jane Smith — no contact in 9 days', 'Move the Doe deal out of "
+        "Offer stage — it has been 18 days')\n"
+        "Be concise but complete. Each section should be scannable in under 10 seconds. "
+        "If a section has nothing to report (e.g. no overdue tasks), say so briefly and move on.\n"
     )
+
+    # Gmail connection status
+    if gmail_status:
+        if gmail_status.get("connected"):
+            synced = gmail_status.get("last_synced_at")
+            sync_info = f", last synced {synced.strftime('%b %d %H:%M')}" if synced else ""
+            base += f"\n\nGmail: Connected ({gmail_status.get('gmail_address', 'unknown')}{sync_info}). "
+            base += "You can search emails, read threads, draft emails, and send emails."
+        else:
+            base += "\n\nGmail: Not connected. If the user asks about emails, tell them to connect Gmail in Settings first."
+
     return base + contact_context
 
 
@@ -176,7 +279,21 @@ async def run_agent(
             lambda: _load_contact_context(conversation_row["contact_id"], agent_id)
         )
 
-    system = _build_system_prompt(agent_name, contact_context)
+    # Check Gmail connection status for email tool awareness
+    gmail_status = await run_query(lambda: check_gmail_status(agent_id))
+
+    system = _build_system_prompt(agent_name, contact_context, gmail_status)
+
+    # Add document awareness if agent has uploaded documents
+    doc_count = await run_query(lambda: _count_agent_documents(agent_id))
+    if doc_count > 0:
+        system += (
+            f"\n\nYou have access to {doc_count} uploaded document(s). "
+            "Use the search_documents tool when the user asks questions that might be "
+            "answered by their documents (contracts, listings, reports, spreadsheets, etc.). "
+            "Use list_documents to see what's available."
+        )
+
     messages = history + [{"role": "user", "content": user_message}]
 
     tool_calls_log: list = []

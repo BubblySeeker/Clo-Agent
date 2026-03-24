@@ -23,11 +23,15 @@ import {
   Mail,
   StickyNote,
   Plus,
+  FileText,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import AIChatBubble from "@/components/shared/AIChatBubble";
+import CitationViewer from "@/components/shared/CitationViewer";
+import CommandPalette from "@/components/shared/CommandPalette";
+import ErrorBoundary from "@/components/shared/ErrorBoundary";
 import { useUIStore } from "@/store/ui-store";
 import { listAllActivities, type Activity } from "@/lib/api/activities";
 
@@ -42,6 +46,7 @@ const navItems = [
   { icon: CheckSquare,     label: "Tasks",     href: "/dashboard/tasks" },
   { icon: BarChart2,       label: "Reports",   href: "/dashboard/analytics" },
   { icon: Workflow,        label: "Workflows", href: "/dashboard/workflows" },
+  { icon: FileText,        label: "Documents", href: "/dashboard/documents" },
 ];
 
 function activityMeta(type: Activity["type"]): { icon: LucideIcon; bg: string; color: string; label: string } {
@@ -90,6 +95,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [newMenuOpen, setNewMenuOpen] = useState(false);
   const newMenuRef = useRef<HTMLDivElement>(null);
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
+  const [cmdPaletteOpen, setCmdPaletteOpen] = useState(false);
   const { getToken } = useAuth();
 
   // Fetch recent activities for notifications
@@ -125,6 +131,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  // Cmd+K / Ctrl+K opens command palette
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setCmdPaletteOpen((o) => !o);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
   const isActive = (href: string, exact?: boolean) =>
@@ -423,12 +441,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto">
-          {children}
+          <ErrorBoundary>
+            {children}
+          </ErrorBoundary>
         </main>
       </div>
 
       {/* Floating AI chat bubble */}
       <AIChatBubble />
+
+      {/* Citation source viewer (slides in from right) */}
+      <CitationViewer />
+
+      {/* Cmd+K command palette */}
+      <CommandPalette open={cmdPaletteOpen} onClose={() => setCmdPaletteOpen(false)} />
     </div>
   );
 }

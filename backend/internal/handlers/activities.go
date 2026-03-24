@@ -37,7 +37,7 @@ func ListActivities(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -56,7 +56,7 @@ func ListActivities(pool *pgxpool.Pool) http.HandlerFunc {
 			args...,
 		)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "query error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "query error", ErrCodeDatabase)
 			return
 		}
 		defer rows.Close()
@@ -66,7 +66,7 @@ func ListActivities(pool *pgxpool.Pool) http.HandlerFunc {
 			var a Activity
 			if err := rows.Scan(&a.ID, &a.ContactID, &a.DealID, &a.AgentID, &a.Type, &a.Body, &a.CreatedAt,
 				&a.DueDate, &a.Priority, &a.CompletedAt); err != nil {
-				respondError(w, http.StatusInternalServerError, "scan error")
+				respondErrorWithCode(w, http.StatusInternalServerError, "scan error", ErrCodeDatabase)
 				return
 			}
 			activities = append(activities, a)
@@ -88,7 +88,7 @@ func ListAllActivities(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -110,7 +110,7 @@ func ListAllActivities(pool *pgxpool.Pool) http.HandlerFunc {
 			args...,
 		)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "query error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "query error", ErrCodeDatabase)
 			return
 		}
 		defer rows.Close()
@@ -120,7 +120,7 @@ func ListAllActivities(pool *pgxpool.Pool) http.HandlerFunc {
 			var a Activity
 			if err := rows.Scan(&a.ID, &a.ContactID, &a.DealID, &a.AgentID, &a.Type, &a.Body, &a.CreatedAt,
 				&a.DueDate, &a.Priority, &a.CompletedAt, &a.ContactName); err != nil {
-				respondError(w, http.StatusInternalServerError, "scan error")
+				respondErrorWithCode(w, http.StatusInternalServerError, "scan error", ErrCodeDatabase)
 				return
 			}
 			activities = append(activities, a)
@@ -148,18 +148,24 @@ func CreateGeneralActivity(pool *pgxpool.Pool) http.HandlerFunc {
 			Priority  *string `json:"priority"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respondError(w, http.StatusBadRequest, "invalid JSON")
+			respondErrorWithCode(w, http.StatusBadRequest, "invalid JSON", ErrCodeBadRequest)
 			return
 		}
 		validTypes := map[string]bool{"call": true, "email": true, "note": true, "showing": true, "task": true}
 		if !validTypes[body.Type] {
-			respondError(w, http.StatusBadRequest, "type must be one of: call, email, note, showing, task")
+			respondErrorWithCode(w, http.StatusBadRequest, "type must be one of: call, email, note, showing, task", ErrCodeBadRequest)
 			return
+		}
+		if body.Body != nil {
+			if err := validateMaxLen("body", *body.Body, 10000); err != nil {
+				respondErrorWithCode(w, http.StatusBadRequest, err.Error(), ErrCodeBadRequest)
+				return
+			}
 		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -173,7 +179,7 @@ func CreateGeneralActivity(pool *pgxpool.Pool) http.HandlerFunc {
 		).Scan(&a.ID, &a.ContactID, &a.DealID, &a.AgentID, &a.Type, &a.Body, &a.CreatedAt,
 			&a.DueDate, &a.Priority, &a.CompletedAt)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "create failed")
+			respondErrorWithCode(w, http.StatusInternalServerError, "create failed", ErrCodeDatabase)
 			return
 		}
 
@@ -196,18 +202,24 @@ func CreateActivity(pool *pgxpool.Pool) http.HandlerFunc {
 			Priority *string `json:"priority"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respondError(w, http.StatusBadRequest, "invalid JSON")
+			respondErrorWithCode(w, http.StatusBadRequest, "invalid JSON", ErrCodeBadRequest)
 			return
 		}
 		validTypes := map[string]bool{"call": true, "email": true, "note": true, "showing": true, "task": true}
 		if !validTypes[body.Type] {
-			respondError(w, http.StatusBadRequest, "type must be one of: call, email, note, showing, task")
+			respondErrorWithCode(w, http.StatusBadRequest, "type must be one of: call, email, note, showing, task", ErrCodeBadRequest)
 			return
+		}
+		if body.Body != nil {
+			if err := validateMaxLen("body", *body.Body, 10000); err != nil {
+				respondErrorWithCode(w, http.StatusBadRequest, err.Error(), ErrCodeBadRequest)
+				return
+			}
 		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -221,7 +233,7 @@ func CreateActivity(pool *pgxpool.Pool) http.HandlerFunc {
 		).Scan(&a.ID, &a.ContactID, &a.DealID, &a.AgentID, &a.Type, &a.Body, &a.CreatedAt,
 			&a.DueDate, &a.Priority, &a.CompletedAt)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "create failed")
+			respondErrorWithCode(w, http.StatusInternalServerError, "create failed", ErrCodeDatabase)
 			return
 		}
 
@@ -243,13 +255,13 @@ func UpdateActivity(pool *pgxpool.Pool) http.HandlerFunc {
 			CompletedAt *string `json:"completed_at"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respondError(w, http.StatusBadRequest, "invalid JSON")
+			respondErrorWithCode(w, http.StatusBadRequest, "invalid JSON", ErrCodeBadRequest)
 			return
 		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -293,7 +305,7 @@ func UpdateActivity(pool *pgxpool.Pool) http.HandlerFunc {
 		}
 
 		if len(setClauses) == 0 {
-			respondError(w, http.StatusBadRequest, "no fields to update")
+			respondErrorWithCode(w, http.StatusBadRequest, "no fields to update", ErrCodeBadRequest)
 			return
 		}
 
@@ -311,7 +323,7 @@ func UpdateActivity(pool *pgxpool.Pool) http.HandlerFunc {
 			&a.DueDate, &a.Priority, &a.CompletedAt,
 		)
 		if err != nil {
-			respondError(w, http.StatusNotFound, "activity not found")
+			respondErrorWithCode(w, http.StatusNotFound, "activity not found", ErrCodeNotFound)
 			return
 		}
 
@@ -338,7 +350,7 @@ func ListTasks(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -365,7 +377,7 @@ func ListTasks(pool *pgxpool.Pool) http.HandlerFunc {
 			args...,
 		).Scan(&total)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "count error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "count error", ErrCodeDatabase)
 			return
 		}
 
@@ -385,7 +397,7 @@ func ListTasks(pool *pgxpool.Pool) http.HandlerFunc {
 			args...,
 		)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "query error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "query error", ErrCodeDatabase)
 			return
 		}
 		defer rows.Close()
@@ -395,7 +407,7 @@ func ListTasks(pool *pgxpool.Pool) http.HandlerFunc {
 			var a Activity
 			if err := rows.Scan(&a.ID, &a.ContactID, &a.DealID, &a.AgentID, &a.Type, &a.Body, &a.CreatedAt,
 				&a.DueDate, &a.Priority, &a.CompletedAt, &a.ContactName); err != nil {
-				respondError(w, http.StatusInternalServerError, "scan error")
+				respondErrorWithCode(w, http.StatusInternalServerError, "scan error", ErrCodeDatabase)
 				return
 			}
 			tasks = append(tasks, a)

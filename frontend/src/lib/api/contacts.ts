@@ -8,6 +8,8 @@ export interface Contact {
   email: string | null;
   phone: string | null;
   source: string | null;
+  folder_id: string | null;
+  folder_name: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -20,6 +22,7 @@ export interface ContactsResponse {
 export interface ContactFilters {
   search?: string;
   source?: string;
+  folder_id?: string;
   page?: number;
   limit?: number;
 }
@@ -38,12 +41,14 @@ export interface UpdateContactBody {
   email?: string;
   phone?: string;
   source?: string;
+  folder_id?: string | null;
 }
 
 export function listContacts(token: string, filters?: ContactFilters): Promise<ContactsResponse> {
   const params = new URLSearchParams();
   if (filters?.search) params.set("search", filters.search);
   if (filters?.source) params.set("source", filters.source);
+  if (filters?.folder_id) params.set("folder_id", filters.folder_id);
   if (filters?.page) params.set("page", String(filters.page));
   if (filters?.limit) params.set("limit", String(filters.limit));
   const qs = params.toString();

@@ -14,6 +14,7 @@ import (
 	"github.com/clerkinc/clerk-sdk-go/clerk"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/httprate"
 
 	"crm-api/internal/config"
 	"crm-api/internal/database"
@@ -55,6 +56,31 @@ func run() error {
 
 	slog.Info("database connection pool established")
 
+	// Initialise token encryption (optional — if ENCRYPTION_KEY is set)
+	handlers.InitEncryption(cfg.EncryptionKey)
+
+	// -------------------------------------------------------------------------
+	// Recover stuck documents from previous crashes
+	// -------------------------------------------------------------------------
+	{
+		cleanupCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		// Use a transaction with a dummy agent ID to satisfy FORCE RLS.
+		tx, txErr := pool.Begin(cleanupCtx)
+		if txErr == nil {
+			tx.Exec(cleanupCtx, "SET LOCAL app.current_agent_id = '00000000-0000-0000-0000-000000000000'")
+			result, err := tx.Exec(cleanupCtx,
+				`UPDATE documents SET status = 'failed', error_message = 'Processing interrupted by server restart', updated_at = NOW()
+				 WHERE status = 'processing' AND updated_at < NOW() - INTERVAL '10 minutes'`)
+			if err != nil {
+				slog.Error("failed to recover stuck documents", "error", err)
+			} else if result.RowsAffected() > 0 {
+				slog.Info("recovered stuck documents", "count", result.RowsAffected())
+			}
+			tx.Commit(cleanupCtx)
+		}
+	}
+
 	// -------------------------------------------------------------------------
 	// Clerk client
 	// -------------------------------------------------------------------------
@@ -71,10 +97,13 @@ func run() error {
 	// Global middleware stack
 	r.Use(chimiddleware.RequestID)
 	r.Use(chimiddleware.RealIP)
-	r.Use(chimiddleware.Logger)
+	r.Use(middleware.StructuredLogger())
 	r.Use(chimiddleware.Recoverer)
 	r.Use(chimiddleware.Compress(5))
-	r.Use(middleware.CORSHandler())
+	r.Use(middleware.CORSHandler([]string{cfg.FrontendURL}))
+
+	// Global rate limit: 100 requests/min per IP
+	r.Use(httprate.LimitByIP(100, time.Minute))
 
 	// -------------------------------------------------------------------------
 	// Routes
@@ -93,7 +122,7 @@ func run() error {
 
 	// Protected — Clerk JWT + user sync required
 	r.Group(func(r chi.Router) {
-		r.Use(middleware.ClerkAuth(clerkClient))
+		r.Use(middleware.ClerkAuth(clerkClient, cfg.AIServiceSecret))
 		r.Use(middleware.UserSync(pool, clerkClient))
 
 		// Dashboard
@@ -145,14 +174,17 @@ func run() error {
 		r.Delete("/api/properties/{id}", handlers.DeleteProperty(pool))
 		r.Get("/api/properties/{id}/matches", handlers.GetPropertyMatches(pool))
 
-		// Conversations
-		r.Get("/api/ai/conversations", handlers.ListConversations(pool))
-		r.Post("/api/ai/conversations", handlers.CreateConversation(pool))
-		r.Get("/api/ai/conversations/{id}", handlers.GetConversation(pool))
-		r.Delete("/api/ai/conversations/{id}", handlers.DeleteConversation(pool))
-		r.Get("/api/ai/conversations/{id}/messages", handlers.GetMessages(pool))
-		r.Post("/api/ai/conversations/{id}/messages", handlers.SendMessage(pool, cfg))
-		r.Post("/api/ai/conversations/{id}/confirm", handlers.ConfirmToolAction(cfg))
+		// Conversations (stricter rate limit for AI-heavy endpoints)
+		r.Group(func(r chi.Router) {
+			r.Use(httprate.LimitByIP(20, time.Minute))
+			r.Get("/api/ai/conversations", handlers.ListConversations(pool))
+			r.Post("/api/ai/conversations", handlers.CreateConversation(pool))
+			r.Get("/api/ai/conversations/{id}", handlers.GetConversation(pool))
+			r.Delete("/api/ai/conversations/{id}", handlers.DeleteConversation(pool))
+			r.Get("/api/ai/conversations/{id}/messages", handlers.GetMessages(pool))
+			r.Post("/api/ai/conversations/{id}/messages", handlers.SendMessage(pool, cfg))
+			r.Post("/api/ai/conversations/{id}/confirm", handlers.ConfirmToolAction(cfg))
+		})
 
 		// Settings
 		r.Get("/api/settings", handlers.GetSettings(pool))
@@ -181,6 +213,33 @@ func run() error {
 		r.Delete("/api/portal/invite/{token_id}", handlers.RevokePortalInvite(pool))
 		r.Get("/api/portal/settings", handlers.GetPortalSettings(pool))
 		r.Patch("/api/portal/settings", handlers.UpdatePortalSettings(pool))
+
+		// Contact Folders
+		r.Get("/api/contact-folders", handlers.ListContactFolders(pool))
+		r.Post("/api/contact-folders", handlers.CreateContactFolder(pool))
+		r.Patch("/api/contact-folders/{id}", handlers.UpdateContactFolder(pool))
+		r.Delete("/api/contact-folders/{id}", handlers.DeleteContactFolder(pool))
+		r.Post("/api/contact-folders/{id}/contacts", handlers.MoveContactsToFolder(pool))
+		r.Delete("/api/contact-folders/{id}/contacts", handlers.RemoveContactsFromFolder(pool))
+
+		// Document Folders
+		r.Get("/api/document-folders", handlers.ListFolders(pool))
+		r.Post("/api/document-folders", handlers.CreateFolder(pool))
+		r.Patch("/api/document-folders/{id}", handlers.RenameFolder(pool))
+		r.Delete("/api/document-folders/{id}", handlers.DeleteFolder(pool))
+
+		// Documents
+		r.Post("/api/documents", handlers.UploadDocument(pool, cfg))
+		r.Get("/api/documents", handlers.ListDocuments(pool))
+		r.Get("/api/documents/counts", handlers.DocumentCounts(pool))
+		r.Get("/api/documents/{id}", handlers.GetDocument(pool))
+		r.Patch("/api/documents/{id}", handlers.UpdateDocument(pool))
+		r.Delete("/api/documents/{id}", handlers.DeleteDocument(pool))
+		r.Get("/api/documents/{id}/download", handlers.DownloadDocument(pool))
+		r.Get("/api/documents/{id}/preview", handlers.PreviewDocument(pool))
+		r.Post("/api/documents/{id}/extract-property", handlers.ProxyExtractProperty(pool, cfg))
+		r.Get("/api/documents/{id}/chunks", handlers.GetDocumentChunks(pool))
+		r.Get("/api/documents/{id}/chunks/{chunkId}", handlers.GetDocumentChunk(pool))
 
 		// Gmail
 		r.Post("/api/gmail/auth/init", handlers.GmailAuthInit(cfg))

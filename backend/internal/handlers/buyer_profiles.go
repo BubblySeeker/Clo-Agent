@@ -39,7 +39,7 @@ func GetBuyerProfile(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -58,7 +58,7 @@ func GetBuyerProfile(pool *pgxpool.Pool) http.HandlerFunc {
 			&bp.CreatedAt, &bp.UpdatedAt,
 		)
 		if err != nil {
-			respondError(w, http.StatusNotFound, "buyer profile not found")
+			respondErrorWithCode(w, http.StatusNotFound, "buyer profile not found", ErrCodeNotFound)
 			return
 		}
 
@@ -87,13 +87,13 @@ func CreateBuyerProfile(pool *pgxpool.Pool) http.HandlerFunc {
 			Notes             *string  `json:"notes"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respondError(w, http.StatusBadRequest, "invalid JSON")
+			respondErrorWithCode(w, http.StatusBadRequest, "invalid JSON", ErrCodeBadRequest)
 			return
 		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -118,7 +118,7 @@ func CreateBuyerProfile(pool *pgxpool.Pool) http.HandlerFunc {
 			&bp.CreatedAt, &bp.UpdatedAt,
 		)
 		if err != nil {
-			respondError(w, http.StatusConflict, "buyer profile already exists or create failed")
+			respondErrorWithCode(w, http.StatusConflict, "buyer profile already exists or create failed", ErrCodeConflict)
 			return
 		}
 
@@ -134,13 +134,13 @@ func UpdateBuyerProfile(pool *pgxpool.Pool) http.HandlerFunc {
 
 		var body map[string]interface{}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respondError(w, http.StatusBadRequest, "invalid JSON")
+			respondErrorWithCode(w, http.StatusBadRequest, "invalid JSON", ErrCodeBadRequest)
 			return
 		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -173,7 +173,7 @@ func UpdateBuyerProfile(pool *pgxpool.Pool) http.HandlerFunc {
 			&bp.CreatedAt, &bp.UpdatedAt,
 		)
 		if err != nil {
-			respondError(w, http.StatusNotFound, "buyer profile not found")
+			respondErrorWithCode(w, http.StatusNotFound, "buyer profile not found", ErrCodeNotFound)
 			return
 		}
 
