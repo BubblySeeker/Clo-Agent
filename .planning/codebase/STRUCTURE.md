@@ -1,459 +1,333 @@
-# CloAgent — Directory Structure & File Organization
+# Codebase Structure
 
-## Monorepo Layout
+**Analysis Date:** 2026-03-24
 
-```
-Clo-Agent/
-├── .claude/                          # Claude Code project config
-├── .planning/                        # Planning/design documents (this repo)
-│   └── codebase/                     # Architecture & structure docs
-├── .gstack/                          # gstack browsing tool config
-├── backend/                          # Go API server
-├── ai-service/                       # Python FastAPI AI service
-├── frontend/                         # Next.js 14 frontend
-├── docker-compose.yml                # Multi-service orchestration
-├── CLAUDE.md                         # Project reference (instructions)
-├── README.md                         # Project overview
-├── API.md                            # API endpoint documentation
-├── PLAN.md                           # Development plan
-├── design-reference/                 # UI reference (images, old designs)
-├── design-system/                    # Design system assets
-├── docs/                             # Miscellaneous documentation
-└── images/                           # Screenshots, diagrams
-```
-
-## Backend Directory Structure
+## Directory Layout
 
 ```
-backend/
-├── cmd/
-│   └── api/
-│       └── main.go                   # Entry point, router setup, middleware stack
-├── internal/
-│   ├── config/
-│   │   └── config.go                 # Env var loading (DATABASE_URL, CLERK_SECRET_KEY, etc)
-│   ├── database/
-│   │   ├── postgres.go               # pgxpool connection + health check
-│   │   └── rls.go                    # BeginWithRLS transaction wrapper
-│   ├── handlers/                     # 15 handler files, 20+ endpoints
-│   │   ├── contacts.go               # CRUD: ListContacts, CreateContact, GetContact, etc
-│   │   ├── deals.go                  # CRUD: ListDeals, CreateDeal, UpdateDeal, DeleteDeal
-│   │   ├── deal_stages.go            # GET /api/deal-stages (7 seeded stages)
-│   │   ├── activities.go             # CRUD: ListActivities, CreateActivity, UpdateActivity
-│   │   ├── buyer_profiles.go         # CRUD: GetBuyerProfile, CreateBuyerProfile, UpdateBuyerProfile
-│   │   ├── dashboard.go              # GetDashboardSummary, GetDashboardLayout, SaveDashboardLayout
-│   │   ├── analytics.go              # GetPipelineAnalytics, GetActivityAnalytics, GetContactAnalytics
-│   │   ├── ai_profile.go             # GetAIProfile, RegenerateAIProfile (calls Python service)
-│   │   ├── conversations.go          # ListConversations, CreateConversation, GetConversation, DeleteConversation
-│   │   ├── messages.go               # GetMessages, SendMessage (proxy + SSE stream)
-│   │   ├── confirm.go                # ConfirmToolAction (proxy to Python)
-│   │   ├── health.go                 # GET /health
-│   │   └── helpers.go                # respondJSON, respondError utilities
-│   └── middleware/
-│       ├── auth.go                   # ClerkAuth: JWT verification + UserIDFromContext
-│       ├── user_sync.go              # UserSync: auto-create/sync user on first request
-│       └── cors.go                   # CORSHandler: CORS headers
-├── migrations/
-│   ├── 001_init.sql                  # Schema: 10 tables, RLS policies, indexes, seed stages
-│   ├── 002_updates.sql               # Add dashboard_layout JSONB, contact_id nullable
-│   ├── 003_tool_calls.sql            # Add messages.tool_calls JSONB
-│   ├── 004_conversation_title.sql    # Add conversations.title TEXT
-│   └── 005_task_fields.sql           # Add due_date DATE, priority TEXT, completed_at TIMESTAMPTZ
-├── scripts/
-│   └── seed.go                       # Database seeding script (unused in current flow)
-├── Dockerfile                        # Multistage Go build
-├── go.mod                            # Dependencies: chi v5, pgx v5, clerk-sdk-go
-└── go.sum
-```
-
-### Handler File Organization
-
-Each handler file follows the **factory pattern**:
-
-```go
-// contacts.go
-type Contact struct {
-    ID string `json:"id"`
-    // fields...
-}
-
-func ListContacts(pool *pgxpool.Pool) http.HandlerFunc {
-    return func(w http.ResponseWriter, r *http.Request) {
-        // Handler implementation
-    }
-}
-
-func CreateContact(pool *pgxpool.Pool) http.HandlerFunc { /* ... */ }
-func GetContact(pool *pgxpool.Pool) http.HandlerFunc { /* ... */ }
-// etc
-```
-
-**Naming Convention:**
-- Handlers: PascalCase verbs (ListContacts, CreateDeal, UpdateActivity)
-- Structs: PascalCase domain types (Contact, Deal, Activity, BuyerProfile)
-- SQL queries: UPPERCASE keywords, snake_case table/column names
-
-## Frontend Directory Structure
-
-```
-frontend/
-├── src/
-│   ├── app/                          # Next.js App Router
-│   │   ├── layout.tsx                # Root layout (Clerk + Providers)
-│   │   ├── page.tsx                  # Marketing homepage
-│   │   ├── middleware.ts             # Clerk routing middleware
-│   │   ├── sign-in/
-│   │   │   └── [[...sign-in]]/page.tsx      # Clerk sign-in page
-│   │   ├── sign-up/
-│   │   │   └── [[...sign-up]]/page.tsx      # Clerk sign-up page
-│   │   ├── sso-callback/
-│   │   │   └── page.tsx              # OAuth redirect handler
-│   │   ├── (marketing)/              # Marketing layout group
-│   │   │   ├── layout.tsx            # Marketing nav + footer
-│   │   │   ├── about/page.tsx
-│   │   │   ├── features/page.tsx
-│   │   │   ├── pricing/page.tsx
-│   │   │   ├── team/page.tsx
-│   │   │   └── mission/page.tsx
-│   │   ├── dashboard/                # Protected app layout
-│   │   │   ├── layout.tsx            # Top bar nav, notifications, chat bubble
-│   │   │   ├── page.tsx              # Dashboard home (6+ widgets)
-│   │   │   ├── contacts/
-│   │   │   │   ├── page.tsx          # Contact list (search, source filter, pagination)
-│   │   │   │   └── [id]/
-│   │   │   │       └── page.tsx      # Contact detail (5 tabs: overview, activities, deals, buyer profile, AI profile)
-│   │   │   ├── pipeline/
-│   │   │   │   └── page.tsx          # Kanban board (native HTML drag-drop)
-│   │   │   ├── chat/
-│   │   │   │   └── page.tsx          # Full-page AI chat (conversation list, delete, rename)
-│   │   │   ├── activities/
-│   │   │   │   └── page.tsx          # Global activity feed
-│   │   │   ├── analytics/
-│   │   │   │   └── page.tsx          # Charts: pipeline, activities, contacts
-│   │   │   ├── tasks/
-│   │   │   │   └── page.tsx          # Tasks list (due_date, priority, completed_at)
-│   │   │   ├── settings/
-│   │   │   │   └── page.tsx          # Pipeline stages (API), commission (localStorage), Coming Soon sections
-│   │   │   └── workflows/
-│   │   │       └── page.tsx          # Stub: honest "Coming Soon" with template previews
-│   │   └── api/
-│   │       └── generate-image/route.ts  # Unused (image generation stub)
-│   ├── components/
-│   │   ├── shared/
-│   │   │   ├── AIChatBubble.tsx      # Floating chat bubble (global)
-│   │   │   ├── providers.tsx         # TanStack Query + ClerkProvider wrapper
-│   │   │   └── ...
-│   │   ├── ui/                       # shadcn components (20+)
-│   │   │   ├── button.tsx
-│   │   │   ├── card.tsx
-│   │   │   ├── dialog.tsx
-│   │   │   ├── input.tsx
-│   │   │   ├── select.tsx
-│   │   │   ├── tabs.tsx
-│   │   │   ├── table.tsx
-│   │   │   ├── slider.tsx
-│   │   │   └── ... (plus ~12 more)
-│   │   └── marketing/                # Marketing page components
-│   │       ├── LinkButton.tsx
-│   │       ├── sections/
-│   │       │   ├── HeroExplodedView.tsx
-│   │       │   ├── PipelineDemoSection.tsx
-│   │       │   ├── ContactIntelligenceSection.tsx
-│   │       │   ├── LayerMockups.tsx
-│   │       │   ├── LayerCard.tsx
-│   │       │   ├── FinalCTASection.tsx
-│   │       │   ├── SecurityTrustSection.tsx
-│   │       │   ├── MiniMap.tsx
-│   │       │   └── ...
-│   │       └── ...
-│   ├── lib/
-│   │   ├── api/                      # 8 API client modules
-│   │   │   ├── client.ts             # Base fetch wrapper (Bearer token auth)
-│   │   │   ├── contacts.ts           # listContacts, createContact, updateContact, deleteContact
-│   │   │   ├── deals.ts              # listDeals, createDeal, updateDeal, deleteDeal, listDealStages
-│   │   │   ├── activities.ts         # listActivities, createActivity, listAllActivities, updateActivity
-│   │   │   ├── buyer-profiles.ts     # getBuyerProfile, createBuyerProfile, updateBuyerProfile
-│   │   │   ├── conversations.ts      # listConversations, createConversation, getConversation, deleteConversation, getMessages, sendMessage
-│   │   │   ├── dashboard.ts          # getDashboardSummary, getDashboardLayout, saveDashboardLayout
-│   │   │   ├── ai-profiles.ts        # getAIProfile, regenerateAIProfile
-│   │   │   └── analytics.ts          # (implied, not listed but may exist)
-│   │   ├── ai-chat-helpers.ts        # Tool labels, confirmation labels, formatPreview
-│   │   ├── gemini.ts                 # Unused (image generation)
-│   │   └── utils.ts                  # Utility functions
-│   ├── store/
-│   │   └── ui-store.ts               # Zustand: sidebar toggle, chat bubble visibility
-│   ├── globals.css                   # Tailwind imports, custom CSS variables
-│   └── middleware.ts                 # Clerk auth routing
-├── public/
-│   └── ...                           # Static assets
-├── .next/                            # Next.js build output (generated)
-├── node_modules/                     # Dependencies (node_modules, not tracked)
-├── next.config.js                    # Next.js config (API rewrites, etc)
-├── tailwind.config.ts                # Tailwind CSS configuration
-├── tsconfig.json                     # TypeScript config
-├── package.json                      # Dependencies: @clerk/nextjs, @tanstack/react-query, zustand, recharts, etc
-├── package-lock.json
-└── Dockerfile                        # Node build → Next.js server
-```
-
-### API Module Organization
-
-Each API module (`src/lib/api/domain.ts`) follows this pattern:
-
-```typescript
-// contacts.ts
-import { apiRequest } from './client';
-
-export async function listContacts(token: string, params?: {...}): Promise<Contact[]> {
-    return apiRequest<Contact[]>('/contacts', token, { /* options */ });
-}
-
-export async function createContact(token: string, data: {...}): Promise<Contact> {
-    return apiRequest<Contact>('/contacts', token, {
-        method: 'POST',
-        body: JSON.stringify(data)
-    });
-}
-
-// Similar for update, delete, get
-```
-
-**API Client Module:**
-```typescript
-// client.ts
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
-
-export async function apiRequest<T>(
-    path: string,
-    token: string,
-    options?: RequestInit
-): Promise<T> {
-    const res = await fetch(`${BASE}/api${path}`, {
-        ...options,
-        headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-            ...(options?.headers ?? {}),
-        },
-    });
-
-    if (!res.ok) throw new Error(...);
-    if (res.status === 204) return {} as T;
-    return res.json();
-}
-```
-
-**Naming Convention:**
-- Modules: kebab-case (contacts.ts, buyer-profiles.ts, ai-profiles.ts)
-- Functions: camelCase (listContacts, createContact, getBuyerProfile)
-- Types: PascalCase (Contact, BuyerProfile, Activity)
-
-## AI Service Directory Structure
-
-```
-ai-service/
-├── app/
-│   ├── __init__.py
-│   ├── main.py                       # FastAPI app entry, route includes
-│   ├── config.py                     # Config: DATABASE_URL, ANTHROPIC_API_KEY, etc
-│   ├── database.py                   # psycopg2 ThreadedConnectionPool, get_conn, run_query
-│   ├── tools.py                      # 23 tool definitions + execution (Read + Write)
-│   ├── routes/
-│   │   ├── __init__.py
-│   │   ├── health.py                 # GET /health
-│   │   ├── chat.py                   # POST /api/messages (stream SSE), POST /api/confirm
-│   │   └── profiles.py               # POST /api/profiles/generate
-│   ├── services/
-│   │   ├── __init__.py
-│   │   └── agent.py                  # Agentic loop: load history, build prompt, Claude call, SSE stream
-│   └── models/
-│       └── __init__.py               # (empty, placeholder for future Pydantic models)
-├── main.py                           # uvicorn entry point
-├── requirements.txt                  # Dependencies: fastapi, psycopg2, anthropic
-├── Dockerfile
-└── .dockerignore
-```
-
-### Tools Organization (tools.py)
-
-```python
-# tools.py
-
-TOOL_DEFINITIONS = [
-    # 11 read tools + 12 write tools
-    {
-        "name": "get_dashboard_summary",
-        "description": "...",
-        "input_schema": {...}
-    },
-    # ... 22 more
-]
-
-READ_TOOLS = {"get_dashboard_summary", "search_contacts", ...}  # 11 tools
-WRITE_TOOLS = {"create_contact", "update_contact", ...}  # 12 tools
-
-def execute_read_tool(tool_name: str, agent_id: str, args: dict) -> dict:
-    """Execute read tool immediately, return result."""
-    # Dispatch to specific executor function
-
-def queue_write_tool(tool_name: str, agent_id: str, args: dict) -> dict:
-    """Queue write tool, return confirmation payload."""
-    # Store in pending_actions, return preview
-```
-
-## Database Schema File Organization
-
-```
-backend/migrations/
-├── 001_init.sql                      # Core schema (9.9 KB)
-│   ├── CREATE TABLE users
-│   ├── CREATE TABLE contacts
-│   ├── CREATE TABLE buyer_profiles
-│   ├── CREATE TABLE deal_stages (7 seed rows)
-│   ├── CREATE TABLE deals
-│   ├── CREATE TABLE activities
-│   ├── CREATE TABLE conversations
-│   ├── CREATE TABLE messages
-│   ├── CREATE TABLE ai_profiles
-│   ├── CREATE TABLE embeddings
-│   ├── RLS policies (one per agent-scoped table)
-│   ├── Indexes (contacts, deals, activities, etc)
-│   └── Triggers (updated_at timestamp)
-├── 002_updates.sql
-│   ├── ALTER TABLE users ADD dashboard_layout JSONB
-│   └── ALTER TABLE conversations ALTER contact_id DROP NOT NULL
-├── 003_tool_calls.sql
-│   └── ALTER TABLE messages ADD tool_calls JSONB
-├── 004_conversation_title.sql
-│   └── ALTER TABLE conversations ADD title TEXT
-└── 005_task_fields.sql
-    ├── ALTER TABLE activities ADD due_date DATE
-    ├── ALTER TABLE activities ADD priority TEXT
-    └── ALTER TABLE activities ADD completed_at TIMESTAMPTZ
-```
-
-## Middleware File Organization
-
-```
-backend/internal/middleware/
-
-├── auth.go
-│   ├── contextKey (unexported type for context keys)
-│   ├── UserIDKey (context key constant)
-│   ├── UserIDFromContext(ctx) → string
-│   └── ClerkAuth(client) → http.Handler middleware
+clo-agent/
+├── backend/                      # Go API server (port 8080)
+│   ├── cmd/api/main.go          # Entry point, router setup, middleware stack
+│   ├── internal/
+│   │   ├── config/config.go     # Env var loading (DATABASE_URL, CLERK_SECRET_KEY, etc.)
+│   │   ├── database/
+│   │   │   ├── postgres.go      # Connection pool initialization
+│   │   │   └── rls.go           # BeginWithRLS(ctx, pool, agentID) transaction helper
+│   │   ├── handlers/            # 14 handler files (contacts, deals, activities, etc.)
+│   │   │   ├── contacts.go
+│   │   │   ├── deals.go
+│   │   │   ├── activities.go
+│   │   │   ├── conversations.go # AI chat proxying
+│   │   │   ├── messages.go      # SSE streaming
+│   │   │   ├── confirm.go       # Write tool confirmation
+│   │   │   ├── portal.go        # Client portal (public)
+│   │   │   ├── documents.go     # Document upload/storage
+│   │   │   ├── gmail.go         # Gmail integration
+│   │   │   ├── workflows.go     # Workflow CRUD
+│   │   │   ├── lead_suggestions.go
+│   │   │   └── [other domain handlers]
+│   │   ├── middleware/          # Middleware functions
+│   │   │   ├── auth.go          # Clerk JWT validation + service secret bypass
+│   │   │   ├── user_sync.go     # Auto-sync user on first request
+│   │   │   └── cors.go
+│   │   └── background/          # Async workers
+│   │       └── email.go         # 30-second email sync loop
+│   ├── migrations/              # 9 SQL migration files
+│   │   ├── 001_init.sql         # Schema v1 (10 tables, RLS policies, indexes)
+│   │   ├── 002_updates.sql      # dashboard_layout JSONB
+│   │   ├── 003_tool_calls.sql   # messages.tool_calls
+│   │   ├── 004_conversation_title.sql
+│   │   ├── 005_task_fields.sql  # due_date, priority, completed_at
+│   │   ├── 006_pending_actions.sql
+│   │   ├── 007_agent_settings.sql
+│   │   ├── 008_embeddings_unique.sql
+│   │   ├── 009_workflows.sql
+│   │   ├── 010_contact_folders.sql
+│   │   ├── 011_documents.sql
+│   │   ├── 012_gmail.sql
+│   │   └── [additional migrations]
+│   ├── go.mod / go.sum          # Go dependencies
+│   └── Dockerfile              # Multi-stage Go build
 │
-├── user_sync.go
-│   ├── AgentUUIDFromContext(ctx) → string
-│   ├── AgentIDKey (context key constant)
-│   └── UserSync(pool, client) → http.Handler middleware
+├── ai-service/                  # Python FastAPI server (port 8000)
+│   ├── app/
+│   │   ├── main.py             # FastAPI app, router registration, startup cleanup
+│   │   ├── config.py           # Env var loading (ANTHROPIC_API_KEY, DATABASE_URL, etc.)
+│   │   ├── database.py         # psycopg2 thread pool, async wrapper
+│   │   ├── tools.py            # Tool definitions + execution (read/write tools, pending actions)
+│   │   ├── routes/             # FastAPI routers
+│   │   │   ├── health.py       # GET /health
+│   │   │   ├── chat.py         # POST /ai/messages, /ai/confirm, GET /ai/conversations
+│   │   │   ├── profiles.py     # POST /ai/profiles/generate
+│   │   │   ├── search.py       # POST /ai/search (semantic)
+│   │   │   ├── workflows.py    # Workflow trigger execution
+│   │   │   ├── documents.py    # Document extraction, chunking
+│   │   │   └── emails.py       # Email operations
+│   │   ├── services/           # Business logic
+│   │   │   ├── agent.py        # Agentic loop, Claude integration, SSE streaming
+│   │   │   ├── embeddings.py   # OpenAI embedding generation (disabled)
+│   │   │   ├── document_processor.py # PDF/document parsing
+│   │   │   ├── document_search.py    # Chunking, semantic search
+│   │   │   └── workflow_engine.py    # Trigger matching, step execution
+│   │   ├── models/             # Pydantic data classes
+│   │   └── __init__.py
+│   ├── requirements.txt         # Python dependencies (anthropic, fastapi, psycopg2, etc.)
+│   ├── Dockerfile             # Multi-stage Python build
+│   └── tests/
 │
-└── cors.go
-    └── CORSHandler() → http.Handler middleware
+├── frontend/                    # Next.js 14 React app (port 3000)
+│   ├── src/
+│   │   ├── app/               # Next.js App Router (file-based routing)
+│   │   │   ├── layout.tsx     # Root layout (Clerk provider, fonts, Providers wrapper)
+│   │   │   ├── page.tsx       # Marketing home (/)
+│   │   │   ├── (marketing)/   # Marketing pages group
+│   │   │   │   ├── about/page.tsx
+│   │   │   │   ├── features/page.tsx
+│   │   │   │   ├── pricing/page.tsx
+│   │   │   │   ├── team/page.tsx
+│   │   │   │   └── mission/page.tsx
+│   │   │   ├── sign-in/[[...sign-in]]/page.tsx  # Clerk UI
+│   │   │   ├── sign-up/[[...sign-up]]/page.tsx  # Clerk UI
+│   │   │   ├── portal/[token]/           # Client portal (public, magic-link auth)
+│   │   │   │   ├── dashboard/page.tsx
+│   │   │   │   ├── deals/page.tsx
+│   │   │   │   ├── properties/page.tsx
+│   │   │   │   └── timeline/page.tsx
+│   │   │   ├── dashboard/                # Protected routes (Clerk auth required)
+│   │   │   │   ├── layout.tsx           # Top bar nav, sidebar, notifications, chat bubble
+│   │   │   │   ├── page.tsx             # Dashboard home (metrics, widgets, customizable layout)
+│   │   │   │   ├── contacts/page.tsx    # Contact list + CRUD
+│   │   │   │   ├── contacts/[id]/page.tsx  # Contact detail (5 tabs: overview, activities, deals, buyer, AI profile)
+│   │   │   │   ├── pipeline/page.tsx    # Kanban board (deals by stage)
+│   │   │   │   ├── chat/page.tsx        # Full-page AI chat
+│   │   │   │   ├── activities/page.tsx  # Global activity feed
+│   │   │   │   ├── analytics/page.tsx   # KPIs, charts (pipeline, activities, contacts)
+│   │   │   │   ├── tasks/page.tsx       # Task management (full CRUD)
+│   │   │   │   ├── settings/page.tsx    # Commission, notifications, integrations
+│   │   │   │   ├── workflows/page.tsx   # Workflow CRUD + runs
+│   │   │   │   ├── properties/page.tsx  # Property listings
+│   │   │   │   ├── properties/[id]/page.tsx # Property detail
+│   │   │   │   ├── documents/page.tsx   # Document management (upload, preview)
+│   │   │   │   ├── communication/page.tsx  # Email/call inbox unified view
+│   │   │   │   └── [other routes]
+│   │   │   ├── api/generate-image/route.ts  # Server action for image generation
+│   │   │   └── middleware.ts            # Clerk route protection
+│   │   ├── components/
+│   │   │   ├── shared/                  # Reusable UI components
+│   │   │   │   ├── AIChatBubble.tsx    # Floating chat bubble with SSE streaming
+│   │   │   │   ├── providers.tsx       # TanStack Query provider + QueryClientProvider
+│   │   │   │   ├── chat-renderers/     # Tool call, confirmation renderers
+│   │   │   │   └── [other shared]
+│   │   │   ├── ui/                     # shadcn components (minimal)
+│   │   │   │   ├── button.tsx          # Only one shadcn component in use
+│   │   │   │   └── [other UI primitives]
+│   │   │   └── marketing/              # Marketing page components
+│   │   │       ├── MarketingNav.tsx
+│   │   │       ├── Footer.tsx
+│   │   │       └── sections/
+│   │   ├── lib/
+│   │   │   ├── api/                    # Domain-specific API client modules
+│   │   │   │   ├── client.ts           # Base fetch wrapper with Bearer token auth
+│   │   │   │   ├── contacts.ts         # listContacts, createContact, etc.
+│   │   │   │   ├── deals.ts
+│   │   │   │   ├── activities.ts
+│   │   │   │   ├── buyer-profiles.ts
+│   │   │   │   ├── conversations.ts    # AI chat API functions
+│   │   │   │   ├── dashboard.ts
+│   │   │   │   ├── settings.ts
+│   │   │   │   ├── workflows.ts
+│   │   │   │   ├── properties.ts
+│   │   │   │   ├── documents.ts
+│   │   │   │   ├── gmail.ts
+│   │   │   │   ├── portal.ts
+│   │   │   │   ├── contact-folders.ts
+│   │   │   │   ├── lead-suggestions.ts
+│   │   │   │   └── [other domain APIs]
+│   │   │   ├── utils.ts                # Utility functions (formatters, etc.)
+│   │   │   └── [other shared utilities]
+│   │   ├── store/
+│   │   │   └── ui-store.ts             # Zustand store (sidebar, chat bubble state, citation viewer)
+│   │   ├── hooks/                      # Custom React hooks (if any)
+│   │   └── fonts/                      # Google font loading
+│   ├── public/                         # Static assets
+│   │   └── images/
+│   ├── package.json                    # npm dependencies + scripts
+│   ├── tsconfig.json                   # TypeScript compiler config (strict, path aliases)
+│   ├── next.config.mjs                 # Next.js config
+│   ├── tailwind.config.ts              # Tailwind CSS customization
+│   ├── postcss.config.mjs              # PostCSS plugins
+│   ├── .prettierrc                     # Prettier config
+│   └── Dockerfile                      # Node.js build → Next.js server
+│
+├── docker-compose.yml                  # Service orchestration (postgres, redis, backend, ai-service, frontend)
+├── CLAUDE.md                           # Project reference + conventions
+└── .planning/
+    └── codebase/                       # Codebase mapping documents (this file + ARCHITECTURE.md)
 ```
 
-## Configuration Files
+## Directory Purposes
 
-### Backend
-- `.env` — DATABASE_URL, CLERK_SECRET_KEY, PORT, AI_SERVICE_URL, AI_SERVICE_SECRET
-- `go.mod` — Module dependencies
-- `Dockerfile` — Build Go binary
+**Backend Handlers (`backend/internal/handlers/`):**
+- Purpose: HTTP request handling, response serialization, database transaction coordination
+- Contains: 14+ files, each focused on a domain (contacts.go, deals.go, etc.)
+- Key files: `contacts.go` (CRUD for contacts), `messages.go` (SSE streaming for AI), `confirm.go` (write tool confirmation)
 
-### Frontend
-- `.env.local` — NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY, CLERK_SECRET_KEY, NEXT_PUBLIC_API_URL
-- `next.config.js` — Next.js config (rewrites, etc)
-- `tailwind.config.ts` — Tailwind theme (colors, fonts, spacing)
-- `tsconfig.json` — TypeScript strict mode
-- `package.json` — Node dependencies
+**Backend Middleware (`backend/internal/middleware/`):**
+- Purpose: Cross-cutting concerns (auth, CORS, logging, user sync)
+- Contains: `auth.go` (Clerk JWT validation + service secret bypass), `user_sync.go` (auto-create user on first request), `cors.go`
+- Applied to: Global middleware stack or specific route groups
 
-### AI Service
-- `.env` — DATABASE_URL, ANTHROPIC_API_KEY, OPENAI_API_KEY, AI_SERVICE_SECRET, BACKEND_URL
-- `requirements.txt` — Python dependencies
-- `Dockerfile` — Build Python image
+**AI Service Routes (`ai-service/app/routes/`):**
+- Purpose: FastAPI endpoint definitions
+- Contains: `chat.py` (message handling, SSE), `profiles.py` (AI profile generation), `search.py` (semantic search), etc.
+- Pattern: Each route file is a FastAPI router, imported and included in `main.py`
 
-### Docker Compose
-- `docker-compose.yml` — 5 services (postgres, redis, backend, ai-service, frontend)
+**AI Service Services (`ai-service/app/services/`):**
+- Purpose: Business logic and complex operations
+- Contains: `agent.py` (Claude loop + tool execution), `workflow_engine.py` (trigger matching), `document_processor.py` (PDF parsing), etc.
+- Called by: Routes, other services
+
+**Frontend Pages (`frontend/src/app/dashboard/`):**
+- Purpose: Next.js route-based page components
+- Contains: One page per route; use `"use client"` if hooks are needed
+- Pattern: Import API functions, call `useQuery()` / `useMutation()`, render with Tailwind CSS
+
+**Frontend API Modules (`frontend/src/lib/api/`):**
+- Purpose: Type-safe API client functions, one file per domain
+- Contains: Typed requests/responses, function per HTTP operation (list, get, create, update, delete)
+- Pattern: `export async function listContacts(token, filters): Promise<ContactListResponse>`
+
+**Frontend Store (`frontend/src/store/`):**
+- Purpose: Centralized UI state management
+- Contains: Single Zustand store with getters/setters
+- Pattern: Import in components → `const { chatOpen, setChatOpen } = useUIStore()`
+
+## Key File Locations
+
+**Entry Points:**
+
+| Service | File | Responsibility |
+|---------|------|-----------------|
+| Backend | `backend/cmd/api/main.go` | Load config, connect database, start HTTP server on port 8080 |
+| AI Service | `ai-service/app/main.py` | FastAPI app initialization, router registration, startup cleanup |
+| Frontend | `frontend/src/app/layout.tsx` | Root layout, Clerk provider, TanStack Query provider, font loading |
+
+**Configuration:**
+
+| Service | File | Env Vars Loaded |
+|---------|------|-----------------|
+| Backend | `backend/internal/config/config.go` | `DATABASE_URL`, `CLERK_SECRET_KEY`, `PORT`, `AI_SERVICE_URL`, `AI_SERVICE_SECRET`, `FRONTEND_URL`, `ENCRYPTION_KEY` |
+| AI Service | `ai-service/app/config.py` | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `DATABASE_URL`, `AI_SERVICE_SECRET`, `BACKEND_URL` |
+| Frontend | `frontend/.env.local.example` | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `NEXT_PUBLIC_API_URL` |
+
+**Core Logic:**
+
+| Domain | Backend File | AI Service File | Frontend File |
+|--------|--------------|-----------------|---------------|
+| Contacts | `handlers/contacts.go` | `tools.py` (read/write) | `lib/api/contacts.ts` + `app/dashboard/contacts/page.tsx` |
+| Deals | `handlers/deals.go` | `tools.py` | `lib/api/deals.ts` + `app/dashboard/pipeline/page.tsx` |
+| Activities | `handlers/activities.go` | `tools.py` | `lib/api/activities.ts` + `app/dashboard/activities/page.tsx` |
+| AI Chat | `handlers/messages.go` (proxy) | `routes/chat.py` + `services/agent.py` | `lib/api/conversations.ts` + `app/dashboard/chat/page.tsx` |
+| Workflows | `handlers/workflows.go` | `services/workflow_engine.py` | `lib/api/workflows.ts` + `app/dashboard/workflows/page.tsx` |
+| Documents | `handlers/documents.go` | `routes/documents.py` + `services/document_processor.py` | `lib/api/documents.ts` + `app/dashboard/documents/page.tsx` |
+| Gmail | `handlers/gmail.go` | `routes/emails.py` | `lib/api/gmail.ts` + `app/dashboard/communication/page.tsx` |
+
+**Testing:**
+
+| Framework | Location | Files |
+|-----------|----------|-------|
+| Go | `backend/internal/` | `handlers_test.go`, `helpers_test.go`, `integration_test.go` |
+| Python | `ai-service/tests/` | Not actively maintained |
+| TypeScript | N/A (no tests committed) | — |
 
 ## Naming Conventions
 
-### Go
-- **Packages:** lowercase, no underscores (`handlers`, `middleware`, `database`)
-- **Exported functions:** PascalCase (ListContacts, CreateDeal)
-- **Unexported functions:** camelCase (loadHistory, buildPrompt)
-- **Types:** PascalCase (Contact, Activity, BuyerProfile)
-- **Constants:** UPPER_SNAKE_CASE or camelCase (UserIDKey)
-- **Files:** snake_case (user_sync.go, deal_stages.go)
+**Files:**
 
-### TypeScript/JavaScript
-- **Files:** kebab-case or camelCase (contacts.ts, AIChatBubble.tsx)
-- **Exported functions:** camelCase (listContacts, createContact)
-- **Components:** PascalCase (AIChatBubble, DashboardLayout)
-- **Types/Interfaces:** PascalCase (Contact, Activity)
-- **Constants:** UPPER_SNAKE_CASE (BASE, MAX_RESULTS)
-- **Variables:** camelCase (myVar, agentID)
+| Layer | Pattern | Example |
+|-------|---------|---------|
+| Backend handlers | `{domain}.go` | `contacts.go`, `deals.go` |
+| Backend packages | `{domain}/` | `database/`, `middleware/` |
+| AI routes | `{domain}.py` | `chat.py`, `profiles.py` |
+| AI services | `{domain}.py` | `agent.py`, `workflow_engine.py` |
+| Frontend pages | `{route}/page.tsx` | `app/dashboard/contacts/page.tsx` |
+| Frontend components | `{ComponentName}.tsx` (PascalCase) | `AIChatBubble.tsx` |
+| Frontend API modules | `{domain}.ts` (camelCase) | `contacts.ts`, `conversations.ts` |
+| Database tables | `{plural_snake_case}` | `contacts`, `conversations`, `buyer_profiles` |
+| Database migrations | `{###}_{description}.sql` | `001_init.sql`, `005_task_fields.sql` |
 
-### Python
-- **Files:** snake_case (agent.py, user_sync.py)
-- **Functions:** snake_case (execute_read_tool, build_system_prompt)
-- **Classes:** PascalCase (Contact, Activity)
-- **Constants:** UPPER_SNAKE_CASE (TOOL_DEFINITIONS, MAX_TOOL_ROUNDS)
-- **Variables:** snake_case (agent_id, tool_name)
+**Directories:**
 
-### Database
-- **Tables:** plural, snake_case (users, contacts, buyer_profiles)
-- **Columns:** snake_case (first_name, agent_id, created_at)
-- **Constraints:** snake_case with prefix (fk_contacts_agent_id, idx_contacts_agent_id)
-- **Indexes:** idx_{table}_{columns} (idx_contacts_agent_id)
+| Layer | Pattern | Example |
+|-------|---------|---------|
+| Backend | `internal/{domain}/` | `internal/handlers/`, `internal/middleware/` |
+| AI Service | `app/{domain}/` | `app/routes/`, `app/services/` |
+| Frontend | `src/{domain}/` | `src/app/`, `src/lib/`, `src/components/` |
+| Frontend routes | `{feature}/` nested in `app/` | `app/dashboard/contacts/` |
 
-## Path Summary
+## Where to Add New Code
 
-| Component | Root Path |
-|-----------|-----------|
-| Go Backend | `/Users/matthewfaust/CloAgent/Clo-Agent/backend/` |
-| Backend Entry Point | `/Users/matthewfaust/CloAgent/Clo-Agent/backend/cmd/api/main.go` |
-| Handlers | `/Users/matthewfaust/CloAgent/Clo-Agent/backend/internal/handlers/` |
-| Middleware | `/Users/matthewfaust/CloAgent/Clo-Agent/backend/internal/middleware/` |
-| Database Config | `/Users/matthewfaust/CloAgent/Clo-Agent/backend/internal/database/` |
-| Migrations | `/Users/matthewfaust/CloAgent/Clo-Agent/backend/migrations/` |
-| Python AI Service | `/Users/matthewfaust/CloAgent/Clo-Agent/ai-service/` |
-| AI Service Entry | `/Users/matthewfaust/CloAgent/Clo-Agent/ai-service/main.py` |
-| AI Routes | `/Users/matthewfaust/CloAgent/Clo-Agent/ai-service/app/routes/` |
-| AI Tools | `/Users/matthewfaust/CloAgent/Clo-Agent/ai-service/app/tools.py` |
-| Agent Loop | `/Users/matthewfaust/CloAgent/Clo-Agent/ai-service/app/services/agent.py` |
-| Next.js Frontend | `/Users/matthewfaust/CloAgent/Clo-Agent/frontend/` |
-| Frontend Entry | `/Users/matthewfaust/CloAgent/Clo-Agent/frontend/src/app/layout.tsx` |
-| Dashboard Routes | `/Users/matthewfaust/CloAgent/Clo-Agent/frontend/src/app/dashboard/` |
-| API Clients | `/Users/matthewfaust/CloAgent/Clo-Agent/frontend/src/lib/api/` |
-| UI Components | `/Users/matthewfaust/CloAgent/Clo-Agent/frontend/src/components/ui/` |
-| Shared Components | `/Users/matthewfaust/CloAgent/Clo-Agent/frontend/src/components/shared/` |
-| Zustand Store | `/Users/matthewfaust/CloAgent/Clo-Agent/frontend/src/store/ui-store.ts` |
-| Docker Compose | `/Users/matthewfaust/CloAgent/Clo-Agent/docker-compose.yml` |
+**New Feature (e.g., "Lead Scoring"):**
+- Backend endpoint: `backend/internal/handlers/lead_scoring.go` - define handler factory
+- Router registration: `backend/cmd/api/main.go` - add route in appropriate group
+- Frontend page: `frontend/src/app/dashboard/lead-scoring/page.tsx` - `"use client"`, use `useQuery()`
+- Frontend API: `frontend/src/lib/api/lead-scoring.ts` - export typed functions
+- Database schema: `backend/migrations/{###}_lead_scoring.sql` - new table or columns
+- Tests: `backend/internal/handlers/lead_scoring_test.go` - unit/integration tests
 
-## Key Files for Getting Started
+**New AI Tool (e.g., "score_lead"):**
+- Tool definition: `ai-service/app/tools.py` - add to `TOOL_DEFINITIONS` list + implement `execute_read_tool()` or `queue_write_tool()`
+- Tool uses database: ensure RLS context is set in calling handler (already done for all handlers)
+- Frontend consumption: `frontend/src/components/shared/chat-renderers/` - add render logic if special UI needed
 
-1. **Understanding the System:**
-   - `/Users/matthewfaust/CloAgent/Clo-Agent/CLAUDE.md` — Project reference
-   - `/Users/matthewfaust/CloAgent/Clo-Agent/.planning/codebase/ARCHITECTURE.md` — This document
+**New Component/Module (e.g., "ContactCard"):**
+- Location: `frontend/src/components/shared/ContactCard.tsx` (reusable) or `frontend/src/components/ui/ContactCard.tsx` (UI primitive)
+- Import in pages: `import { ContactCard } from "@/components/shared/ContactCard"`
+- Style: Tailwind CSS only, no CSS files
+- Props: TypeScript interfaces, export types for consumers
 
-2. **Backend Entry Point:**
-   - `/Users/matthewfaust/CloAgent/Clo-Agent/backend/cmd/api/main.go` — Router + middleware setup
+**New Database Table (e.g., "lead_scores"):**
+- Migration file: `backend/migrations/{###}_lead_scores.sql`
+- Include: CREATE TABLE, RLS policies (if agent-scoped), indexes, triggers
+- No data migrations in schema; handle in handlers or background jobs
+- Foreign keys should CASCADE DELETE where appropriate for cleanup
 
-3. **Key Backend Concepts:**
-   - `/Users/matthewfaust/CloAgent/Clo-Agent/backend/internal/database/rls.go` — RLS transaction pattern
-   - `/Users/matthewfaust/CloAgent/Clo-Agent/backend/internal/middleware/auth.go` — Auth flow
-   - `/Users/matthewfaust/CloAgent/Clo-Agent/backend/internal/handlers/contacts.go` — Handler pattern
+**Utilities/Helpers:**
+- Shared (used by multiple modules): `frontend/src/lib/utils.ts` or `backend/internal/utils/` or `ai-service/app/utils.py`
+- Domain-specific: Keep in domain file (e.g., helper function in `contacts.go`) or separate `{domain}_utils.go`
 
-4. **AI Service:**
-   - `/Users/matthewfaust/CloAgent/Clo-Agent/ai-service/app/services/agent.py` — Agent loop
-   - `/Users/matthewfaust/CloAgent/Clo-Agent/ai-service/app/tools.py` — Tool definitions
+## Special Directories
 
-5. **Frontend Entry Point:**
-   - `/Users/matthewfaust/CloAgent/Clo-Agent/frontend/src/app/layout.tsx` — Root layout
-   - `/Users/matthewfaust/CloAgent/Clo-Agent/frontend/src/lib/api/client.ts` — API client wrapper
+**Migrations (`backend/migrations/`):**
+- Purpose: Version-controlled database schema changes
+- Generated: No (manual SQL files)
+- Committed: Yes (all migrations checked in)
+- Applied on: Backend startup (Docker entrypoint or manual `psql` command)
+- Convention: Numbered `{###}_{description}.sql`, applied in order
 
-6. **Database:**
-   - `/Users/matthewfaust/CloAgent/Clo-Agent/backend/migrations/001_init.sql` — Core schema
+**Public Assets (`frontend/public/`):**
+- Purpose: Static files served directly (images, favicons, etc.)
+- Generated: No (committed source assets)
+- Committed: Yes
+- Served from: `/` at runtime (e.g., `/public/images/logo.png` → `/images/logo.png`)
+
+**Node Modules (`frontend/node_modules/`):**
+- Purpose: Dependency packages
+- Generated: Yes (by `npm install`)
+- Committed: No (in `.gitignore`)
+
+**Build Output (`frontend/.next/`, `backend/dist/`):**
+- Purpose: Compiled code
+- Generated: Yes (by `npm run build` or Go compiler)
+- Committed: No (in `.gitignore`)
+
+**Next.js App Router Conventions (`frontend/src/app/`):**
+- `layout.tsx` — Nested layouts (define layout structure and shared UI)
+- `page.tsx` — Page component (only rendered for the route)
+- `[[...slug]]/` — Catch-all segment (e.g., `sign-in/[[...sign-in]]/` for Clerk)
+- `(group)/` — Route grouping without URL segment (e.g., `(marketing)/about/`)
+- Dynamic routes: `[id]/page.tsx` — captures URL parameter (accessed via `useParams()`)
 
 ---
 
-**Last Updated:** 2026-03-17
+*Structure analysis: 2026-03-24*
