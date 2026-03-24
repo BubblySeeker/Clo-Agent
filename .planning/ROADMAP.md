@@ -27,7 +27,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Saying "email Rohan" when two Rohans exist causes the AI to list both and ask the user to pick one
   4. Saying "email Rohan" when no Rohan exists causes the AI to report no match found and suggest checking the spelling
   5. All existing AI operations (deals, tasks, activities, morning briefing) continue working without any regression
-**Plans**: TBD
+**Plans:** 1 plan
+
+Plans:
+- [ ] 01-01-PLAN.md — Add contact resolution protocol to system prompt and sharpen search_contacts tool description
 
 ### Phase 2: Context Awareness and Hardening
 **Goal**: The AI resolves pronoun references ("follow up with him") using conversation context, and any edge cases exposed by Phase 1 real-world use are addressed
@@ -46,5 +49,5 @@ Phases execute in numeric order: 1 → 2
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Core Resolution Protocol | 0/? | Not started | - |
+| 1. Core Resolution Protocol | 0/1 | Not started | - |
 | 2. Context Awareness and Hardening | 0/? | Not started | - |
