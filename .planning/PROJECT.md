@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A focused improvement to CloAgent's AI assistant that makes it smarter about finding, resolving, and reasoning about contacts. Currently the AI fails on basic contact operations — it can't split "Rohan Batre" into first/last name for search, can't find "my last contact," and returns empty results for partial name lookups like "email Rohan." This milestone fixes the AI's contact resolution so it behaves like a competent human assistant.
+A focused improvement to CloAgent's AI assistant that makes it smarter about finding, resolving, and reasoning about contacts. The AI previously failed on basic contact operations — couldn't split "Rohan Batre" into first/last name for search, couldn't find "my last contact," and returned empty results for partial name lookups like "email Rohan." v1.0 shipped a complete contact resolution protocol via system prompt engineering — 8 rules covering name parsing, recency, ambiguity, and pronoun resolution.
 
 ## Core Value
 
@@ -36,17 +36,17 @@ When a user references a contact by any natural description (name, partial name,
 - AI chat UI changes — this is purely AI behavior
 - Performance optimization — not the issue here
 
-## Context
+## Current State
 
-The search_contacts tool already supports searching across first_name, last_name, email, and full name concatenation via ILIKE. The SQL is solid. The problem is the AI model (Claude Haiku 4.5) isn't being instructed well enough in the system prompt to:
+**v1.0 shipped 2026-03-24.** Two files changed, 40 lines added:
+- `ai-service/app/services/agent.py` — 8-rule `<contact_resolution>` XML protocol in system prompt (11,576 chars total)
+- `ai-service/app/tools.py` — search_contacts tool description updated with UUID safety and resolution guidance
 
-1. **Always search before acting** — when a user mentions a contact by name, search first, get the UUID, then use it
-2. **Parse natural language references** — "my last contact" means sort by recency; "Rohan" means search by first name
-3. **Handle the search → resolve → act pipeline** — the AI jumps straight to action without the resolve step
+The fix is entirely in the prompt and tool description layer — no backend code, no migrations, no frontend changes. All 12 v1 requirements validated. 6 human verification items tracked in UAT files (require live Haiku 4.5 sessions).
 
 Key files:
 - `ai-service/app/services/agent.py` — system prompt construction, agent loop
-- `ai-service/app/tools.py` — tool definitions and execution (search_contacts at line 649)
+- `ai-service/app/tools.py` — tool definitions and execution
 
 ## Constraints
 
@@ -80,4 +80,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-24 after Phase 2 completion — Context Awareness and Hardening shipped (pronoun resolution)*
+*Last updated: 2026-03-24 after v1.0 milestone — AI Contact Intelligence shipped*

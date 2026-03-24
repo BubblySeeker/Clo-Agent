@@ -2,46 +2,50 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
-## Milestone: v1.0 — Tool Routing
+## Milestone: v1.0 — AI Contact Intelligence
 
 **Shipped:** 2026-03-24
-**Phases:** 3 | **Plans:** 3
+**Phases:** 2 | **Plans:** 2 | **Tasks:** 4
 
 ### What Was Built
-- "Design & Build Tool Routing" section in CLAUDE.md (50 lines, 5 subsections)
-- 5 tool routing defaults with path-based first-match-wins precedence
-- Hard constraints (21st.dev dashboard ban, backend exclusions, Tailwind conformance)
+- 8-rule `<contact_resolution>` XML protocol in AI system prompt covering name parsing, recency, ambiguity, and pronoun resolution
+- Updated `search_contacts` tool description with UUID safety and resolution guidance
+- Pronoun resolution (Rule 8) with 4 sub-rules: contact-scoped, single-contact, gender-match, ambiguous-ask
 
 ### What Worked
-- Phase 1 was comprehensive enough that Phases 2 and 3 were verification-only (no edits needed)
-- Compact milestone — 3 phases for a config-only change was appropriate granularity
+- Prompt-only approach: 40 lines of changes across 2 files delivered all 12 requirements — no backend, no migrations, no frontend changes
+- XML tags for behavioral contracts: `<contact_resolution>` triggers native pattern recognition in Haiku 4.5
+- Phase 1/Phase 2 split: shipping core resolution first gave empirical evidence for pronoun resolution design
+- Early placement in system prompt maximized Haiku instruction-following
 
 ### What Was Inefficient
-- Phases 2 and 3 were pure verification of Phase 1's work — could have been a single phase
-- STATE.md requirement tracking stayed "Pending" despite work being complete
+- Phase 1 ROADMAP.md shows "0/1 Not started" despite being complete on disk — roadmap update-plan-progress wasn't called during Phase 1 execution
+- Human verification items (6 total across both phases) require live Haiku sessions — no automated testing path exists for prompt adherence
 
 ### Patterns Established
-- Path-based routing as the primary signal for tool selection
-- First-match-wins rule ordering for predictable precedence
+- XML-tagged behavioral contracts in system prompts for Claude Haiku 4.5
+- Rule numbering with sub-rules (8a, 8b, 8c, 8d) for complex behaviors
+- Structural validation of prompt integrity (char count, XML balance, rule count, Python syntax) as part of verification
 
 ### Key Lessons
-1. For CLAUDE.md-only changes, coarse granularity (fewer phases) is better — verification phases without code changes add overhead
-2. Summary one-liners should be populated properly for downstream consumption
+1. System prompt engineering is high-leverage for Haiku 4.5 — explicit numbered rules with XML delimiters are more reliable than prose instructions
+2. Token budget monitoring matters: 11,576 chars is near the practical limit for Haiku prompt attention; future additions should be measured
+3. Gender inference from first names is a pragmatic heuristic but will fail for gender-neutral names — the "ask when ambiguous" fallback (Rule 8d) is essential
 
 ### Cost Observations
-- Model mix: 100% opus (quality profile)
-- Notable: Small milestone, could have used balanced profile
+- Model mix: 100% Sonnet for execution agents, Sonnet for verification
+- Sessions: 3 (discuss → plan → execute for each phase)
+- Notable: Entire milestone completed in a single day — prompt-only changes are extremely fast to ship
 
 ---
 
 ## Cross-Milestone Trends
 
-### Process Evolution
-
-| Milestone | Phases | Plans | Key Change |
-|-----------|--------|-------|------------|
-| v1.0 | 3 | 3 | Initial milestone — established GSD workflow |
-
-### Top Lessons (Verified Across Milestones)
-
-1. (Awaiting more milestones for cross-validation)
+| Metric | v1.0 |
+|--------|------|
+| Phases | 2 |
+| Plans | 2 |
+| Files Changed | 2 |
+| Lines Added | 40 |
+| Timeline | 1 day |
+| Requirements | 12/12 |
