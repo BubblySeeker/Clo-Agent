@@ -7,8 +7,8 @@ import { listAllActivities, createActivity, type Activity } from "@/lib/api/acti
 import { listContacts } from "@/lib/api/contacts";
 import { getGmailStatus, syncGmail, listEmails, getEmail, sendEmail, markEmailRead, type Email } from "@/lib/api/gmail";
 import { getSMSStatus, syncSMS, listSMSMessages, sendSMS, type SMSMessage } from "@/lib/api/sms";
-import { listCallLogs, initiateCall, syncCallLogs, getCallTranscript, confirmTranscriptAction, dismissTranscriptAction, type CallLog, type CallTranscript, type AIAction } from "@/lib/api/calls";
-import { Phone, Mail, Search, Plus, X, User, ChevronDown, ChevronUp, ChevronRight, RefreshCw, Send, Reply, Star, Paperclip, MessageSquare, PhoneCall, Play, Loader2 } from "lucide-react";
+import { listCallLogs, initiateCall, syncCallLogs, getCallTranscript, confirmTranscriptAction, dismissTranscriptAction, updateCallOutcome, type CallLog, type CallTranscript, type AIAction } from "@/lib/api/calls";
+import { Phone, Mail, Search, Plus, X, User, ChevronDown, ChevronUp, ChevronRight, RefreshCw, Send, Reply, Star, Paperclip, MessageSquare, PhoneCall, Play, Loader2, Bot, FileText, CheckCircle, XCircle } from "lucide-react";
 
 const typeColors: Record<string, { bg: string; color: string }> = {
   call: { bg: "#EFF6FF", color: "#0EA5E9" },
@@ -292,6 +292,132 @@ function TranscriptSection({ callId }: { callId: string }) {
               <div style={{ fontSize: 14, color: "#1E293B", lineHeight: 1.5, marginTop: 2 }}>{seg.text}</div>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const CALL_OUTCOMES = [
+  { value: "connected", label: "Connected", bg: "#DCFCE7", color: "#166534" },
+  { value: "voicemail", label: "Voicemail", bg: "#FEF9C3", color: "#854D0E" },
+  { value: "no_answer", label: "No Answer", bg: "#FEE2E2", color: "#991B1B" },
+  { value: "left_message", label: "Left Message", bg: "#DBEAFE", color: "#1E40AF" },
+  { value: "wrong_number", label: "Wrong Number", bg: "#F3F4F6", color: "#374151" },
+  { value: "busy", label: "Busy", bg: "#FFEDD5", color: "#9A3412" },
+];
+
+function OutcomeTagDropdown({ callId, currentOutcome }: { callId: string; currentOutcome: string | null }) {
+  const { getToken } = useAuth();
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+
+  const handleSelect = async (value: string | null) => {
+    const token = await getToken();
+    if (!token) return;
+    try {
+      await updateCallOutcome(token, callId, value);
+      queryClient.invalidateQueries({ queryKey: ["call-logs"] });
+    } catch (e) {
+      console.error("Failed to update outcome:", e);
+    }
+    setOpen(false);
+  };
+
+  const current = CALL_OUTCOMES.find((o) => o.value === currentOutcome);
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border"
+        style={current
+          ? { background: current.bg, color: current.color, borderColor: current.bg }
+          : { background: "#F9FAFB", color: "#6B7280", borderColor: "#E5E7EB" }
+        }
+      >
+        {current ? current.label : "Tag Outcome"}
+        <ChevronDown className="w-3 h-3" />
+      </button>
+      {open && (
+        <div className="absolute z-50 mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1">
+          {CALL_OUTCOMES.map((o) => (
+            <button
+              key={o.value}
+              onClick={() => handleSelect(o.value)}
+              className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 ${
+                o.value === currentOutcome ? "font-semibold" : ""
+              }`}
+            >
+              <span className="inline-block w-2 h-2 rounded-full mr-2" style={{ background: o.bg }} />
+              {o.label}
+            </button>
+          ))}
+          {currentOutcome && (
+            <button
+              onClick={() => handleSelect(null)}
+              className="w-full text-left px-3 py-1.5 text-xs text-gray-400 hover:bg-gray-50 border-t border-gray-100"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CallDetailPanel({ call }: { call: CallLog }) {
+  const formatDuration = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${String(s).padStart(2, "0")}`;
+  };
+
+  return (
+    <div className="space-y-4 mt-3">
+      {/* Header: direction, status, duration, outcome */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span
+            className="text-xs font-medium px-2 py-0.5 rounded"
+            style={call.direction === "inbound"
+              ? { background: "#DCFCE7", color: "#166534" }
+              : { background: "#DBEAFE", color: "#1E40AF" }
+            }
+          >
+            {call.direction === "inbound" ? "Inbound" : "Outbound"}
+          </span>
+          <span className="text-xs text-gray-500">{call.status}</span>
+          {call.duration > 0 && (
+            <span className="text-xs text-gray-500">{formatDuration(call.duration)}</span>
+          )}
+        </div>
+        <OutcomeTagDropdown callId={call.id} currentOutcome={call.outcome} />
+      </div>
+
+      {/* AMD Badge */}
+      {call.answered_by && call.answered_by.startsWith("machine") && (
+        <div className="flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium"
+          style={{ background: "#FEF9C3", color: "#854D0E", border: "1px solid #FDE68A" }}>
+          <Bot className="w-3.5 h-3.5" />
+          Voicemail Detected
+        </div>
+      )}
+
+      {/* Recording Player */}
+      {call.has_recording && (
+        <div>
+          <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Recording</div>
+          <RecordingPlayer callId={call.id} />
+        </div>
+      )}
+
+      {/* Transcript + AI Actions */}
+      {(call.transcription_status === "completed" || call.transcription_status === "processing" || call.has_recording) && (
+        <div>
+          <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Transcript & AI Insights</div>
+          <TranscriptSection callId={call.id} />
         </div>
       )}
     </div>
@@ -1181,11 +1307,8 @@ export default function CommunicationPage() {
                           ) : (
                             <p className="text-sm text-gray-700 leading-relaxed">{item.body}</p>
                           )}
-                          {item.call_data?.has_recording && (
-                            <>
-                              <RecordingPlayer callId={item.call_data.id} />
-                              <TranscriptSection callId={item.call_data.id} />
-                            </>
+                          {item.call_data && (
+                            <CallDetailPanel call={item.call_data} />
                           )}
                         </div>
                       )}
