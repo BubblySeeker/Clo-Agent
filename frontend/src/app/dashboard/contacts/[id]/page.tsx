@@ -11,6 +11,7 @@ import { listDeals } from "@/lib/api/deals";
 import { getBuyerProfile, createBuyerProfile, updateBuyerProfile } from "@/lib/api/buyer-profiles";
 import type { CreateBuyerProfileBody } from "@/lib/api/buyer-profiles";
 import { getAIProfile, regenerateAIProfile } from "@/lib/api/ai-profiles";
+import { createPortalInvite, listPortalInvites, revokePortalInvite, type PortalToken } from "@/lib/api/portal";
 import { listDocuments, uploadDocument, deleteDocument, type Document as DocType } from "@/lib/api/documents";
 import { listEmails, type Email } from "@/lib/api/gmail";
 import { listContactFolders } from "@/lib/api/contact-folders";
@@ -39,6 +40,10 @@ import {
   Plus,
   User,
   BedDouble,
+  Link2,
+  Copy,
+  Check,
+  ExternalLink,
   Upload,
   FileSpreadsheet,
   File,
@@ -123,6 +128,12 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
   // Delete confirmation modal
   const [showDelete, setShowDelete] = useState(false);
 
+  // Portal sharing
+  const [showPortal, setShowPortal] = useState(false);
+  const [portalLoading, setPortalLoading] = useState(false);
+  const [portalInvites, setPortalInvites] = useState<PortalToken[]>([]);
+  const [copiedToken, setCopiedToken] = useState<string | null>(null);
+
   // Buyer profile editing
   const [editingBuyer, setEditingBuyer] = useState(false);
   const [buyerForm, setBuyerForm] = useState<{
@@ -157,7 +168,7 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
   const [isDraggingDoc, setIsDraggingDoc] = useState(false);
 
   // --- Queries ---
-  const { data: contact, isLoading: contactLoading } = useQuery({
+  const { data: contact, isLoading: contactLoading, isError: contactError, refetch: refetchContact } = useQuery({
     queryKey: ["contact", id],
     queryFn: async () => {
       const token = await getToken();
@@ -430,6 +441,51 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
   const deals = dealsData?.deals ?? [];
 
   // --- Action button handlers ---
+  // --- Portal helpers ---
+  const openPortalModal = async () => {
+    setShowPortal(true);
+    setPortalLoading(true);
+    try {
+      const token = await getToken();
+      const data = await listPortalInvites(token!);
+      setPortalInvites(data.invites.filter((inv) => inv.contact_id === id));
+    } catch {
+      setPortalInvites([]);
+    } finally {
+      setPortalLoading(false);
+    }
+  };
+
+  const generatePortalLink = async () => {
+    setPortalLoading(true);
+    try {
+      const token = await getToken();
+      const inv = await createPortalInvite(token!, id);
+      setPortalInvites((prev) => [inv, ...prev]);
+    } catch {
+      // silent
+    } finally {
+      setPortalLoading(false);
+    }
+  };
+
+  const revokeLink = async (tokenId: string) => {
+    try {
+      const token = await getToken();
+      await revokePortalInvite(token!, tokenId);
+      setPortalInvites((prev) => prev.filter((inv) => inv.id !== tokenId));
+    } catch {
+      // silent
+    }
+  };
+
+  const copyPortalUrl = (portalToken: string) => {
+    const url = `${window.location.origin}/portal/${portalToken}`;
+    navigator.clipboard.writeText(url);
+    setCopiedToken(portalToken);
+    setTimeout(() => setCopiedToken(null), 2000);
+  };
+
   const actionButtons = [
     {
       icon: Phone,
@@ -460,6 +516,17 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
       },
     },
   ];
+
+  if (contactError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full min-h-[400px] gap-4 p-6 text-center">
+        <p className="text-gray-600 font-medium">Failed to load contact</p>
+        <button onClick={() => refetchContact()} className="px-4 py-2 rounded-xl text-white text-sm font-semibold" style={{ backgroundColor: "#0EA5E9" }}>
+          Try again
+        </button>
+      </div>
+    );
+  }
 
   if (contactLoading) {
     return (
@@ -609,6 +676,112 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
         </div>
       )}
 
+      {/* Portal Share Modal */}
+      {showPortal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold" style={{ color: "#1E3A5F" }}>
+                Share Client Portal
+              </h3>
+              <button
+                onClick={() => setShowPortal(false)}
+                className="w-7 h-7 rounded-lg hover:bg-gray-100 flex items-center justify-center"
+              >
+                <X size={16} className="text-gray-400" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">
+              Generate a portal link so your client can view their deal progress,
+              properties, and activity timeline.
+            </p>
+
+            {portalLoading && portalInvites.length === 0 ? (
+              <div className="flex justify-center py-6">
+                <div className="animate-spin w-6 h-6 border-2 border-cyan-500 border-t-transparent rounded-full" />
+              </div>
+            ) : (
+              <>
+                {portalInvites.length > 0 ? (
+                  <div className="space-y-3 mb-4">
+                    {portalInvites.map((inv) => {
+                      const url = `${typeof window !== "undefined" ? window.location.origin : ""}/portal/${inv.token}`;
+                      const expiryDate = new Date(inv.expires_at).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      });
+                      return (
+                        <div
+                          key={inv.id}
+                          className="border border-gray-200 rounded-xl p-3"
+                        >
+                          <div className="flex items-center gap-2 mb-2">
+                            <input
+                              readOnly
+                              value={url}
+                              className="flex-1 text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-600 truncate"
+                            />
+                            <button
+                              onClick={() => copyPortalUrl(inv.token)}
+                              className="flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-medium bg-cyan-50 text-cyan-700 hover:bg-cyan-100 transition-colors"
+                            >
+                              {copiedToken === inv.token ? (
+                                <>
+                                  <Check size={12} /> Copied
+                                </>
+                              ) : (
+                                <>
+                                  <Copy size={12} /> Copy
+                                </>
+                              )}
+                            </button>
+                          </div>
+                          <div className="flex items-center justify-between text-xs text-gray-400">
+                            <span>Expires {expiryDate}</span>
+                            <div className="flex items-center gap-2">
+                              <a
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-cyan-600 hover:text-cyan-700 flex items-center gap-0.5"
+                              >
+                                <ExternalLink size={11} /> Preview
+                              </a>
+                              <button
+                                onClick={() => revokeLink(inv.id)}
+                                className="text-red-400 hover:text-red-600"
+                              >
+                                Revoke
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="bg-gray-50 rounded-xl p-6 text-center mb-4">
+                    <Link2 className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                    <p className="text-sm text-gray-500">
+                      No active portal links for this contact
+                    </p>
+                  </div>
+                )}
+                <button
+                  onClick={generatePortalLink}
+                  disabled={portalLoading}
+                  className="w-full py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 transition-colors"
+                  style={{ backgroundColor: "#0EA5E9" }}
+                >
+                  {portalLoading ? "Generating..." : "Generate New Link"}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       <button
         onClick={() => router.push("/dashboard/contacts")}
         className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-4 transition-colors"
@@ -639,6 +812,13 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
                     title="Edit contact"
                   >
                     <Edit2 size={14} className="text-gray-400" />
+                  </button>
+                  <button
+                    onClick={openPortalModal}
+                    className="w-7 h-7 rounded-lg hover:bg-cyan-50 flex items-center justify-center transition-colors"
+                    title="Share portal link"
+                  >
+                    <Link2 size={14} className="text-cyan-500" />
                   </button>
                   <button
                     onClick={() => setShowDelete(true)}

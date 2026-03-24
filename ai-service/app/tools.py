@@ -949,14 +949,15 @@ def cleanup_expired_actions() -> int:
 # Write tool executor (called from /ai/confirm)
 # ---------------------------------------------------------------------------
 
-async def execute_write_tool(pending_id: str) -> dict:
-    # Fetch and delete the pending action atomically
+async def execute_write_tool(pending_id: str, agent_id: str) -> dict:
+    # Fetch and delete the pending action atomically, verifying agent ownership
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute(
-            """DELETE FROM pending_actions WHERE id = %s AND expires_at >= NOW()
+            """DELETE FROM pending_actions
+               WHERE id = %s AND agent_id = %s AND expires_at >= NOW()
                RETURNING tool, input, agent_id""",
-            (pending_id,),
+            (pending_id, agent_id),
         )
         action = cur.fetchone()
     if not action:

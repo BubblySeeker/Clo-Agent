@@ -22,6 +22,7 @@ export interface Deal {
   stage_color: string;
   property_id: string | null;
   property_address: string;
+  last_activity_at: string | null;
 }
 
 export interface DealsResponse {

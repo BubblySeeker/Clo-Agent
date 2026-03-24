@@ -49,7 +49,7 @@ func ListProperties(pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		agentID := middleware.AgentUUIDFromContext(r.Context())
 		if agentID == "" {
-			respondError(w, http.StatusUnauthorized, "unauthorized")
+			respondErrorWithCode(w, http.StatusUnauthorized, "unauthorized", ErrCodeUnauthorized)
 			return
 		}
 
@@ -72,7 +72,7 @@ func ListProperties(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -119,7 +119,7 @@ func ListProperties(pool *pgxpool.Pool) http.HandlerFunc {
 		var total int
 		countSQL := "SELECT COUNT(*) FROM properties WHERE " + whereExpr
 		if err := tx.QueryRow(r.Context(), countSQL, args...).Scan(&total); err != nil {
-			respondError(w, http.StatusInternalServerError, "count error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "count error", ErrCodeDatabase)
 			return
 		}
 
@@ -131,7 +131,7 @@ func ListProperties(pool *pgxpool.Pool) http.HandlerFunc {
 
 		rows, err := tx.Query(r.Context(), dataSQL, dataArgs...)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "query error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "query error", ErrCodeDatabase)
 			return
 		}
 		defer rows.Close()
@@ -140,14 +140,14 @@ func ListProperties(pool *pgxpool.Pool) http.HandlerFunc {
 		for rows.Next() {
 			p, err := scanProperty(rows)
 			if err != nil {
-				respondError(w, http.StatusInternalServerError, "scan error")
+				respondErrorWithCode(w, http.StatusInternalServerError, "scan error", ErrCodeDatabase)
 				return
 			}
 			properties = append(properties, p)
 		}
 
 		if err := tx.Commit(r.Context()); err != nil {
-			respondError(w, http.StatusInternalServerError, "commit error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "commit error", ErrCodeDatabase)
 			return
 		}
 
@@ -165,7 +165,7 @@ func GetProperty(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -173,7 +173,7 @@ func GetProperty(pool *pgxpool.Pool) http.HandlerFunc {
 		row := tx.QueryRow(r.Context(), fmt.Sprintf("SELECT %s FROM properties WHERE id = $1", propertySelectCols), id)
 		p, err := scanProperty(row)
 		if err != nil {
-			respondError(w, http.StatusNotFound, "property not found")
+			respondErrorWithCode(w, http.StatusNotFound, "property not found", ErrCodeNotFound)
 			return
 		}
 
@@ -230,11 +230,11 @@ func CreateProperty(pool *pgxpool.Pool) http.HandlerFunc {
 			LotSize      *float64        `json:"lot_size"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respondError(w, http.StatusBadRequest, "invalid JSON")
+			respondErrorWithCode(w, http.StatusBadRequest, "invalid JSON", ErrCodeBadRequest)
 			return
 		}
 		if body.Address == "" {
-			respondError(w, http.StatusBadRequest, "address is required")
+			respondErrorWithCode(w, http.StatusBadRequest, "address is required", ErrCodeBadRequest)
 			return
 		}
 
@@ -250,7 +250,7 @@ func CreateProperty(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -263,7 +263,7 @@ func CreateProperty(pool *pgxpool.Pool) http.HandlerFunc {
 			agentID, body.Address, body.City, body.State, body.Zip, body.Price, body.Bedrooms, body.Bathrooms, body.Sqft, body.PropertyType, status, body.ListingType, body.MlsID, body.Description, photos, body.YearBuilt, body.LotSize,
 		).Scan(&p.ID, &p.AgentID, &p.Address, &p.City, &p.State, &p.Zip, &p.Price, &p.Bedrooms, &p.Bathrooms, &p.Sqft, &p.PropertyType, &p.Status, &p.ListingType, &p.MlsID, &p.Description, &p.Photos, &p.YearBuilt, &p.LotSize, &p.CreatedAt, &p.UpdatedAt)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "create failed")
+			respondErrorWithCode(w, http.StatusInternalServerError, "create failed", ErrCodeDatabase)
 			return
 		}
 
@@ -279,13 +279,13 @@ func UpdateProperty(pool *pgxpool.Pool) http.HandlerFunc {
 
 		var body map[string]interface{}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respondError(w, http.StatusBadRequest, "invalid JSON")
+			respondErrorWithCode(w, http.StatusBadRequest, "invalid JSON", ErrCodeBadRequest)
 			return
 		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -299,7 +299,7 @@ func UpdateProperty(pool *pgxpool.Pool) http.HandlerFunc {
 					// Marshal photos back to JSON for JSONB column
 					b, err := json.Marshal(val)
 					if err != nil {
-						respondError(w, http.StatusBadRequest, "invalid photos value")
+						respondErrorWithCode(w, http.StatusBadRequest, "invalid photos value", ErrCodeBadRequest)
 						return
 					}
 					args = append(args, b)
@@ -317,7 +317,7 @@ func UpdateProperty(pool *pgxpool.Pool) http.HandlerFunc {
 			args...,
 		).Scan(&p.ID, &p.AgentID, &p.Address, &p.City, &p.State, &p.Zip, &p.Price, &p.Bedrooms, &p.Bathrooms, &p.Sqft, &p.PropertyType, &p.Status, &p.ListingType, &p.MlsID, &p.Description, &p.Photos, &p.YearBuilt, &p.LotSize, &p.CreatedAt, &p.UpdatedAt)
 		if err != nil {
-			respondError(w, http.StatusNotFound, "property not found")
+			respondErrorWithCode(w, http.StatusNotFound, "property not found", ErrCodeNotFound)
 			return
 		}
 
@@ -333,14 +333,14 @@ func DeleteProperty(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
 
 		result, err := tx.Exec(r.Context(), `DELETE FROM properties WHERE id = $1`, id)
 		if err != nil || result.RowsAffected() == 0 {
-			respondError(w, http.StatusNotFound, "property not found")
+			respondErrorWithCode(w, http.StatusNotFound, "property not found", ErrCodeNotFound)
 			return
 		}
 
@@ -356,7 +356,7 @@ func GetPropertyMatches(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -371,7 +371,7 @@ func GetPropertyMatches(pool *pgxpool.Pool) http.HandlerFunc {
 			`SELECT price, bedrooms, bathrooms, property_type, city FROM properties WHERE id = $1`, id,
 		).Scan(&price, &bedrooms, &bathrooms, &propType, &city)
 		if err != nil {
-			respondError(w, http.StatusNotFound, "property not found")
+			respondErrorWithCode(w, http.StatusNotFound, "property not found", ErrCodeNotFound)
 			return
 		}
 
@@ -383,7 +383,7 @@ func GetPropertyMatches(pool *pgxpool.Pool) http.HandlerFunc {
 			 FROM buyer_profiles bp
 			 JOIN contacts c ON c.id = bp.contact_id`)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "query error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "query error", ErrCodeDatabase)
 			return
 		}
 		defer rows.Close()
@@ -410,7 +410,7 @@ func GetPropertyMatches(pool *pgxpool.Pool) http.HandlerFunc {
 			err := rows.Scan(&m.ContactID, &m.FirstName, &m.LastName, &m.Email, &m.Phone,
 				&budgetMin, &budgetMax, &bpBedrooms, &bpBathrooms, &bpPropType, &locations)
 			if err != nil {
-				respondError(w, http.StatusInternalServerError, "scan error")
+				respondErrorWithCode(w, http.StatusInternalServerError, "scan error", ErrCodeDatabase)
 				return
 			}
 

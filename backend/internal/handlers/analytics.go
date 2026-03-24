@@ -49,7 +49,7 @@ func GetPipelineAnalytics(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -87,7 +87,7 @@ func GetActivityAnalytics(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -119,7 +119,7 @@ func GetContactAnalytics(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())

@@ -98,7 +98,7 @@ func run() error {
 	// Global middleware stack
 	r.Use(chimiddleware.RequestID)
 	r.Use(chimiddleware.RealIP)
-	r.Use(chimiddleware.Logger)
+	r.Use(middleware.StructuredLogger())
 	r.Use(chimiddleware.Recoverer)
 	r.Use(chimiddleware.Compress(5))
 	r.Use(middleware.CORSHandler([]string{cfg.FrontendURL}))
@@ -113,6 +113,13 @@ func run() error {
 	// Public
 	r.Get("/health", handlers.Health)
 	r.Get("/api/auth/google/callback", handlers.GmailAuthCallback(pool, cfg))
+
+	// Client Portal (public — token-based auth, no Clerk)
+	r.Get("/api/portal/auth/{token}", handlers.PortalAuth(pool))
+	r.Get("/api/portal/view/{token}/dashboard", handlers.PortalDashboard(pool))
+	r.Get("/api/portal/view/{token}/deals", handlers.PortalDeals(pool))
+	r.Get("/api/portal/view/{token}/properties", handlers.PortalProperties(pool))
+	r.Get("/api/portal/view/{token}/timeline", handlers.PortalTimeline(pool))
 
 	// Protected — Clerk JWT + user sync required
 	r.Group(func(r chi.Router) {
@@ -200,6 +207,13 @@ func run() error {
 		r.Get("/api/analytics/pipeline", handlers.GetPipelineAnalytics(pool))
 		r.Get("/api/analytics/activities", handlers.GetActivityAnalytics(pool))
 		r.Get("/api/analytics/contacts", handlers.GetContactAnalytics(pool))
+
+		// Portal (agent-side)
+		r.Post("/api/portal/invite/{contact_id}", handlers.CreatePortalInvite(pool))
+		r.Get("/api/portal/invites", handlers.ListPortalInvites(pool))
+		r.Delete("/api/portal/invite/{token_id}", handlers.RevokePortalInvite(pool))
+		r.Get("/api/portal/settings", handlers.GetPortalSettings(pool))
+		r.Patch("/api/portal/settings", handlers.UpdatePortalSettings(pool))
 
 		// Contact Folders
 		r.Get("/api/contact-folders", handlers.ListContactFolders(pool))

@@ -221,7 +221,7 @@ export default function CommunicationPage() {
     },
   });
 
-  const { data: activitiesData } = useQuery({
+  const { data: activitiesData, isError: activitiesError, refetch: refetchActivities } = useQuery({
     queryKey: ["comm-activities"],
     queryFn: async () => {
       const token = await getToken();
@@ -563,6 +563,17 @@ export default function CommunicationPage() {
       el.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }
   }, [selectedGroupKey]);
+
+  if (activitiesError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full min-h-[400px] gap-4 p-6 text-center">
+        <p className="text-gray-600 font-medium">Failed to load communications</p>
+        <button onClick={() => refetchActivities()} className="px-4 py-2 rounded-xl text-white text-sm font-semibold" style={{ backgroundColor: "#0EA5E9" }}>
+          Try again
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-[calc(100vh-4rem)]">

@@ -953,7 +953,7 @@ export default function DocumentsPage() {
   })();
 
   // Load documents
-  const { data, isLoading, error } = useQuery<DocumentsResponse>({
+  const { data, isLoading, error, refetch } = useQuery<DocumentsResponse>({
     queryKey: ["documents", page, activeFilter],
     queryFn: async () => {
       const t = await getToken();
@@ -1066,6 +1066,17 @@ export default function DocumentsPage() {
   const documents = data?.documents ?? [];
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / 25));
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full min-h-[400px] gap-4 p-6 text-center">
+        <p className="text-gray-600 font-medium">Failed to load documents</p>
+        <button onClick={() => refetch()} className="px-4 py-2 rounded-xl text-white text-sm font-semibold" style={{ backgroundColor: "#0EA5E9" }}>
+          Try again
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6">

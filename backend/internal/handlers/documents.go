@@ -94,20 +94,20 @@ func UploadDocument(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		agentID := middleware.AgentUUIDFromContext(r.Context())
 		if agentID == "" {
-			respondError(w, http.StatusUnauthorized, "unauthorized")
+			respondErrorWithCode(w, http.StatusUnauthorized, "unauthorized", ErrCodeUnauthorized)
 			return
 		}
 
 		// Limit request body to 100 MB.
 		r.Body = http.MaxBytesReader(w, r.Body, 100<<20)
 		if err := r.ParseMultipartForm(100 << 20); err != nil {
-			respondError(w, http.StatusBadRequest, "file too large or invalid multipart form")
+			respondErrorWithCode(w, http.StatusBadRequest, "file too large or invalid multipart form", ErrCodeBadRequest)
 			return
 		}
 
 		file, header, err := r.FormFile("file")
 		if err != nil {
-			respondError(w, http.StatusBadRequest, "file is required")
+			respondErrorWithCode(w, http.StatusBadRequest, "file is required", ErrCodeBadRequest)
 			return
 		}
 		defer file.Close()
@@ -115,7 +115,7 @@ func UploadDocument(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 		// Validate file extension.
 		ext := strings.ToLower(filepath.Ext(header.Filename))
 		if !allowedExtensions[ext] {
-			respondError(w, http.StatusBadRequest, "unsupported file type: "+ext)
+			respondErrorWithCode(w, http.StatusBadRequest, "unsupported file type: "+ext, ErrCodeBadRequest)
 			return
 		}
 
@@ -140,13 +140,13 @@ func UploadDocument(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 		// Read file bytes.
 		fileBytes, err := io.ReadAll(file)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "failed to read file")
+			respondErrorWithCode(w, http.StatusInternalServerError, "failed to read file", ErrCodeDatabase)
 			return
 		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -160,12 +160,12 @@ func UploadDocument(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 		).Scan(&doc.ID, &doc.AgentID, &doc.ContactID, &doc.PropertyID, &doc.FolderID, &doc.Filename, &doc.FileType, &doc.FileSize,
 			&doc.Status, &doc.ErrorMessage, &doc.PageCount, &doc.ChunkCount, &doc.CreatedAt, &doc.UpdatedAt)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "failed to store document")
+			respondErrorWithCode(w, http.StatusInternalServerError, "failed to store document", ErrCodeDatabase)
 			return
 		}
 
 		if err := tx.Commit(r.Context()); err != nil {
-			respondError(w, http.StatusInternalServerError, "commit error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "commit error", ErrCodeDatabase)
 			return
 		}
 
@@ -181,7 +181,7 @@ func ListDocuments(pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		agentID := middleware.AgentUUIDFromContext(r.Context())
 		if agentID == "" {
-			respondError(w, http.StatusUnauthorized, "unauthorized")
+			respondErrorWithCode(w, http.StatusUnauthorized, "unauthorized", ErrCodeUnauthorized)
 			return
 		}
 
@@ -202,7 +202,7 @@ func ListDocuments(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -244,7 +244,7 @@ func ListDocuments(pool *pgxpool.Pool) http.HandlerFunc {
 		var total int
 		countSQL := "SELECT COUNT(*) FROM documents d WHERE " + whereExpr
 		if err := tx.QueryRow(r.Context(), countSQL, args...).Scan(&total); err != nil {
-			respondError(w, http.StatusInternalServerError, "count error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "count error", ErrCodeDatabase)
 			return
 		}
 
@@ -266,7 +266,7 @@ func ListDocuments(pool *pgxpool.Pool) http.HandlerFunc {
 
 		rows, err := tx.Query(r.Context(), dataSQL, dataArgs...)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "query error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "query error", ErrCodeDatabase)
 			return
 		}
 		defer rows.Close()
@@ -279,14 +279,14 @@ func ListDocuments(pool *pgxpool.Pool) http.HandlerFunc {
 				&d.FolderID, &d.FolderName,
 				&d.Filename, &d.FileType, &d.FileSize,
 				&d.Status, &d.ErrorMessage, &d.PageCount, &d.ChunkCount, &d.CreatedAt, &d.UpdatedAt); err != nil {
-				respondError(w, http.StatusInternalServerError, "scan error")
+				respondErrorWithCode(w, http.StatusInternalServerError, "scan error", ErrCodeDatabase)
 				return
 			}
 			documents = append(documents, d)
 		}
 
 		if err := tx.Commit(r.Context()); err != nil {
-			respondError(w, http.StatusInternalServerError, "commit error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "commit error", ErrCodeDatabase)
 			return
 		}
 
@@ -305,7 +305,7 @@ func GetDocument(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -329,7 +329,7 @@ func GetDocument(pool *pgxpool.Pool) http.HandlerFunc {
 			&d.Filename, &d.FileType, &d.FileSize,
 			&d.Status, &d.ErrorMessage, &d.PageCount, &d.ChunkCount, &d.CreatedAt, &d.UpdatedAt)
 		if err != nil {
-			respondError(w, http.StatusNotFound, "document not found")
+			respondErrorWithCode(w, http.StatusNotFound, "document not found", ErrCodeNotFound)
 			return
 		}
 
@@ -346,14 +346,14 @@ func DeleteDocument(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
 
 		result, err := tx.Exec(r.Context(), `DELETE FROM documents WHERE id = $1`, id)
 		if err != nil || result.RowsAffected() == 0 {
-			respondError(w, http.StatusNotFound, "document not found")
+			respondErrorWithCode(w, http.StatusNotFound, "document not found", ErrCodeNotFound)
 			return
 		}
 
@@ -370,7 +370,7 @@ func DownloadDocument(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -381,7 +381,7 @@ func DownloadDocument(pool *pgxpool.Pool) http.HandlerFunc {
 			`SELECT raw_file, filename, file_type FROM documents WHERE id = $1`, id,
 		).Scan(&rawFile, &filename, &fileType)
 		if err != nil {
-			respondError(w, http.StatusNotFound, "document not found")
+			respondErrorWithCode(w, http.StatusNotFound, "document not found", ErrCodeNotFound)
 			return
 		}
 
@@ -409,7 +409,7 @@ func PreviewDocument(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -420,7 +420,7 @@ func PreviewDocument(pool *pgxpool.Pool) http.HandlerFunc {
 			`SELECT raw_file, pdf_preview, filename, file_type FROM documents WHERE id = $1`, id,
 		).Scan(&rawFile, &pdfPreview, &filename, &fileType)
 		if err != nil {
-			respondError(w, http.StatusNotFound, "document not found")
+			respondErrorWithCode(w, http.StatusNotFound, "document not found", ErrCodeNotFound)
 			return
 		}
 
@@ -433,7 +433,7 @@ func PreviewDocument(pool *pgxpool.Pool) http.HandlerFunc {
 		} else if fileType == ".pdf" {
 			pdfBytes = rawFile
 		} else {
-			respondError(w, http.StatusNotFound, "no PDF preview available")
+			respondErrorWithCode(w, http.StatusNotFound, "no PDF preview available", ErrCodeNotFound)
 			return
 		}
 
@@ -463,7 +463,7 @@ func GetDocumentChunks(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -472,7 +472,7 @@ func GetDocumentChunks(pool *pgxpool.Pool) http.HandlerFunc {
 		if err := tx.QueryRow(r.Context(),
 			`SELECT COUNT(*) FROM document_chunks WHERE document_id = $1`, docID,
 		).Scan(&total); err != nil {
-			respondError(w, http.StatusInternalServerError, "count error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "count error", ErrCodeDatabase)
 			return
 		}
 
@@ -483,7 +483,7 @@ func GetDocumentChunks(pool *pgxpool.Pool) http.HandlerFunc {
 			docID, limit, offset,
 		)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "query error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "query error", ErrCodeDatabase)
 			return
 		}
 		defer rows.Close()
@@ -493,14 +493,14 @@ func GetDocumentChunks(pool *pgxpool.Pool) http.HandlerFunc {
 			var c DocumentChunk
 			if err := rows.Scan(&c.ID, &c.DocumentID, &c.ChunkIndex, &c.Content,
 				&c.PageNumber, &c.SectionHeading, &c.Metadata, &c.CreatedAt); err != nil {
-				respondError(w, http.StatusInternalServerError, "scan error")
+				respondErrorWithCode(w, http.StatusInternalServerError, "scan error", ErrCodeDatabase)
 				return
 			}
 			chunks = append(chunks, c)
 		}
 
 		if err := tx.Commit(r.Context()); err != nil {
-			respondError(w, http.StatusInternalServerError, "commit error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "commit error", ErrCodeDatabase)
 			return
 		}
 
@@ -519,7 +519,7 @@ func GetDocumentChunk(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -531,7 +531,7 @@ func GetDocumentChunk(pool *pgxpool.Pool) http.HandlerFunc {
 		).Scan(&c.ID, &c.DocumentID, &c.ChunkIndex, &c.Content,
 			&c.PageNumber, &c.SectionHeading, &c.Metadata, &c.CreatedAt)
 		if err != nil {
-			respondError(w, http.StatusNotFound, "chunk not found")
+			respondErrorWithCode(w, http.StatusNotFound, "chunk not found", ErrCodeNotFound)
 			return
 		}
 
@@ -597,13 +597,13 @@ func UpdateDocument(pool *pgxpool.Pool) http.HandlerFunc {
 			FolderID   *string `json:"folder_id"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respondError(w, http.StatusBadRequest, "invalid JSON")
+			respondErrorWithCode(w, http.StatusBadRequest, "invalid JSON", ErrCodeBadRequest)
 			return
 		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -645,7 +645,7 @@ func UpdateDocument(pool *pgxpool.Pool) http.HandlerFunc {
 
 		result, err := tx.Exec(r.Context(), sql, args...)
 		if err != nil || result.RowsAffected() == 0 {
-			respondError(w, http.StatusNotFound, "document not found")
+			respondErrorWithCode(w, http.StatusNotFound, "document not found", ErrCodeNotFound)
 			return
 		}
 
@@ -659,13 +659,13 @@ func DocumentCounts(pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		agentID := middleware.AgentUUIDFromContext(r.Context())
 		if agentID == "" {
-			respondError(w, http.StatusUnauthorized, "unauthorized")
+			respondErrorWithCode(w, http.StatusUnauthorized, "unauthorized", ErrCodeUnauthorized)
 			return
 		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -738,7 +738,7 @@ func ProxyExtractProperty(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFu
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost,
 			cfg.AIServiceURL+"/ai/documents/extract-property", bytes.NewBuffer(payload))
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "failed to build request")
+			respondErrorWithCode(w, http.StatusInternalServerError, "failed to build request", ErrCodeDatabase)
 			return
 		}
 		req.Header.Set("Content-Type", "application/json")
@@ -747,7 +747,7 @@ func ProxyExtractProperty(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFu
 		client := &http.Client{Timeout: 60 * time.Second}
 		resp, err := client.Do(req)
 		if err != nil {
-			respondError(w, http.StatusBadGateway, "AI service unavailable")
+			respondErrorWithCode(w, http.StatusBadGateway, "AI service unavailable", ErrCodeInternal)
 			return
 		}
 		defer resp.Body.Close()

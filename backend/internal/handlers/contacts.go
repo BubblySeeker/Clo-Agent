@@ -32,7 +32,7 @@ func ListContacts(pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		agentID := middleware.AgentUUIDFromContext(r.Context())
 		if agentID == "" {
-			respondError(w, http.StatusUnauthorized, "unauthorized")
+			respondErrorWithCode(w, http.StatusUnauthorized, "unauthorized", ErrCodeUnauthorized)
 			return
 		}
 
@@ -51,7 +51,7 @@ func ListContacts(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -78,7 +78,7 @@ func ListContacts(pool *pgxpool.Pool) http.HandlerFunc {
 		var total int
 		countSQL := "SELECT COUNT(*) FROM contacts c WHERE " + whereExpr
 		if err := tx.QueryRow(r.Context(), countSQL, args...).Scan(&total); err != nil {
-			respondError(w, http.StatusInternalServerError, "count error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "count error", ErrCodeDatabase)
 			return
 		}
 
@@ -95,7 +95,7 @@ func ListContacts(pool *pgxpool.Pool) http.HandlerFunc {
 
 		rows, err := tx.Query(r.Context(), dataSQL, dataArgs...)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "query error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "query error", ErrCodeDatabase)
 			return
 		}
 		defer rows.Close()
@@ -104,14 +104,14 @@ func ListContacts(pool *pgxpool.Pool) http.HandlerFunc {
 		for rows.Next() {
 			var c Contact
 			if err := rows.Scan(&c.ID, &c.AgentID, &c.FirstName, &c.LastName, &c.Email, &c.Phone, &c.Source, &c.FolderID, &c.FolderName, &c.CreatedAt, &c.UpdatedAt); err != nil {
-				respondError(w, http.StatusInternalServerError, "scan error")
+				respondErrorWithCode(w, http.StatusInternalServerError, "scan error", ErrCodeDatabase)
 				return
 			}
 			contacts = append(contacts, c)
 		}
 
 		if err := tx.Commit(r.Context()); err != nil {
-			respondError(w, http.StatusInternalServerError, "commit error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "commit error", ErrCodeDatabase)
 			return
 		}
 
@@ -129,7 +129,7 @@ func GetContact(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -145,7 +145,7 @@ func GetContact(pool *pgxpool.Pool) http.HandlerFunc {
 			id,
 		).Scan(&c.ID, &c.AgentID, &c.FirstName, &c.LastName, &c.Email, &c.Phone, &c.Source, &c.FolderID, &c.FolderName, &c.CreatedAt, &c.UpdatedAt)
 		if err != nil {
-			respondError(w, http.StatusNotFound, "contact not found")
+			respondErrorWithCode(w, http.StatusNotFound, "contact not found", ErrCodeNotFound)
 			return
 		}
 
@@ -167,41 +167,48 @@ func CreateContact(pool *pgxpool.Pool) http.HandlerFunc {
 			FolderID  *string `json:"folder_id"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respondError(w, http.StatusBadRequest, "invalid JSON")
+			respondErrorWithCode(w, http.StatusBadRequest, "invalid JSON", ErrCodeBadRequest)
 			return
 		}
 		if body.FirstName == "" || body.LastName == "" {
-			respondError(w, http.StatusBadRequest, "first_name and last_name are required")
+			respondErrorWithCode(w, http.StatusBadRequest, "first_name and last_name are required", ErrCodeBadRequest)
 			return
 		}
 		// Input validation
-		for _, v := range []struct{ f, val string; max int }{
+		for _, v := range []struct {
+			f, val string
+			max    int
+		}{
 			{"first_name", body.FirstName, 100},
 			{"last_name", body.LastName, 100},
 		} {
 			if err := validateMaxLen(v.f, v.val, v.max); err != nil {
-				respondError(w, http.StatusBadRequest, err.Error()); return
+				respondErrorWithCode(w, http.StatusBadRequest, err.Error(), ErrCodeBadRequest)
+				return
 			}
 		}
 		if body.Email != nil {
 			if err := validateEmail(*body.Email); err != nil {
-				respondError(w, http.StatusBadRequest, err.Error()); return
+				respondErrorWithCode(w, http.StatusBadRequest, err.Error(), ErrCodeBadRequest)
+				return
 			}
 		}
 		if body.Phone != nil {
 			if err := validateMaxLen("phone", *body.Phone, 20); err != nil {
-				respondError(w, http.StatusBadRequest, err.Error()); return
+				respondErrorWithCode(w, http.StatusBadRequest, err.Error(), ErrCodeBadRequest)
+				return
 			}
 		}
 		if body.Source != nil {
 			if err := validateMaxLen("source", *body.Source, 50); err != nil {
-				respondError(w, http.StatusBadRequest, err.Error()); return
+				respondErrorWithCode(w, http.StatusBadRequest, err.Error(), ErrCodeBadRequest)
+				return
 			}
 		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -214,7 +221,7 @@ func CreateContact(pool *pgxpool.Pool) http.HandlerFunc {
 			agentID, body.FirstName, body.LastName, body.Email, body.Phone, body.Source, body.FolderID,
 		).Scan(&c.ID, &c.AgentID, &c.FirstName, &c.LastName, &c.Email, &c.Phone, &c.Source, &c.FolderID, &c.FolderName, &c.CreatedAt, &c.UpdatedAt)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "create failed")
+			respondErrorWithCode(w, http.StatusInternalServerError, "create failed", ErrCodeDatabase)
 			return
 		}
 
@@ -245,13 +252,13 @@ func UpdateContact(pool *pgxpool.Pool) http.HandlerFunc {
 
 		var body map[string]interface{}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respondError(w, http.StatusBadRequest, "invalid JSON")
+			respondErrorWithCode(w, http.StatusBadRequest, "invalid JSON", ErrCodeBadRequest)
 			return
 		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -277,7 +284,7 @@ func UpdateContact(pool *pgxpool.Pool) http.HandlerFunc {
 			args...,
 		).Scan(&c.ID, &c.AgentID, &c.FirstName, &c.LastName, &c.Email, &c.Phone, &c.Source, &c.FolderID, &c.FolderName, &c.CreatedAt, &c.UpdatedAt)
 		if err != nil {
-			respondError(w, http.StatusNotFound, "contact not found")
+			respondErrorWithCode(w, http.StatusNotFound, "contact not found", ErrCodeNotFound)
 			return
 		}
 
@@ -293,14 +300,14 @@ func DeleteContact(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
 
 		result, err := tx.Exec(r.Context(), `DELETE FROM contacts WHERE id = $1`, id)
 		if err != nil || result.RowsAffected() == 0 {
-			respondError(w, http.StatusNotFound, "contact not found")
+			respondErrorWithCode(w, http.StatusNotFound, "contact not found", ErrCodeNotFound)
 			return
 		}
 

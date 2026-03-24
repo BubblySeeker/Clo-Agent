@@ -45,7 +45,7 @@ const sourceColors = [
 export default function AnalyticsPage() {
   const { getToken } = useAuth();
 
-  const { data: pipeline, isLoading: pipelineLoading } = useQuery({
+  const { data: pipeline, isLoading: pipelineLoading, isError: pipelineError, refetch: refetchPipeline } = useQuery({
     queryKey: ["analytics-pipeline"],
     queryFn: async () => {
       const token = await getToken();
@@ -74,6 +74,17 @@ export default function AnalyticsPage() {
   const maxDealCount = Math.max(1, ...(pipeline?.stages.map((s) => s.deal_count) ?? [1]));
   const maxActivityCount = Math.max(1, ...(activities?.by_type.map((t) => t.count) ?? [1]));
   const maxSourceCount = Math.max(1, ...(contacts?.by_source.map((s) => s.count) ?? [1]));
+
+  if (pipelineError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full min-h-[400px] gap-4 p-6 text-center">
+        <p className="text-gray-600 font-medium">Failed to load analytics</p>
+        <button onClick={() => refetchPipeline()} className="px-4 py-2 rounded-xl text-white text-sm font-semibold" style={{ backgroundColor: "#0EA5E9" }}>
+          Try again
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6">
