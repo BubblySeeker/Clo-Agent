@@ -1,44 +1,64 @@
----
-gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: Twilio Voice Calling
-current_phase: 0
-status: defining_requirements
-last_updated: "2026-03-23"
-progress:
-  total_phases: 0
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
----
+# Project State
 
-# Project State: CloAgent — Twilio Voice Calling
+## Project Reference
 
-**Current Phase:** Not started (defining requirements)
-**Status:** Defining requirements
-**Last Updated:** 2026-03-23
+See: .planning/PROJECT.md (updated 2026-03-23)
 
----
+**Core value:** AI-powered voice calling that automatically transcribes conversations and updates the CRM, so real estate agents never miss a follow-up.
+**Current focus:** Phase 4 — Core Call Flow
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-03-23 — Milestone v2.0 started
+Phase: 4 of 8 (Core Call Flow)
+Plan: 0 of ? in current phase
+Status: Ready to plan
+Last activity: 2026-03-23 — Roadmap created for v2.0 Twilio Voice Calling
+
+Progress: [..........] 0%
+
+## Performance Metrics
+
+**Velocity:**
+- Total plans completed: 0 (v2.0)
+- Average duration: —
+- Total execution time: —
+
+**By Phase:**
+
+| Phase | Plans | Total | Avg/Plan |
+|-------|-------|-------|----------|
+| - | - | - | - |
+
+**Recent Trend:**
+- Last 5 plans: —
+- Trend: —
+
+*Updated after each plan completion*
 
 ## Accumulated Context
 
-- v1.0 (Tool Routing) complete — 3 phases, all done
-- Existing call scaffolding in codebase: call_logs table, calls.go handler, calls.ts API client, 3 AI tools, communication page integration — but core call flow is broken
-- Existing SMS integration is fully working and provides the Twilio config pattern to build on
-- User wants: agent calls client normally, AI listens via recording, auto-updates CRM
-- User wants a React Native mobile app as a thin dialer shell
-- Post-call recording approach chosen over real-time streaming
+### Decisions
 
-## Blockers
+Decisions are logged in PROJECT.md Key Decisions table.
+Recent decisions affecting current work:
 
-(none)
+- Post-call recording chosen over real-time streaming (simpler, more reliable)
+- Two-leg bridge call flow (agent phone rings first, then bridges to client)
+- API-triggered calls for mobile (no VoIP SDK needed in v2.0)
+- OpenAI gpt-4o-transcribe for transcription (6-8x cheaper than Twilio built-in)
+- Dual-channel recording for speaker diarization (split with pydub, transcribe separately)
 
----
-*Initialized: 2026-03-23*
+### Pending Todos
+
+None yet.
+
+### Blockers/Concerns
+
+- Expo 55 + Twilio Voice RN SDK v1.7.0 compatibility unverified (affects Phase 8)
+- Per-agent cost ~$160-200/month needs pricing model consideration before AI phases ship to users
+
+## Session Continuity
+
+Last session: 2026-03-23
+Stopped at: Roadmap created, ready to plan Phase 4
+Resume file: None

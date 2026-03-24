@@ -76,40 +76,40 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CALL-01 | — | Pending |
-| CALL-02 | — | Pending |
-| CALL-03 | — | Pending |
-| CALL-04 | — | Pending |
-| CALL-05 | — | Pending |
-| CALL-06 | — | Pending |
-| CALL-07 | — | Pending |
-| REC-01 | — | Pending |
-| REC-02 | — | Pending |
-| REC-03 | — | Pending |
-| REC-04 | — | Pending |
-| REC-05 | — | Pending |
-| AI-01 | — | Pending |
-| AI-02 | — | Pending |
-| AI-03 | — | Pending |
-| AI-04 | — | Pending |
-| AI-05 | — | Pending |
-| AI-06 | — | Pending |
-| FE-01 | — | Pending |
-| FE-02 | — | Pending |
-| FE-03 | — | Pending |
-| FE-04 | — | Pending |
-| FE-05 | — | Pending |
-| FE-06 | — | Pending |
-| MOB-01 | — | Pending |
-| MOB-02 | — | Pending |
-| MOB-03 | — | Pending |
-| MOB-04 | — | Pending |
-| MOB-05 | — | Pending |
+| CALL-01 | Phase 4 | Pending |
+| CALL-02 | Phase 4 | Pending |
+| CALL-03 | Phase 4 | Pending |
+| CALL-04 | Phase 4 | Pending |
+| CALL-05 | Phase 4 | Pending |
+| CALL-06 | Phase 4 | Pending |
+| CALL-07 | Phase 4 | Pending |
+| REC-01 | Phase 5 | Pending |
+| REC-02 | Phase 5 | Pending |
+| REC-03 | Phase 5 | Pending |
+| REC-04 | Phase 5 | Pending |
+| REC-05 | Phase 5 | Pending |
+| AI-01 | Phase 6 | Pending |
+| AI-02 | Phase 6 | Pending |
+| AI-03 | Phase 6 | Pending |
+| AI-04 | Phase 6 | Pending |
+| AI-05 | Phase 6 | Pending |
+| AI-06 | Phase 6 | Pending |
+| FE-01 | Phase 7 | Pending |
+| FE-02 | Phase 7 | Pending |
+| FE-03 | Phase 7 | Pending |
+| FE-04 | Phase 7 | Pending |
+| FE-05 | Phase 7 | Pending |
+| FE-06 | Phase 7 | Pending |
+| MOB-01 | Phase 8 | Pending |
+| MOB-02 | Phase 8 | Pending |
+| MOB-03 | Phase 8 | Pending |
+| MOB-04 | Phase 8 | Pending |
+| MOB-05 | Phase 8 | Pending |
 
 **Coverage:**
 - v2.0 requirements: 29 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 29
+- Mapped to phases: 29
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-23*
