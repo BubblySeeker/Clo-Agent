@@ -161,6 +161,69 @@ class TestToolDefinitions:
         assert "address" in schema["required"]
 
 
+class TestWorkflowToolsInDefinitions:
+    """Validate that workflow management tools exist in TOOL_DEFINITIONS and WRITE_TOOLS."""
+
+    def setup_method(self):
+        self.definitions, self.read_tools, self.write_tools = get_tool_definitions()
+        self.tool_names = {t["name"] for t in self.definitions}
+
+    def test_save_workflow_in_definitions(self):
+        assert "save_workflow" in self.tool_names
+
+    def test_save_workflow_in_write_tools(self):
+        assert "save_workflow" in self.write_tools
+
+    def test_update_workflow_in_definitions(self):
+        assert "update_workflow" in self.tool_names
+
+    def test_update_workflow_in_write_tools(self):
+        assert "update_workflow" in self.write_tools
+
+    def test_save_conversation_as_workflow_in_definitions(self):
+        assert "save_conversation_as_workflow" in self.tool_names
+
+    def test_save_conversation_as_workflow_in_write_tools(self):
+        assert "save_conversation_as_workflow" in self.write_tools
+
+    def test_save_workflow_schema_has_instruction(self):
+        tool = next(t for t in self.definitions if t["name"] == "save_workflow")
+        schema = tool["input_schema"]
+        assert "instruction" in schema["properties"]
+
+    def test_save_workflow_schema_has_name(self):
+        tool = next(t for t in self.definitions if t["name"] == "save_workflow")
+        schema = tool["input_schema"]
+        assert "name" in schema["required"]
+
+    def test_update_workflow_schema_has_workflow_id(self):
+        tool = next(t for t in self.definitions if t["name"] == "update_workflow")
+        schema = tool["input_schema"]
+        assert "workflow_id" in schema["required"]
+
+    def test_instruction_validation_rejects_long_text(self):
+        """Instructions over 5000 chars should be rejected."""
+        import sys
+        from unittest.mock import MagicMock
+        sys.modules.setdefault("app.database", MagicMock())
+        from app.tools import _save_workflow
+
+        mock_conn = MagicMock()
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=False)
+
+        with __import__("unittest.mock", fromlist=["patch"]).patch(
+            "app.tools.get_conn", return_value=mock_conn
+        ):
+            result = _save_workflow("agent-1", {
+                "name": "Test",
+                "instruction": "x" * 5001,
+                "trigger_type": "manual",
+            })
+            assert "error" in result
+            assert "5000" in result["error"]
+
+
 class TestToolTriggerMapping:
     """Validate the workflow trigger mapping."""
 
@@ -179,7 +242,7 @@ class TestToolTriggerMapping:
         sys.modules.setdefault("app.database", MagicMock())
         from app.tools import _TOOL_TO_TRIGGER
 
-        valid_triggers = {"contact_created", "deal_stage_changed", "activity_logged", "manual"}
+        valid_triggers = {"contact_created", "deal_stage_changed", "activity_logged", "email_sent", "manual"}
         for tool, trigger in _TOOL_TO_TRIGGER.items():
             assert trigger in valid_triggers, (
                 f"Tool {tool} maps to unknown trigger type: {trigger}"
