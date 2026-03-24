@@ -1,66 +1,72 @@
-# Requirements: CloAgent Tool Routing
+# Requirements: AI Contact Intelligence
 
-**Defined:** 2026-03-17
-**Core Value:** Claude Code should automatically use the right specialized tool for each task to produce good design by default.
+**Defined:** 2026-03-24
+**Core Value:** When a user references a contact by any natural description, the AI finds the right contact and acts on it — every time.
 
 ## v1 Requirements
 
-### Tool Defaults
+### Contact Resolution Protocol
 
-- [ ] **TOOL-01**: When building or modifying frontend UI, use the `frontend-design` skill for dashboard/app pages
-- [ ] **TOOL-02**: When building or modifying landing/marketing pages, use the `ui-ux-pro-max` skill
-- [ ] **TOOL-03**: When creating new reusable components or doing styling/theming work, use Stitch
-- [ ] **TOOL-04**: When any image asset is needed (marketing, app, icons, placeholders), use Gemini (nano banana 2)
-- [ ] **TOOL-05**: When 3D interactive components are needed on landing/marketing pages, use 21st.dev
+- [ ] **RES-01**: AI always calls search_contacts before using a contact_id in any other tool — never guesses or fabricates UUIDs
+- [ ] **RES-02**: AI splits multi-word name references into searchable terms (e.g. "Rohan Batre" → search query that matches first_name="Rohan" AND last_name="Batre")
+- [ ] **RES-03**: AI resolves recency references ("my last contact", "most recent contact") by searching with limit=1 sorted by created_at DESC
+- [ ] **RES-04**: AI resolves partial name references ("email Rohan") by searching the partial name and selecting the best match
+- [ ] **RES-05**: AI presents ranked candidates when search returns multiple matches — shows top 3 with name, email, and source so user can pick
+- [ ] **RES-06**: AI handles zero results gracefully — tells user no match was found and suggests checking the name spelling
 
-### Hard Constraints
+### Context Awareness
 
-- [ ] **CNST-01**: 21st.dev is NEVER used in dashboard pages — landing/marketing only
-- [ ] **CNST-02**: Design tools are not invoked for backend (Go), AI service (Python), or pure logic changes (API calls, state management, hooks)
-- [ ] **CNST-03**: All tool output must use Tailwind CSS consistent with existing codebase patterns
+- [ ] **CTX-01**: AI resolves pronoun references ("email him", "call her") using the current conversation's contact context or most recently discussed contact
+- [ ] **CTX-02**: AI skips search_contacts when conversation is already contact-scoped (contact_id pre-loaded) and uses the known UUID directly
+- [ ] **CTX-03**: AI uses contact context from earlier in the conversation (e.g. if user searched for "Rohan" 2 messages ago, "create a deal for him" resolves to Rohan)
 
-### Integration
+### Safety & Compatibility
 
-- [ ] **INTG-01**: Rules are added to the existing CLAUDE.md file as a new section
-- [ ] **INTG-02**: Rules are concise — broad defaults with few specific exceptions, not an exhaustive routing table
+- [ ] **SAFE-01**: All existing AI interactions (deals, tasks, activities, morning briefing) continue working without regression
+- [ ] **SAFE-02**: Contact resolution adds at most 1 extra tool round — stays within the 5-round budget for typical operations
+- [ ] **SAFE-03**: System prompt changes are structured with XML tags and placed near the top for reliable Haiku 4.5 instruction-following
 
 ## v2 Requirements
 
-### Advanced Routing
+### Advanced Resolution
 
-- **ADV-01**: Multi-tool composition sequencing for complex tasks
-- **ADV-02**: Component reuse awareness (check existing components before creating new ones)
-- **ADV-03**: Brand-specific prompt templates for Gemini image generation
+- **ADV-01**: Fuzzy/phonetic matching for misspelled names (e.g. "Rohan Batra" matches "Rohan Batre")
+- **ADV-02**: Resolution across multiple entity types (contacts, deals, properties) from a single reference
+- **ADV-03**: Learning from corrections ("not that John, the other one" → remember preference)
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Backend/AI service changes | This is a CLAUDE.md instruction update only |
-| New frontend features | Configuring how Claude builds, not what it builds |
-| Complex precedence rules | User wants broad defaults, not hyper-specific routing |
-| Per-file routing rules | Brittle; use broad directory/task-type rules instead |
+| Backend search changes (fuzzy search, Levenshtein) | Current ILIKE is sufficient; fix is in the prompt layer |
+| Model upgrade from Haiku 4.5 | Cost/speed constraints for real-time chat |
+| Frontend UI changes | This is purely AI behavior — no chat UI modifications |
+| New tools or API endpoints | Resolution works via existing search_contacts tool |
 
 ## Traceability
 
+Which phases cover which requirements. Updated during roadmap creation.
+
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INTG-01 | Phase 1 — Integration & Structure | Pending |
-| INTG-02 | Phase 1 — Integration & Structure | Pending |
-| TOOL-01 | Phase 2 — Tool Defaults & Routing Rules | Pending |
-| TOOL-02 | Phase 2 — Tool Defaults & Routing Rules | Pending |
-| TOOL-03 | Phase 2 — Tool Defaults & Routing Rules | Pending |
-| TOOL-04 | Phase 2 — Tool Defaults & Routing Rules | Pending |
-| TOOL-05 | Phase 2 — Tool Defaults & Routing Rules | Pending |
-| CNST-01 | Phase 3 — Hard Constraints & Exclusions | Pending |
-| CNST-02 | Phase 3 — Hard Constraints & Exclusions | Pending |
-| CNST-03 | Phase 3 — Hard Constraints & Exclusions | Pending |
+| RES-01 | Pending | Pending |
+| RES-02 | Pending | Pending |
+| RES-03 | Pending | Pending |
+| RES-04 | Pending | Pending |
+| RES-05 | Pending | Pending |
+| RES-06 | Pending | Pending |
+| CTX-01 | Pending | Pending |
+| CTX-02 | Pending | Pending |
+| CTX-03 | Pending | Pending |
+| SAFE-01 | Pending | Pending |
+| SAFE-02 | Pending | Pending |
+| SAFE-03 | Pending | Pending |
 
 **Coverage:**
-- v1 requirements: 10 total
-- Mapped to phases: 10
-- Unmapped: 0
+- v1 requirements: 12 total
+- Mapped to phases: 0
+- Unmapped: 12 ⚠️
 
 ---
-*Requirements defined: 2026-03-17*
-*Last updated: 2026-03-17 after roadmap phase mapping*
+*Requirements defined: 2026-03-24*
+*Last updated: 2026-03-24 after initial definition*
