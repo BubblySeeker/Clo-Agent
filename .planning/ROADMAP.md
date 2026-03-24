@@ -26,7 +26,7 @@ Build end-to-end voice calling where the agent makes/receives calls through Twil
 
 ### v2.0 Twilio Voice Calling
 
-- [ ] **Phase 4: Core Call Flow** - Fix broken call infrastructure; agent can make and receive real calls
+- [x] **Phase 4: Core Call Flow** - Fix broken call infrastructure; agent can make and receive real calls
 - [ ] **Phase 5: Recording Infrastructure** - Calls are recorded, stored, and playable; credentials encrypted
 - [ ] **Phase 6: AI Transcription & Intelligence** - Recordings auto-transcribed, AI extracts summaries and CRM actions
 - [ ] **Phase 7: Frontend Call Experience** - Full call lifecycle visible in web UI with AI action cards and inbound intelligence
@@ -48,7 +48,7 @@ Build end-to-end voice calling where the agent makes/receives calls through Twil
 
 Plans:
 - [x] 04-01-PLAN.md — Backend foundation: bug fixes, shared Twilio utils, migration, config, personal_phone support
-- [ ] 04-02-PLAN.md — Two-leg bridge call flow, inbound forwarding, TwiML endpoints, frontend settings + dynamic polling
+- [x] 04-02-PLAN.md — Two-leg bridge call flow, inbound forwarding, TwiML endpoints, frontend settings + dynamic polling
 
 ### Phase 5: Recording Infrastructure
 **Goal**: All calls are automatically recorded in dual-channel format, recordings are stored securely, and agents can play back any call recording in the web UI

@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-03-23)
 ## Current Position
 
 Phase: 4 of 8 (Core Call Flow)
-Plan: 1 of 2 in current phase
-Status: Executing
-Last activity: 2026-03-24 — Completed 04-01 (Foundation, Bug Fixes, Shared Infrastructure)
+Plan: 2 of 2 in current phase (PHASE COMPLETE)
+Status: Phase 4 Complete
+Last activity: 2026-03-24 — Completed 04-02 (Core Call Flow: Two-Leg Bridge, Inbound, Settings)
 
-Progress: [#.........] 10%
+Progress: [##........] 20%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1 (v2.0)
-- Average duration: 3m17s
-- Total execution time: 3m17s
+- Total plans completed: 2 (v2.0)
+- Average duration: 3m59s
+- Total execution time: 7m58s
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 4 | 1 | 3m17s | 3m17s |
+| 4 | 2 | 7m58s | 3m59s |
 
 **Recent Trend:**
-- Last 5 plans: 04-01 (3m17s)
-- Trend: Starting
+- Last 5 plans: 04-01 (3m17s), 04-02 (4m41s)
+- Trend: Consistent
 
 *Updated after each plan completion*
 
@@ -42,6 +42,9 @@ Progress: [#.........] 10%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
+- Used twilio-go SDK instead of raw HTTP for call creation (cleaner, typed params)
+- Personal phone update reuses /sms/configure endpoint with empty credentials to avoid new endpoint
+- TwiML bridge validates signature only on POST (Twilio may hit via GET initially)
 - Activity logging moved from call initiation to terminal status webhook for accuracy
 - personal_phone uses COALESCE to preserve existing value when not provided
 - Post-call recording chosen over real-time streaming (simpler, more reliable)
@@ -62,5 +65,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-24
-Stopped at: Completed 04-01-PLAN.md
+Stopped at: Completed 04-02-PLAN.md (Phase 4 complete)
 Resume file: None
