@@ -29,9 +29,10 @@ func SMSConfigure(pool *pgxpool.Pool) http.HandlerFunc {
 		}
 
 		var body struct {
-			AccountSID  string `json:"account_sid"`
-			AuthToken   string `json:"auth_token"`
-			PhoneNumber string `json:"phone_number"`
+			AccountSID    string  `json:"account_sid"`
+			AuthToken     string  `json:"auth_token"`
+			PhoneNumber   string  `json:"phone_number"`
+			PersonalPhone *string `json:"personal_phone"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			respondError(w, http.StatusBadRequest, "invalid request body")
@@ -43,14 +44,15 @@ func SMSConfigure(pool *pgxpool.Pool) http.HandlerFunc {
 		}
 
 		_, err := pool.Exec(r.Context(),
-			`INSERT INTO twilio_config (agent_id, account_sid, auth_token, phone_number)
-			 VALUES ($1, $2, $3, $4)
+			`INSERT INTO twilio_config (agent_id, account_sid, auth_token, phone_number, personal_phone)
+			 VALUES ($1, $2, $3, $4, $5)
 			 ON CONFLICT (agent_id) DO UPDATE SET
 			   account_sid = EXCLUDED.account_sid,
 			   auth_token = EXCLUDED.auth_token,
 			   phone_number = EXCLUDED.phone_number,
+			   personal_phone = COALESCE(EXCLUDED.personal_phone, twilio_config.personal_phone),
 			   updated_at = now()`,
-			agentID, body.AccountSID, body.AuthToken, body.PhoneNumber,
+			agentID, body.AccountSID, body.AuthToken, body.PhoneNumber, body.PersonalPhone,
 		)
 		if err != nil {
 			slog.Error("sms configure failed", "error", err)
@@ -74,16 +76,18 @@ func SMSStatus(pool *pgxpool.Pool) http.HandlerFunc {
 
 		var phoneNumber string
 		var lastSynced *time.Time
+		var personalPhone *string
 		err := pool.QueryRow(r.Context(),
-			`SELECT phone_number, last_synced_at FROM twilio_config WHERE agent_id = $1`,
+			`SELECT phone_number, last_synced_at, personal_phone FROM twilio_config WHERE agent_id = $1`,
 			agentID,
-		).Scan(&phoneNumber, &lastSynced)
+		).Scan(&phoneNumber, &lastSynced, &personalPhone)
 
 		if err != nil {
 			respondJSON(w, http.StatusOK, map[string]interface{}{
 				"configured":     false,
 				"phone_number":   nil,
 				"last_synced_at": nil,
+				"personal_phone": nil,
 			})
 			return
 		}
@@ -92,6 +96,7 @@ func SMSStatus(pool *pgxpool.Pool) http.HandlerFunc {
 			"configured":     true,
 			"phone_number":   phoneNumber,
 			"last_synced_at": lastSynced,
+			"personal_phone": personalPhone,
 		})
 	}
 }
