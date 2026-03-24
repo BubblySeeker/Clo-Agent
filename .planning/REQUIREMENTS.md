@@ -27,10 +27,10 @@
 
 - [x] **AI-01**: Completed call recordings are automatically transcribed using OpenAI gpt-4o-transcribe with speaker diarization via dual-channel split
 - [x] **AI-02**: Call transcripts are analyzed by Claude to generate a call summary, action items, and CRM update suggestions
-- [ ] **AI-03**: AI-extracted tasks are surfaced as confirmation cards the agent can approve with one click
-- [ ] **AI-04**: AI-suggested deal stage and buyer profile updates are surfaced as confirmation cards
-- [ ] **AI-05**: Recent call transcripts and summaries are loaded into AI chat contact context
-- [ ] **AI-06**: Call transcripts are embedded in pgvector for semantic search
+- [x] **AI-03**: AI-extracted tasks are surfaced as confirmation cards the agent can approve with one click
+- [x] **AI-04**: AI-suggested deal stage and buyer profile updates are surfaced as confirmation cards
+- [x] **AI-05**: Recent call transcripts and summaries are loaded into AI chat contact context
+- [x] **AI-06**: Call transcripts are embedded in pgvector for semantic search
 
 ### Frontend
 
@@ -90,10 +90,10 @@
 | REC-05 | Phase 5 | Complete |
 | AI-01 | Phase 6 | Complete |
 | AI-02 | Phase 6 | Complete |
-| AI-03 | Phase 6 | Pending |
-| AI-04 | Phase 6 | Pending |
-| AI-05 | Phase 6 | Pending |
-| AI-06 | Phase 6 | Pending |
+| AI-03 | Phase 6 | Complete |
+| AI-04 | Phase 6 | Complete |
+| AI-05 | Phase 6 | Complete |
+| AI-06 | Phase 6 | Complete |
 | FE-01 | Phase 7 | Pending |
 | FE-02 | Phase 7 | Pending |
 | FE-03 | Phase 7 | Pending |
