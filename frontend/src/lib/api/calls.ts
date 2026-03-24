@@ -16,6 +16,7 @@ export interface CallLog {
   recording_sid: string | null;
   recording_duration: number;
   has_recording: boolean;
+  transcription_status: "processing" | "completed" | "failed" | null;
 }
 
 export interface CallLogsResponse {
@@ -52,6 +53,55 @@ export function initiateCall(
 
 export function syncCallLogs(token: string): Promise<{ synced: number }> {
   return apiRequest("/calls/sync", token, { method: "POST" });
+}
+
+export interface AIAction {
+  type: "create_task" | "update_buyer_profile" | "update_deal_stage";
+  params: Record<string, unknown>;
+  status: "pending" | "confirmed" | "dismissed";
+}
+
+export interface CallTranscript {
+  id: string;
+  call_id: string;
+  full_text: string;
+  speaker_segments: Array<{
+    speaker: "agent" | "client" | "unknown";
+    start: number;
+    end: number;
+    text: string;
+  }>;
+  ai_summary: string | null;
+  ai_actions: AIAction[];
+  status: "pending" | "processing" | "completed" | "failed";
+  duration_seconds: number | null;
+  word_count: number | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export function getCallTranscript(token: string, callId: string): Promise<CallTranscript> {
+  return apiRequest(`/calls/${callId}/transcript`, token);
+}
+
+export function confirmTranscriptAction(
+  token: string,
+  callId: string,
+  actionIndex: number
+): Promise<{ status: string }> {
+  return apiRequest(`/calls/${callId}/transcript/actions/${actionIndex}/confirm`, token, {
+    method: "POST",
+  });
+}
+
+export function dismissTranscriptAction(
+  token: string,
+  callId: string,
+  actionIndex: number
+): Promise<{ status: string }> {
+  return apiRequest(`/calls/${callId}/transcript/actions/${actionIndex}/dismiss`, token, {
+    method: "POST",
+  });
 }
 
 export function getRecordingUrl(callId: string): string {

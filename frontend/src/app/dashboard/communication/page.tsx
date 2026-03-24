@@ -7,7 +7,7 @@ import { listAllActivities, createActivity, type Activity } from "@/lib/api/acti
 import { listContacts } from "@/lib/api/contacts";
 import { getGmailStatus, syncGmail, listEmails, getEmail, sendEmail, markEmailRead, type Email } from "@/lib/api/gmail";
 import { getSMSStatus, syncSMS, listSMSMessages, sendSMS, type SMSMessage } from "@/lib/api/sms";
-import { listCallLogs, initiateCall, syncCallLogs, type CallLog } from "@/lib/api/calls";
+import { listCallLogs, initiateCall, syncCallLogs, getCallTranscript, confirmTranscriptAction, dismissTranscriptAction, type CallLog, type CallTranscript, type AIAction } from "@/lib/api/calls";
 import { Phone, Mail, Search, Plus, X, User, ChevronDown, ChevronUp, ChevronRight, RefreshCw, Send, Reply, Star, Paperclip, MessageSquare, PhoneCall, Play, Loader2 } from "lucide-react";
 
 const typeColors: Record<string, { bg: string; color: string }> = {
@@ -126,6 +126,175 @@ function RecordingPlayer({ callId }: { callId: string }) {
 
   return (
     <audio controls src={audioUrl} className="w-full h-8 mt-1" />
+  );
+}
+
+function AIActionCard({ action, index, onConfirm, onDismiss, isConfirming, isDismissing }: {
+  action: AIAction;
+  index: number;
+  onConfirm: () => void;
+  onDismiss: () => void;
+  isConfirming: boolean;
+  isDismissing: boolean;
+}) {
+  const typeLabels: Record<string, { label: string; color: string; bg: string }> = {
+    create_task: { label: "Task", color: "#F59E0B", bg: "#FFFBEB" },
+    update_buyer_profile: { label: "Buyer Profile", color: "#0EA5E9", bg: "#F0F9FF" },
+    update_deal_stage: { label: "Deal Stage", color: "#22C55E", bg: "#F0FDF4" },
+  };
+  const typeInfo = typeLabels[action.type] || { label: action.type, color: "#64748B", bg: "#F8FAFC" };
+
+  const descriptionParts: string[] = [];
+  const p = action.params;
+  if (action.type === "create_task") {
+    descriptionParts.push(String(p.body || ""));
+    if (p.due_date) descriptionParts.push(`Due: ${p.due_date}`);
+    if (p.priority) descriptionParts.push(`Priority: ${p.priority}`);
+  } else if (action.type === "update_buyer_profile") {
+    Object.entries(p).filter(([k]) => k !== "contact_id").forEach(([k, v]) => {
+      if (v !== null && v !== undefined) {
+        descriptionParts.push(`${k.replace(/_/g, " ")}: ${Array.isArray(v) ? v.join(", ") : v}`);
+      }
+    });
+  } else if (action.type === "update_deal_stage") {
+    descriptionParts.push(`Move to "${p.stage_name}" stage`);
+  }
+
+  return (
+    <div style={{ border: "1px solid #E2E8F0", borderRadius: 8, padding: 12, background: "#FAFAFA" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+        <span style={{ fontSize: 11, fontWeight: 600, color: typeInfo.color, background: typeInfo.bg, padding: "2px 8px", borderRadius: 9999 }}>
+          {typeInfo.label}
+        </span>
+      </div>
+      <div style={{ fontSize: 13, color: "#334155", lineHeight: 1.4, marginBottom: 8 }}>
+        {descriptionParts.join(" · ")}
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <button
+          onClick={onConfirm}
+          disabled={isConfirming || isDismissing}
+          style={{ padding: "4px 12px", fontSize: 12, fontWeight: 500, borderRadius: 6, border: "none", background: "#7C3AED", color: "#fff", cursor: "pointer", opacity: (isConfirming || isDismissing) ? 0.5 : 1 }}
+        >
+          {isConfirming ? "Confirming..." : "Confirm"}
+        </button>
+        <button
+          onClick={onDismiss}
+          disabled={isConfirming || isDismissing}
+          style={{ padding: "4px 12px", fontSize: 12, fontWeight: 500, borderRadius: 6, border: "1px solid #E2E8F0", background: "#fff", color: "#64748B", cursor: "pointer", opacity: (isConfirming || isDismissing) ? 0.5 : 1 }}
+        >
+          Dismiss
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function TranscriptSection({ callId }: { callId: string }) {
+  const { getToken } = useAuth();
+  const queryClient = useQueryClient();
+  const [expanded, setExpanded] = useState(false);
+
+  const { data: transcript, isLoading } = useQuery({
+    queryKey: ["call-transcript", callId],
+    queryFn: async () => {
+      const token = await getToken();
+      return getCallTranscript(token!, callId);
+    },
+  });
+
+  const confirmMutation = useMutation({
+    mutationFn: async ({ index }: { index: number }) => {
+      const token = await getToken();
+      return confirmTranscriptAction(token!, callId, index);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["call-transcript", callId] }),
+  });
+
+  const dismissMutation = useMutation({
+    mutationFn: async ({ index }: { index: number }) => {
+      const token = await getToken();
+      return dismissTranscriptAction(token!, callId, index);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["call-transcript", callId] }),
+  });
+
+  if (isLoading) return <div style={{ padding: "12px", color: "#64748B", fontSize: 13 }}>Loading transcript...</div>;
+  if (!transcript || transcript.status === "failed") return null;
+  if (transcript.status === "processing") return <div style={{ padding: "12px", color: "#F59E0B", fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}><Loader2 size={14} className="animate-spin" /> Transcribing...</div>;
+
+  const pendingActions = transcript.ai_actions.filter(a => a.status === "pending");
+  const processedActions = transcript.ai_actions.filter(a => a.status !== "pending");
+
+  return (
+    <div style={{ borderTop: "1px solid #E2E8F0", marginTop: 12 }}>
+      {/* AI Summary */}
+      {transcript.ai_summary && (
+        <div style={{ padding: "12px 0", borderBottom: "1px solid #F1F5F9" }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 4, textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>AI Summary</div>
+          <div style={{ fontSize: 14, color: "#1E293B", lineHeight: 1.5 }}>{transcript.ai_summary}</div>
+        </div>
+      )}
+
+      {/* AI Action Cards */}
+      {pendingActions.length > 0 && (
+        <div style={{ padding: "12px 0", borderBottom: "1px solid #F1F5F9" }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 8, textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>Suggested Actions</div>
+          <div style={{ display: "flex", flexDirection: "column" as const, gap: 8 }}>
+            {transcript.ai_actions.map((action, idx) => {
+              if (action.status !== "pending") return null;
+              return (
+                <AIActionCard
+                  key={idx}
+                  action={action}
+                  index={idx}
+                  onConfirm={() => confirmMutation.mutate({ index: idx })}
+                  onDismiss={() => dismissMutation.mutate({ index: idx })}
+                  isConfirming={confirmMutation.isPending}
+                  isDismissing={dismissMutation.isPending}
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Processed actions (confirmed/dismissed) summary */}
+      {processedActions.length > 0 && (
+        <div style={{ padding: "8px 0", borderBottom: "1px solid #F1F5F9", fontSize: 13, color: "#94A3B8" }}>
+          {processedActions.filter(a => a.status === "confirmed").length} confirmed, {processedActions.filter(a => a.status === "dismissed").length} dismissed
+        </div>
+      )}
+
+      {/* Transcript toggle */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        style={{ display: "flex", alignItems: "center", gap: 4, padding: "8px 0", fontSize: 13, color: "#7C3AED", background: "none", border: "none", cursor: "pointer", fontWeight: 500 }}
+      >
+        {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        {expanded ? "Hide transcript" : `Show transcript (${transcript.word_count || 0} words)`}
+      </button>
+
+      {expanded && (
+        <div style={{ padding: "8px 0", maxHeight: 400, overflowY: "auto" as const }}>
+          {transcript.speaker_segments.map((seg, i) => (
+            <div key={i} style={{ marginBottom: 8 }}>
+              <span style={{
+                fontSize: 11, fontWeight: 600,
+                color: seg.speaker === "agent" ? "#7C3AED" : seg.speaker === "client" ? "#0EA5E9" : "#94A3B8",
+                textTransform: "uppercase" as const,
+              }}>
+                {seg.speaker}
+              </span>
+              <span style={{ fontSize: 11, color: "#94A3B8", marginLeft: 6 }}>
+                {Math.floor(seg.start / 60)}:{String(Math.floor(seg.start % 60)).padStart(2, "0")}
+              </span>
+              <div style={{ fontSize: 14, color: "#1E293B", lineHeight: 1.5, marginTop: 2 }}>{seg.text}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1013,7 +1182,10 @@ export default function CommunicationPage() {
                             <p className="text-sm text-gray-700 leading-relaxed">{item.body}</p>
                           )}
                           {item.call_data?.has_recording && (
-                            <RecordingPlayer callId={item.call_data.id} />
+                            <>
+                              <RecordingPlayer callId={item.call_data.id} />
+                              <TranscriptSection callId={item.call_data.id} />
+                            </>
                           )}
                         </div>
                       )}
