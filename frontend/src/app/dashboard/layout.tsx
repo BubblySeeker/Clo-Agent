@@ -102,19 +102,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { getToken } = useAuth();
   const queryClient = useQueryClient();
 
-  // Silent Gmail auto-sync on dashboard load
+  // Silent Gmail auto-sync every 30 seconds while on site
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    const doSync = async () => {
       try {
         const token = await getToken();
         if (!token || cancelled) return;
         const status = await getGmailStatus(token);
         if (!status.connected || cancelled) return;
-        if (status.last_synced_at) {
-          const elapsed = Date.now() - new Date(status.last_synced_at).getTime();
-          if (elapsed < 5 * 60 * 1000) return;
-        }
         await syncGmail(token);
         if (cancelled) return;
         queryClient.invalidateQueries({ queryKey: ["gmail-emails"] });
@@ -122,8 +118,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       } catch {
         // Silent — fire-and-forget background sync
       }
-    })();
-    return () => { cancelled = true; };
+    };
+    doSync(); // sync immediately on load
+    const interval = setInterval(doSync, 30_000); // then every 30s
+    return () => { cancelled = true; clearInterval(interval); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

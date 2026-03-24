@@ -261,6 +261,9 @@ func run() error {
 	// -------------------------------------------------------------------------
 	// Background workers
 	// -------------------------------------------------------------------------
+	// Wire up sync callback so HTTP-triggered syncs also process emails
+	handlers.SyncCallback = background.ProcessNewEmails
+
 	bgCtx, bgCancel := context.WithCancel(context.Background())
 	defer bgCancel()
 	go background.StartEmailSyncLoop(bgCtx, pool, cfg)

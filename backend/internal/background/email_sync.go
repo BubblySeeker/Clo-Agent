@@ -122,20 +122,27 @@ func syncAgent(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config, agen
 		"matched", len(result.MatchedIDs),
 	)
 
-	// Trigger AI lead triage for unmatched emails
+	// Trigger AI processing (triage + embedding) async
+	ProcessNewEmails(pool, cfg, agentID, result)
+}
+
+// ProcessNewEmails triggers AI triage and embedding for newly synced emails.
+// Called by both the background goroutine and the HTTP sync handler.
+// Runs async (fire-and-forget) — returns immediately.
+func ProcessNewEmails(pool *pgxpool.Pool, cfg *config.Config, agentID string, result *handlers.SyncResult) {
 	if len(result.UnmatchedIDs) > 0 {
 		go func() {
+			ctx := context.Background()
 			if err := callAITriage(ctx, pool, cfg, agentID, result.UnmatchedIDs); err != nil {
-				slog.Error("email sync loop: triage failed", "agent_id", agentID, "error", err)
+				slog.Error("email processing: triage failed", "agent_id", agentID, "error", err)
 			}
 		}()
 	}
-
-	// Trigger email embedding for matched emails
 	if len(result.MatchedIDs) > 0 {
 		go func() {
+			ctx := context.Background()
 			if err := callAIEmbed(ctx, pool, cfg, agentID, result.MatchedIDs); err != nil {
-				slog.Error("email sync loop: embed failed", "agent_id", agentID, "error", err)
+				slog.Error("email processing: embed failed", "agent_id", agentID, "error", err)
 			}
 		}()
 	}

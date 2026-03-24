@@ -344,7 +344,7 @@ func SyncAgentGmail(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config,
 		`SELECT last_synced_at FROM gmail_tokens WHERE agent_id = $1`, agentID,
 	).Scan(&lastSynced)
 
-	if lastSynced != nil && time.Since(*lastSynced) < 5*time.Minute {
+	if lastSynced != nil && time.Since(*lastSynced) < 30*time.Second {
 		tx.Commit(ctx)
 		return &SyncResult{Skipped: true, SkipMessage: "recently synced, skipping"}, nil
 	}
@@ -534,6 +534,10 @@ func SyncAgentGmail(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config,
 
 // GmailSync fetches emails from Gmail and stores them.
 // POST /api/gmail/sync
+// SyncCallback is called after a successful sync to trigger AI processing.
+// Set by the background package at startup to avoid circular imports.
+var SyncCallback func(pool *pgxpool.Pool, cfg *config.Config, agentID string, result *SyncResult)
+
 func GmailSync(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		agentID := middleware.AgentUUIDFromContext(r.Context())
@@ -555,6 +559,11 @@ func GmailSync(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 				"message": result.SkipMessage,
 			})
 			return
+		}
+
+		// Trigger AI processing (triage + embedding) async
+		if SyncCallback != nil && (len(result.UnmatchedIDs) > 0 || len(result.MatchedIDs) > 0) {
+			SyncCallback(pool, cfg, agentID, result)
 		}
 
 		respondJSON(w, http.StatusOK, map[string]interface{}{
