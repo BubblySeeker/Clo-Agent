@@ -112,6 +112,23 @@ def _load_contact_context(contact_id: str, agent_id: str) -> str:
                 direction = "Sent" if s["direction"] == "outbound" else "Received"
                 lines.append(f"  - [{direction}] {s['body'][:80]} ({s['sent_at'].strftime('%b %d')})")
 
+        # Recent call transcript summaries
+        cur.execute(
+            """SELECT ct.ai_summary, ct.created_at, cl.direction, cl.duration
+               FROM call_transcripts ct
+               JOIN call_logs cl ON cl.id = ct.call_id
+               WHERE cl.contact_id = %s AND cl.agent_id = %s AND ct.ai_summary IS NOT NULL
+               ORDER BY ct.created_at DESC LIMIT 3""",
+            (contact_id, agent_id),
+        )
+        call_summaries = cur.fetchall()
+        if call_summaries:
+            lines.append("Recent Call Summaries:")
+            for cs in call_summaries:
+                direction = "Outbound" if cs["direction"] == "outbound" else "Inbound"
+                dur = cs["duration"] or 0
+                lines.append(f"  - [{direction}, {dur}s, {cs['created_at'].strftime('%b %d')}] {cs['ai_summary'][:200]}")
+
         return "\n".join(lines)
 
 
@@ -156,7 +173,8 @@ def _build_system_prompt(agent_name: str, contact_context: str = "") -> str:
         "- For destructive actions (deleting contacts or deals), always confirm with the user first "
         "and warn them about what data will be lost.\n"
         "- Be concise. Skip preamble. Lead with action."
-        "\n- When the agent has SMS configured, you can search and send text messages. "
+        "\n- When the agent has Twilio configured, you can search and send text messages, and initiate outbound phone calls. "
+        "Use initiate_call to start a call, search_call_logs to find past calls, and get_call_history for a contact's call history."
         "Use send_sms for quick follow-ups and appointment confirmations."
     )
     return base + contact_context

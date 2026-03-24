@@ -464,6 +464,67 @@ TOOL_DEFINITIONS = [
             "required": ["to", "body"],
         },
     },
+    {
+        "name": "search_call_logs",
+        "description": "Search call history. Filter by contact or direction (inbound/outbound).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "contact_id": {"type": "string", "description": "UUID of the contact to filter by"},
+                "direction": {"type": "string", "description": "Filter by direction: 'inbound' or 'outbound'"},
+                "limit": {"type": "integer", "description": "Max results (default 20)"},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "get_call_history",
+        "description": "Get call history for a specific contact, ordered by most recent first.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "contact_id": {"type": "string", "description": "UUID of the contact"},
+                "limit": {"type": "integer", "description": "Max results (default 20)"},
+            },
+            "required": ["contact_id"],
+        },
+    },
+    {
+        "name": "get_call_transcript",
+        "description": "Get the full transcript with speaker labels, AI summary, and suggested actions for a specific call. Use when the agent asks about what was said on a call.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "call_id": {"type": "string", "description": "UUID of the call log entry"},
+            },
+            "required": ["call_id"],
+        },
+    },
+    {
+        "name": "search_call_transcripts",
+        "description": "Search call transcripts by text content. Use when the agent asks about what was discussed on calls or wants to find calls where a topic was mentioned.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search term to find in transcript text"},
+                "contact_id": {"type": "string", "description": "Optional: limit to a specific contact's calls"},
+                "limit": {"type": "integer", "description": "Max results (default 10)"},
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "initiate_call",
+        "description": "Initiate an outbound phone call via Twilio. Requires user confirmation before dialing.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "to": {"type": "string", "description": "Phone number to call (E.164 format preferred, e.g. +15551234567)"},
+                "contact_id": {"type": "string", "description": "Optional contact UUID to associate with"},
+            },
+            "required": ["to"],
+        },
+    },
 ]
 
 READ_TOOLS = {
@@ -484,6 +545,10 @@ READ_TOOLS = {
     "match_buyer_to_properties",
     "search_sms",
     "get_sms_conversation",
+    "search_call_logs",
+    "get_call_history",
+    "get_call_transcript",
+    "search_call_transcripts",
 }
 
 WRITE_TOOLS = {
@@ -503,6 +568,7 @@ WRITE_TOOLS = {
     "update_property",
     "delete_property",
     "send_sms",
+    "initiate_call",
 }
 
 # ---------------------------------------------------------------------------
@@ -544,6 +610,14 @@ async def execute_read_tool(tool_name: str, tool_input: dict, agent_id: str) -> 
         return await run_query(lambda: _search_sms(agent_id, tool_input))
     elif tool_name == "get_sms_conversation":
         return await run_query(lambda: _get_sms_conversation(agent_id, tool_input))
+    elif tool_name == "search_call_logs":
+        return await run_query(lambda: _search_call_logs(agent_id, tool_input))
+    elif tool_name == "get_call_history":
+        return await run_query(lambda: _get_call_history(agent_id, tool_input))
+    elif tool_name == "get_call_transcript":
+        return await run_query(lambda: _get_call_transcript(agent_id, tool_input))
+    elif tool_name == "search_call_transcripts":
+        return await run_query(lambda: _search_call_transcripts(agent_id, tool_input))
     else:
         return {"error": f"Unknown tool: {tool_name}"}
 
@@ -897,6 +971,134 @@ async def _send_sms_via_backend(agent_id: str, inp: dict) -> dict:
         return {"error": f"SMS send failed: {str(e)}"}
 
 
+def _search_call_logs(agent_id: str, inp: dict) -> list:
+    contact_id = inp.get("contact_id")
+    direction = inp.get("direction")
+    limit = inp.get("limit", 20)
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        where = "cl.agent_id = %s"
+        params: list = [agent_id]
+        if contact_id:
+            where += " AND cl.contact_id = %s"
+            params.append(contact_id)
+        if direction:
+            where += " AND cl.direction = %s"
+            params.append(direction)
+        params.append(limit)
+        cur.execute(
+            f"""SELECT cl.id, cl.from_number, cl.to_number, cl.direction, cl.status,
+                       cl.duration, cl.started_at, cl.ended_at,
+                       COALESCE(c.first_name || ' ' || c.last_name, '') AS contact_name
+                FROM call_logs cl
+                LEFT JOIN contacts c ON c.id = cl.contact_id
+                WHERE {where}
+                ORDER BY cl.started_at DESC LIMIT %s""",
+            params,
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+
+def _get_call_history(agent_id: str, inp: dict) -> list:
+    contact_id = inp["contact_id"]
+    limit = inp.get("limit", 20)
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            """SELECT cl.id, cl.from_number, cl.to_number, cl.direction, cl.status,
+                      cl.duration, cl.started_at, cl.ended_at
+               FROM call_logs cl
+               WHERE cl.agent_id = %s AND cl.contact_id = %s
+               ORDER BY cl.started_at DESC LIMIT %s""",
+            (agent_id, contact_id, limit),
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+
+def _get_call_transcript(agent_id: str, inp: dict) -> dict:
+    call_id = inp["call_id"]
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            """SELECT ct.id, ct.full_text, ct.speaker_segments, ct.ai_summary,
+                      ct.ai_actions, ct.status, ct.duration_seconds, ct.word_count,
+                      ct.created_at, ct.completed_at,
+                      cl.direction, cl.from_number, cl.to_number, cl.duration,
+                      cl.started_at,
+                      COALESCE(c.first_name || ' ' || c.last_name, '') AS contact_name
+               FROM call_transcripts ct
+               JOIN call_logs cl ON cl.id = ct.call_id
+               LEFT JOIN contacts c ON c.id = cl.contact_id
+               WHERE ct.call_id = %s AND ct.agent_id = %s""",
+            (call_id, agent_id),
+        )
+        row = cur.fetchone()
+        if not row:
+            return {"error": "No transcript found for this call"}
+        result = dict(row)
+        # Parse JSONB fields if returned as strings
+        if isinstance(result.get("speaker_segments"), str):
+            result["speaker_segments"] = json.loads(result["speaker_segments"])
+        if isinstance(result.get("ai_actions"), str):
+            result["ai_actions"] = json.loads(result["ai_actions"])
+        return result
+
+
+def _search_call_transcripts(agent_id: str, inp: dict) -> list:
+    query = inp["query"]
+    contact_id = inp.get("contact_id")
+    limit = inp.get("limit", 10)
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        where_parts = ["ct.agent_id = %s", "ct.status = 'completed'"]
+        params: list = [agent_id]
+
+        # Use PostgreSQL full-text search
+        params.append(query)
+        where_parts.append("to_tsvector('english', ct.full_text) @@ plainto_tsquery('english', %s)")
+
+        if contact_id:
+            params.append(contact_id)
+            where_parts.append("cl.contact_id = %s")
+
+        where_clause = " AND ".join(where_parts)
+        params.append(limit)
+        cur.execute(
+            f"""SELECT ct.call_id, ct.ai_summary, ct.word_count, ct.created_at,
+                       cl.direction, cl.duration, cl.started_at,
+                       COALESCE(c.first_name || ' ' || c.last_name, '') AS contact_name
+                FROM call_transcripts ct
+                JOIN call_logs cl ON cl.id = ct.call_id
+                LEFT JOIN contacts c ON c.id = cl.contact_id
+                WHERE {where_clause}
+                ORDER BY ct.created_at DESC LIMIT %s""",
+            params,
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+
+async def _initiate_call_via_backend(agent_id: str, inp: dict) -> dict:
+    """Initiate a call by proxying through the Go backend."""
+    import httpx
+    from app.config import BACKEND_URL, AI_SERVICE_SECRET
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{BACKEND_URL}/api/calls/initiate",
+                json={"to": inp["to"], "contact_id": inp.get("contact_id")},
+                headers={
+                    "X-AI-Service-Secret": AI_SERVICE_SECRET,
+                    "X-Agent-ID": agent_id,
+                },
+                timeout=15.0,
+            )
+            if resp.status_code >= 400:
+                return {"error": f"Failed to initiate call: {resp.text}"}
+            return resp.json()
+    except Exception as e:
+        return {"error": f"Call initiation failed: {str(e)}"}
+
+
 # ---------------------------------------------------------------------------
 # Workflow trigger hooks (fire-and-forget)
 # ---------------------------------------------------------------------------
@@ -906,6 +1108,7 @@ _TOOL_TO_TRIGGER = {
     "log_activity": "activity_logged",
     "update_deal": "deal_stage_changed",
     "send_sms": "sms_sent",
+    "initiate_call": "call_initiated",
 }
 
 
@@ -1022,6 +1225,8 @@ async def execute_write_tool(pending_id: str) -> dict:
         result = await run_query(lambda: _delete_property(agent_id, inp))
     elif tool_name == "send_sms":
         result = await _send_sms_via_backend(agent_id, inp)
+    elif tool_name == "initiate_call":
+        result = await _initiate_call_via_backend(agent_id, inp)
     else:
         return {"error": f"Unknown write tool: {tool_name}"}
 
