@@ -107,11 +107,11 @@ Plans:
   3. Agent taps a contact to call, their phone rings within 3 seconds, and the call bridges to the client
   4. Agent can view call history showing status, duration, and AI transcript summaries for each call
   5. Agent can configure their personal phone number in mobile app settings
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 08-01: TBD
-- [ ] 08-02: TBD
+- [ ] 08-01-PLAN.md — Expo scaffold with Clerk auth, API client layer, shared types
+- [ ] 08-02-PLAN.md — Contacts list + search, contact detail with tap-to-call, call history, settings
 
 ## Progress
 
@@ -124,7 +124,7 @@ Phases execute in numeric order: 4 -> 5 -> 6 -> 7 -> 8
 | 5. Recording Infrastructure | 2/2 | Complete   | 2026-03-24 |
 | 6. AI Transcription & Intelligence | 0/2 | Planning complete | - |
 | 7. Frontend Call Experience | 0/2 | Planning complete | - |
-| 8. React Native Mobile Dialer | 0/? | Not started | - |
+| 8. React Native Mobile Dialer | 0/2 | Planning complete | - |
 
 ---
 *Roadmap created: 2026-03-23*
