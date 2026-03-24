@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useClerk, useUser, useAuth } from "@clerk/nextjs";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   LayoutDashboard,
   Users,
@@ -24,6 +24,7 @@ import {
   StickyNote,
   Plus,
   FileText,
+  UserPlus,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -34,6 +35,8 @@ import CommandPalette from "@/components/shared/CommandPalette";
 import ErrorBoundary from "@/components/shared/ErrorBoundary";
 import { useUIStore } from "@/store/ui-store";
 import { listAllActivities, type Activity } from "@/lib/api/activities";
+import { getGmailStatus, syncGmail } from "@/lib/api/gmail";
+import { listLeadSuggestions } from "@/lib/api/lead-suggestions";
 
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard", exact: true },
@@ -97,6 +100,32 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
   const [cmdPaletteOpen, setCmdPaletteOpen] = useState(false);
   const { getToken } = useAuth();
+  const queryClient = useQueryClient();
+
+  // Silent Gmail auto-sync on dashboard load
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken();
+        if (!token || cancelled) return;
+        const status = await getGmailStatus(token);
+        if (!status.connected || cancelled) return;
+        if (status.last_synced_at) {
+          const elapsed = Date.now() - new Date(status.last_synced_at).getTime();
+          if (elapsed < 5 * 60 * 1000) return;
+        }
+        await syncGmail(token);
+        if (cancelled) return;
+        queryClient.invalidateQueries({ queryKey: ["gmail-emails"] });
+        queryClient.invalidateQueries({ queryKey: ["gmail-status"] });
+      } catch {
+        // Silent — fire-and-forget background sync
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Fetch recent activities for notifications
   const { data: recentActivities } = useQuery({
@@ -108,6 +137,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     },
     refetchInterval: 60000, // refresh every minute
   });
+
+  // Fetch pending lead suggestions count
+  const { data: leadSuggestionsData } = useQuery({
+    queryKey: ["lead-suggestions"],
+    queryFn: async () => {
+      const token = await getToken();
+      if (!token) return { suggestions: [], total: 0 };
+      return listLeadSuggestions(token);
+    },
+    refetchInterval: 60000,
+  });
+  const leadCount = leadSuggestionsData?.total ?? 0;
 
   const notifications = recentActivities?.activities ?? [];
   const unreadCount = notifications.filter((a) => !readIds.has(a.id)).length;
@@ -301,6 +342,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
           {/* Bell + user avatar */}
           <div className="flex items-center gap-2">
+            {/* Lead suggestions badge */}
+            {leadCount > 0 && (
+              <Link
+                href="/dashboard/communication?tab=leads"
+                className="relative w-9 h-9 rounded-full border flex items-center justify-center transition-colors bg-green-50 border-green-200 text-green-600 hover:bg-green-100"
+                title={`${leadCount} potential lead${leadCount !== 1 ? "s" : ""} detected`}
+              >
+                <UserPlus size={16} />
+                <span
+                  className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 rounded-full border-2 border-white flex items-center justify-center text-[9px] font-bold text-white px-0.5"
+                  style={{ backgroundColor: "#22C55E" }}
+                >
+                  {leadCount}
+                </span>
+              </Link>
+            )}
+
             {/* Notification bell */}
             <div className="relative" ref={notifRef}>
               <button

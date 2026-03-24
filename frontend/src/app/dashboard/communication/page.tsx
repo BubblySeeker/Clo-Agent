@@ -6,7 +6,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { listAllActivities, createActivity } from "@/lib/api/activities";
 import { listContacts } from "@/lib/api/contacts";
 import { getGmailStatus, syncGmail, listEmails, getEmail, sendEmail, markEmailRead, type Email } from "@/lib/api/gmail";
-import { Phone, Mail, Search, Plus, X, User, ChevronDown, ChevronUp, ChevronRight, RefreshCw, Send, Reply, Star, Paperclip } from "lucide-react";
+import { Phone, Mail, Search, Plus, X, User, ChevronDown, ChevronUp, ChevronRight, RefreshCw, Send, Reply, Star, Paperclip, UserPlus, Check, XCircle } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { listLeadSuggestions, acceptLeadSuggestion, dismissLeadSuggestion, type LeadSuggestion } from "@/lib/api/lead-suggestions";
 
 const typeColors: Record<string, { bg: string; color: string }> = {
   call: { bg: "#EFF4FF", color: "#2563EB" },
@@ -136,8 +138,10 @@ function EmailHtmlFrame({ html }: { html: string }) {
 export default function CommunicationPage() {
   const { getToken } = useAuth();
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
 
-  const [filter, setFilter] = useState<"all" | "call" | "email" | "gmail">("all");
+  const initialTab = searchParams.get("tab") === "leads" ? "leads" : "all";
+  const [filter, setFilter] = useState<"all" | "call" | "email" | "gmail" | "leads">(initialTab);
   const [search, setSearch] = useState("");
   const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -183,23 +187,39 @@ export default function CommunicationPage() {
 
   const gmailConnected = gmailStatusData?.connected ?? false;
 
-  // Auto-sync on mount if connected and last sync > 5 min ago
-  useEffect(() => {
-    if (!gmailConnected) return;
-    if (gmailStatusData?.last_synced_at) {
-      const elapsed = Date.now() - new Date(gmailStatusData.last_synced_at).getTime();
-      if (elapsed < 5 * 60 * 1000) return;
-    }
-    (async () => {
+  // Lead suggestions
+  const { data: leadSuggestionsData } = useQuery({
+    queryKey: ["lead-suggestions"],
+    queryFn: async () => {
       const token = await getToken();
-      if (token) {
-        await syncGmail(token);
-        queryClient.invalidateQueries({ queryKey: ["gmail-emails"] });
-        queryClient.invalidateQueries({ queryKey: ["gmail-status"] });
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gmailConnected]);
+      if (!token) return { suggestions: [], total: 0 };
+      return listLeadSuggestions(token);
+    },
+    refetchInterval: 60000,
+  });
+  const leadSuggestions = leadSuggestionsData?.suggestions ?? [];
+
+  const acceptMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const token = await getToken();
+      return acceptLeadSuggestion(token!, id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["lead-suggestions"] });
+      queryClient.invalidateQueries({ queryKey: ["contacts"] });
+      queryClient.invalidateQueries({ queryKey: ["gmail-emails"] });
+    },
+  });
+
+  const dismissMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const token = await getToken();
+      return dismissLeadSuggestion(token!, id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["lead-suggestions"] });
+    },
+  });
 
   const { data: activitiesData, isError: activitiesError, refetch: refetchActivities } = useQuery({
     queryKey: ["comm-activities"],
@@ -596,17 +616,87 @@ export default function CommunicationPage() {
           </div>
 
           <div className="flex gap-1">
-            {(["all", "call", "email", ...(gmailConnected ? ["gmail" as const] : [])] as const).map((f) => (
+            {(["all", "call", "email", ...(gmailConnected ? ["gmail" as const] : []), ...(leadSuggestions.length > 0 ? ["leads" as const] : [])] as const).map((f) => (
               <button key={f} onClick={() => setFilter(f as typeof filter)}
-                className={`flex-1 py-2 rounded-lg text-xs font-medium tracking-wide uppercase transition-all duration-200 ${filter === f ? "bg-[#2563EB] text-white shadow-sm" : "text-[#6B7280] hover:text-[#1A2E44] hover:bg-[#F8F9FC]"}`}>
-                {f === "all" ? "All" : f === "call" ? "Calls" : f === "email" ? "Manual" : "Gmail"}
+                className={`flex-1 py-2 rounded-lg text-xs font-medium tracking-wide uppercase transition-all duration-200 ${
+                  filter === f
+                    ? f === "leads" ? "bg-green-600 text-white shadow-sm" : "bg-[#2563EB] text-white shadow-sm"
+                    : "text-[#6B7280] hover:text-[#1A2E44] hover:bg-[#F8F9FC]"
+                }`}>
+                {f === "all" ? "All" : f === "call" ? "Calls" : f === "email" ? "Manual" : f === "gmail" ? "Gmail" : `Leads (${leadSuggestions.length})`}
               </button>
             ))}
           </div>
         </div>
 
         <div ref={sidebarRef} className="flex-1 overflow-y-auto">
-          {threads.length === 0 ? (
+          {filter === "leads" ? (
+            <div className="divide-y divide-gray-100">
+              {leadSuggestions.length === 0 ? (
+                <div className="p-8 text-center">
+                  <UserPlus size={24} className="mx-auto text-gray-300 mb-2" />
+                  <p className="text-sm text-gray-400">No lead suggestions</p>
+                  <p className="text-xs text-gray-300 mt-1">AI will detect potential leads from your incoming emails</p>
+                </div>
+              ) : (
+                leadSuggestions.map((s) => (
+                  <div key={s.id} className="px-4 py-3.5">
+                    <div className="flex items-start gap-3">
+                      <div className="w-9 h-9 rounded-full bg-green-100 flex items-center justify-center shrink-0">
+                        <UserPlus size={16} className="text-green-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-gray-900 truncate">
+                            {s.suggested_first_name || s.from_name || s.from_address}
+                            {s.suggested_last_name ? ` ${s.suggested_last_name}` : ""}
+                          </span>
+                          {s.confidence > 0 && (
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                              s.confidence >= 0.7 ? "bg-green-100 text-green-700" :
+                              s.confidence >= 0.4 ? "bg-yellow-100 text-yellow-700" :
+                              "bg-gray-100 text-gray-500"
+                            }`}>
+                              {Math.round(s.confidence * 100)}%
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500 truncate">{s.from_address}</p>
+                        {s.subject && <p className="text-xs text-gray-700 mt-1 truncate font-medium">{s.subject}</p>}
+                        {s.snippet && <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">{s.snippet}</p>}
+                        {s.suggested_intent && (
+                          <span className="inline-block mt-1.5 text-[10px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 font-medium capitalize">
+                            {s.suggested_intent}
+                          </span>
+                        )}
+                        <div className="flex gap-2 mt-2">
+                          <button
+                            onClick={() => acceptMutation.mutate(s.id)}
+                            disabled={acceptMutation.isPending}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-500 text-white text-xs font-semibold hover:bg-green-600 transition-colors disabled:opacity-50"
+                          >
+                            <Check size={12} />
+                            Accept
+                          </button>
+                          <button
+                            onClick={() => dismissMutation.mutate(s.id)}
+                            disabled={dismissMutation.isPending}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-xs font-semibold hover:bg-gray-200 transition-colors disabled:opacity-50"
+                          >
+                            <XCircle size={12} />
+                            Dismiss
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    {s.gmail_date && (
+                      <p className="text-[10px] text-gray-300 mt-1 text-right">{timeAgo(s.gmail_date)}</p>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          ) : threads.length === 0 ? (
             <div className="p-8 text-center">
               <Mail size={32} className="mx-auto text-[#E8E6E1] mb-3" />
               <p className="text-sm text-[#1A2E44] font-medium font-[family-name:var(--font-sora)]">No communications yet</p>

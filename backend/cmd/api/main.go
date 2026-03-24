@@ -16,6 +16,7 @@ import (
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/httprate"
 
+	"crm-api/internal/background"
 	"crm-api/internal/config"
 	"crm-api/internal/database"
 	"crm-api/internal/handlers"
@@ -113,6 +114,13 @@ func run() error {
 	r.Get("/health", handlers.Health)
 	r.Get("/api/auth/google/callback", handlers.GmailAuthCallback(pool, cfg))
 
+	// Client Portal (public — token-based auth, no Clerk)
+	r.Get("/api/portal/auth/{token}", handlers.PortalAuth(pool))
+	r.Get("/api/portal/view/{token}/dashboard", handlers.PortalDashboard(pool))
+	r.Get("/api/portal/view/{token}/deals", handlers.PortalDeals(pool))
+	r.Get("/api/portal/view/{token}/properties", handlers.PortalProperties(pool))
+	r.Get("/api/portal/view/{token}/timeline", handlers.PortalTimeline(pool))
+
 	// Protected — Clerk JWT + user sync required
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.ClerkAuth(clerkClient, cfg.AIServiceSecret))
@@ -200,6 +208,13 @@ func run() error {
 		r.Get("/api/analytics/activities", handlers.GetActivityAnalytics(pool))
 		r.Get("/api/analytics/contacts", handlers.GetContactAnalytics(pool))
 
+		// Portal (agent-side)
+		r.Post("/api/portal/invite/{contact_id}", handlers.CreatePortalInvite(pool))
+		r.Get("/api/portal/invites", handlers.ListPortalInvites(pool))
+		r.Delete("/api/portal/invite/{token_id}", handlers.RevokePortalInvite(pool))
+		r.Get("/api/portal/settings", handlers.GetPortalSettings(pool))
+		r.Patch("/api/portal/settings", handlers.UpdatePortalSettings(pool))
+
 		// Contact Folders
 		r.Get("/api/contact-folders", handlers.ListContactFolders(pool))
 		r.Post("/api/contact-folders", handlers.CreateContactFolder(pool))
@@ -236,7 +251,19 @@ func run() error {
 		r.Get("/api/gmail/emails/{id}", handlers.GetEmail(pool))
 		r.Post("/api/gmail/send", handlers.SendEmail(pool, cfg))
 		r.Patch("/api/gmail/emails/{id}/read", handlers.MarkEmailRead(pool, cfg))
+
+		// Lead suggestions
+		r.Get("/api/lead-suggestions", handlers.ListLeadSuggestions(pool))
+		r.Post("/api/lead-suggestions/{id}/accept", handlers.AcceptLeadSuggestion(pool))
+		r.Post("/api/lead-suggestions/{id}/dismiss", handlers.DismissLeadSuggestion(pool))
 	})
+
+	// -------------------------------------------------------------------------
+	// Background workers
+	// -------------------------------------------------------------------------
+	bgCtx, bgCancel := context.WithCancel(context.Background())
+	defer bgCancel()
+	go background.StartEmailSyncLoop(bgCtx, pool, cfg)
 
 	// -------------------------------------------------------------------------
 	// HTTP server
@@ -266,6 +293,9 @@ func run() error {
 	case sig := <-quit:
 		slog.Info("shutdown signal received", "signal", sig)
 	}
+
+	// Stop background workers
+	bgCancel()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
