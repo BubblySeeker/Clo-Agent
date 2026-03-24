@@ -16,6 +16,8 @@ export interface CallLog {
   recording_sid: string | null;
   recording_duration: number;
   has_recording: boolean;
+  outcome: string | null;
+  answered_by: string | null;
   transcription_status: "processing" | "completed" | "failed" | null;
 }
 
@@ -107,4 +109,15 @@ export function dismissTranscriptAction(
 export function getRecordingUrl(callId: string): string {
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
   return `${API_URL}/api/calls/${callId}/recording`;
+}
+
+export function updateCallOutcome(
+  token: string,
+  callId: string,
+  outcome: string | null
+): Promise<{ message: string }> {
+  return apiRequest(`/calls/${callId}`, token, {
+    method: "PATCH",
+    body: JSON.stringify({ outcome }),
+  });
 }
