@@ -1,279 +1,263 @@
-# Research: CLAUDE.md Tool/Skill Routing Configuration
+# Technology Stack: AI Contact Resolution
 
-## Context
-
-CloAgent is a brownfield AI-powered CRM with an extensive CLAUDE.md (~400 lines) and a mature `.claude/` directory structure including agents, commands, skills, hooks, and GSD workflows. The goal is to add routing rules so Claude Code automatically invokes the correct specialized tool based on task context.
-
-### Tools to Route
-
-| Tool | Plugin ID | Purpose | Scope |
-|------|-----------|---------|-------|
-| `frontend-design` | `frontend-design@claude-plugins-official` | Dashboard/app UI design and implementation | `/dashboard/*` pages, app components |
-| `ui-ux-pro-max` | `ui-ux-pro-max@ui-ux-pro-max-skill` | Landing/marketing page design | `page.tsx` (root), `(marketing)/*` routes |
-| Stitch | MCP tool or standalone | Component styling, new component creation | Any frontend file |
-| Gemini (nano banana 2) | MCP tool or standalone | AI image generation | Any image asset needed anywhere |
-| 21st.dev | MCP tool or API | Pre-built 3D component library | Landing/marketing pages only |
+**Project:** AI Contact Intelligence (CloAgent milestone)
+**Researched:** 2026-03-24
+**Scope:** Prompt engineering and tool description techniques for reliable contact resolution in an existing Claude Haiku 4.5 CRM assistant
 
 ---
 
-## 1. How CLAUDE.md Routing Rules Should Be Structured
+## What This Document Covers
 
-### 1.1 Placement Within CLAUDE.md
-
-**Recommendation:** Add a dedicated `## Tool & Skill Routing` section immediately after the existing `## gstack Skills` section and before `## Backend Patterns`. This keeps all tool/skill configuration grouped together.
-
-**Confidence: HIGH** -- CLAUDE.md is read top-to-bottom and injected as system context. Placement order affects priority when instructions conflict. Placing routing rules after existing skill docs and before implementation patterns means routing decisions happen early but after the project context is established.
-
-### 1.2 Format: Imperative Directives with File-Path Triggers
-
-Claude Code processes CLAUDE.md as natural-language system instructions. The most effective format uses:
-
-1. **Imperative voice** ("ALWAYS use X when...", "NEVER use Y for...")
-2. **File-path pattern matching** as the primary trigger (Claude can see which files are being edited)
-3. **Task-type keywords** as the secondary trigger (what the user is asking to do)
-4. **Explicit exclusion rules** to prevent misrouting
-
-**Confidence: HIGH** -- This mirrors the pattern already used successfully in the existing CLAUDE.md (e.g., "Use the `/browse` skill from gstack for all web browsing tasks. Never use `mcp__claude-in-chrome__*` tools directly.").
-
-### 1.3 Routing Table Format
-
-The GSD `do.md` workflow demonstrates a proven routing table pattern using "If the text describes... | Route to | Why" columns. This same pattern should be adapted for tool routing.
-
-**Confidence: HIGH** -- The GSD dispatcher at `.claude/get-shit-done/workflows/do.md` already uses this exact pattern and it works reliably for intent-to-command routing.
+This is not a general stack reference — the application stack is already chosen. This document covers the specific techniques for improving Claude Haiku 4.5's contact lookup behavior through system prompt engineering and tool description optimization. All recommendations apply to `ai-service/app/services/agent.py` and `ai-service/app/tools.py`.
 
 ---
 
-## 2. What Triggers Each Tool
+## Recommended Approach
 
-### 2.1 `frontend-design` Skill
+**Change the system prompt and the `search_contacts` tool description. Do not change the model, the backend, or add new tools.**
 
-**Triggers:**
-- Editing or creating files under `frontend/src/app/dashboard/`
-- Editing or creating files under `frontend/src/components/` (excluding `marketing/`)
-- Keywords: "dashboard", "app UI", "contact page", "pipeline", "kanban", "widget", "settings page", "chat page", "analytics page"
-- Any task involving TanStack Query data display, form layouts, or interactive app components
-
-**Does NOT trigger for:**
-- Marketing pages (`(marketing)/` route group or root `page.tsx`)
-- Pure backend/API work
-- Image generation requests
-- 3D component requests
-
-### 2.2 `ui-ux-pro-max` Skill
-
-**Triggers:**
-- Editing or creating `frontend/src/app/page.tsx` (marketing home)
-- Editing or creating files under `frontend/src/app/(marketing)/`
-- Editing or creating files under `frontend/src/components/marketing/`
-- Keywords: "landing page", "marketing page", "hero section", "pricing page", "about page", "features page", "team page", "mission page", "footer", "marketing nav"
-
-**Does NOT trigger for:**
-- Dashboard pages (`/dashboard/*`)
-- Backend work
-- Image generation (hand off to Gemini)
-
-### 2.3 Stitch
-
-**Triggers:**
-- "Style this component", "restyle", "redesign", "make it look better"
-- Creating a new reusable component (not a page)
-- Tailwind CSS refactoring or design system work
-- "Create a component for...", "extract component", "build a card component"
-- Any request focused on visual styling rather than functionality
-
-**Does NOT trigger for:**
-- Full page creation (use `frontend-design` or `ui-ux-pro-max` instead)
-- Backend/API work
-- Image generation
-
-### 2.4 Gemini (nano banana 2)
-
-**Triggers:**
-- "Generate an image", "create an image", "make a graphic"
-- "Hero image", "placeholder image", "icon", "illustration"
-- Any request for a visual asset (PNG, JPG, SVG, WebP)
-- "Marketing banner", "app screenshot mockup", "avatar placeholder"
-
-**Does NOT trigger for:**
-- Code generation of any kind
-- Component creation (use Stitch)
-- 3D components (use 21st.dev)
-
-### 2.5 21st.dev
-
-**Triggers:**
-- "3D component", "3D element", "3D animation", "globe", "3D card"
-- "Interactive 3D", "three.js component", "WebGL"
-- Specifically when working on landing/marketing pages AND the request involves 3D
-
-**Hard constraint:** ONLY on landing/marketing pages. Never on dashboard pages.
-
-**Does NOT trigger for:**
-- Dashboard pages (even if user asks for 3D -- redirect to simpler alternatives)
-- 2D components or standard UI elements
-- Image generation (use Gemini)
+The search SQL already works. The problem is the model is not being instructed precisely enough to follow a search-before-act pipeline. This is a prompt engineering problem, not an infrastructure problem.
 
 ---
 
-## 3. Best Practices for Skill Invocation Directives in CLAUDE.md
+## Technique 1: Explicit Procedure Block in the System Prompt
 
-### 3.1 Use Explicit Priority Ordering
+**Confidence: HIGH** — Verified against Anthropic's official prompting best practices (2025).
 
-When multiple tools could apply, specify which takes precedence. The GSD `do.md` uses "Apply the **first matching** rule" -- this same principle should apply.
+### The Core Pattern
 
-**Example conflict:** User says "make the landing page hero look better with a 3D globe." This matches both `ui-ux-pro-max` (landing page) and `21st.dev` (3D). The routing rule should specify: use `ui-ux-pro-max` as the orchestrator, and invoke `21st.dev` for the 3D component within that context.
+Claude 4.x models respond to explicit, numbered procedure blocks. The documentation states: "Provide instructions as sequential steps using numbered lists or bullet points when the order or completeness of steps matters." This is the most direct way to encode the search-before-act pipeline.
 
-**Confidence: HIGH**
+Add a dedicated `<contact_resolution>` XML block to the system prompt. XML tags signal to Claude that this is a structured section with distinct authority from surrounding prose.
 
-### 3.2 Use MUST/NEVER/ALWAYS Language
-
-CLAUDE.md directives are strongest when they use RFC 2119-style language. The existing CLAUDE.md already uses this pattern (e.g., "The Go backend is the single entry point for the frontend. AI requests are proxied from Go -> Python AI service. The frontend **never** talks to the AI service directly.").
-
-**Confidence: HIGH**
-
-### 3.3 Define the Boundary Clearly, Not Just the Trigger
-
-Exclusion rules are as important as inclusion rules. Each tool entry should have both "use when" and "do NOT use when" clauses.
-
-**Confidence: HIGH** -- Without explicit exclusions, Claude will sometimes apply a tool to edge cases where it seems plausible but is wrong (e.g., using `21st.dev` on a dashboard page because the user mentioned "3D").
-
-### 3.4 File-Path Patterns Are More Reliable Than Keyword Matching
-
-When Claude is editing a specific file, it has high confidence about the file path. Keywords in user requests are ambiguous. Prefer file-path triggers as the primary routing signal.
-
-**Confidence: MEDIUM-HIGH** -- File paths work well for the dashboard vs. marketing distinction, but some tasks (like "generate an image for the hero") don't involve editing a specific file when the routing decision is made.
-
-### 3.5 Composability: Allow Multiple Tools Per Task
-
-Some tasks legitimately need multiple tools. The routing rules should allow chaining, not force a single tool choice. For example: "Rebuild the landing page hero with a 3D globe and AI-generated background image" needs `ui-ux-pro-max` + `21st.dev` + Gemini.
-
-**Confidence: MEDIUM** -- Claude Code can chain tool invocations, but the CLAUDE.md directive needs to explicitly say this is allowed or Claude may stop after the first tool.
-
-### 3.6 Keep Routing Rules Close to the Tool Descriptions
-
-Do not scatter routing rules across multiple sections. A single routing table followed by per-tool detail blocks is the most maintainable format.
-
-**Confidence: HIGH**
-
----
-
-## 4. Concrete CLAUDE.md Routing Rule Syntax
-
-### 4.1 Recommended Section to Add
-
-```markdown
-## Tool & Skill Routing
-
-When working on frontend tasks, ALWAYS use the appropriate specialized tool. Apply the **first matching** rule:
-
-### Routing Table
-
-| Context | Tool/Skill | Invocation |
-|---------|-----------|------------|
-| Editing/creating `frontend/src/app/dashboard/**` or `frontend/src/components/` (not `marketing/`) | `frontend-design` skill | Use for layout, data display, forms, interactive app UI |
-| Editing/creating `frontend/src/app/page.tsx`, `frontend/src/app/(marketing)/**`, or `frontend/src/components/marketing/**` | `ui-ux-pro-max` skill | Use for all landing page and marketing page work |
-| Creating a new reusable component, restyling existing components, or design system work | Stitch | Use for component-level styling and creation |
-| Any request for image assets (hero images, icons, illustrations, placeholders) | Gemini (nano banana 2) | Use for ALL image generation regardless of where the image will be used |
-| 3D components, WebGL elements, interactive 3D animations | 21st.dev | Use ONLY on landing/marketing pages — NEVER on dashboard pages |
-
-### Composition Rules
-
-- A single task MAY require multiple tools. For example, a landing page rebuild might use `ui-ux-pro-max` for layout + `21st.dev` for 3D elements + Gemini for images.
-- When composing, the **page-level tool** (`frontend-design` or `ui-ux-pro-max`) is the primary orchestrator. Other tools (Stitch, Gemini, 21st.dev) are invoked as needed within that context.
-- Stitch is used for individual component styling regardless of whether the component lives in dashboard or marketing pages.
-
-### Hard Constraints
-
-- **21st.dev is landing-page only.** If a user requests 3D elements on a dashboard page, suggest a simpler alternative (CSS animations, SVG, Framer Motion) instead.
-- **Gemini is the sole image generator.** Never attempt to create images with any other tool.
-- **Stitch is for components, not pages.** For full page creation, use `frontend-design` (dashboard) or `ui-ux-pro-max` (marketing).
+```python
+contact_resolution_block = (
+    "<contact_resolution>\n"
+    "When the user refers to any contact by name, partial name, or description, "
+    "you MUST follow this exact procedure before taking any action:\n\n"
+    "1. Extract the name or description from the user's message.\n"
+    "   - Full name like 'Rohan Batre': use the full string as the search query.\n"
+    "   - Partial name like 'Rohan' or 'email Rohan': use that part as the query.\n"
+    "   - Recency reference like 'my last contact', 'most recent lead': call "
+    "search_contacts with no query and limit=5, then pick the entry with the "
+    "most recent created_at date.\n"
+    "   - Relational description like 'the buyer I showed on Tuesday': call "
+    "get_all_activities with type=showing and limit=5 to find the contact.\n\n"
+    "2. Call search_contacts with the extracted query. Never guess a contact_id.\n\n"
+    "3. Evaluate the results:\n"
+    "   - Exactly one match: use that contact_id for all subsequent tool calls.\n"
+    "   - Multiple matches: ask the user which one they mean before proceeding.\n"
+    "   - Zero matches: tell the user no contact was found and offer to create one "
+    "or search differently.\n\n"
+    "This procedure applies even if you believe you already know the contact_id "
+    "from earlier in the conversation. Always resolve freshly when the user "
+    "explicitly names a contact.\n"
+    "</contact_resolution>\n\n"
+)
 ```
 
-### 4.2 Alternative: Inline Imperative Style
+### Why This Works
 
-If the routing table format feels too rigid, an imperative-directive style also works:
+The Anthropic docs are explicit: "Claude responds well to clear, explicit instructions. Being specific about your desired output can help enhance results." The XML tag wrapping prevents Claude from treating this as background context rather than a behavioral rule. The numbered steps make the required sequence unambiguous.
 
-```markdown
-## Tool & Skill Routing
+The instruction also explains *why*: "Never guess a contact_id." This matters because Anthropic's own documentation notes that explaining the reason behind an instruction ("Your response will be read aloud by a text-to-speech engine, so never use ellipses") produces better generalization than bare prohibitions.
 
-### Dashboard / App UI
-ALWAYS use the `frontend-design` skill when creating or modifying pages under `frontend/src/app/dashboard/` or components under `frontend/src/components/` (excluding `marketing/`). This includes contact pages, pipeline, chat, analytics, tasks, settings, and all dashboard widgets.
+### Why NOT to Use CRITICAL/ALL-CAPS
 
-### Landing / Marketing Pages
-ALWAYS use the `ui-ux-pro-max` skill when creating or modifying the marketing home page (`frontend/src/app/page.tsx`), any page under `frontend/src/app/(marketing)/`, or components under `frontend/src/components/marketing/`.
-
-### Component Design & Styling
-Use Stitch when the task is focused on creating a new reusable component or restyling an existing component. Stitch handles the visual/design layer — not full page layout or data wiring.
-
-### Image Generation
-ALWAYS use Gemini (nano banana 2) when any image asset is needed — hero images, icons, illustrations, placeholders, marketing banners. This applies to both dashboard and marketing contexts.
-
-### 3D Components
-Use 21st.dev for pre-built 3D components (globes, 3D cards, WebGL effects). NEVER use 21st.dev on dashboard pages — 3D elements are restricted to landing and marketing pages only. If a user requests 3D on a dashboard page, suggest CSS animations or Framer Motion instead.
-```
-
-**Confidence: HIGH for both formats** -- The routing table is more scannable; the imperative style is more explicit. Either will work. The imperative style may be slightly more effective because Claude processes natural-language instructions better than structured tables when making real-time decisions.
-
-### 4.3 Disambiguation Directive
-
-Add a fallback for ambiguous cases:
-
-```markdown
-### Ambiguous Requests
-If a task could reasonably trigger multiple tools, ask the user which scope applies:
-- "Is this for the dashboard app or the marketing site?"
-- "Do you want a new reusable component (Stitch) or a full page (frontend-design/ui-ux-pro-max)?"
-
-When in doubt, default to: `frontend-design` for app work, `ui-ux-pro-max` for marketing work.
-```
-
-**Confidence: MEDIUM** -- Claude will sometimes just pick one rather than asking. The directive makes it more likely to ask, but not guaranteed.
+The official docs note that Claude Haiku 4.5 is responsive to system prompts without aggressive language. The advice for current models: "Use normal prompting like 'Use this tool when...' rather than 'CRITICAL: You MUST use this tool when...'." Overemphatic language triggers over-activation patterns. The procedure block above is firm but not alarmist.
 
 ---
 
-## 5. Confidence Summary
+## Technique 2: Enrich the `search_contacts` Tool Description
 
-| Recommendation | Confidence | Rationale |
-|----------------|-----------|-----------|
-| Place routing rules in a dedicated `## Tool & Skill Routing` section after `## gstack Skills` | HIGH | Follows existing CLAUDE.md organization; groups all tool config |
-| Use file-path patterns as primary routing trigger | HIGH | File paths are unambiguous; Claude sees them during editing |
-| Use imperative MUST/NEVER/ALWAYS language | HIGH | Proven effective in existing CLAUDE.md; mirrors RFC 2119 |
-| Include both "use when" and "do NOT use when" clauses | HIGH | Prevents misrouting on edge cases |
-| Allow multi-tool composition with a primary orchestrator | MEDIUM | Works in practice, but Claude may not always chain correctly |
-| Add disambiguation fallback directive | MEDIUM | Claude sometimes picks a tool instead of asking |
-| Routing table format (vs. imperative prose) | MEDIUM | Both work; imperative may be slightly more reliable for real-time decisions |
-| 21st.dev hard constraint on landing pages only | HIGH | Clear, simple rule with no ambiguity |
-| Gemini as sole image generator | HIGH | Single-tool policy is easy to enforce |
-| Stitch for components (not pages) | HIGH | Clear scope boundary between component-level and page-level tools |
+**Confidence: HIGH** — Verified against Anthropic tool-use implementation docs (2025).
+
+### The Core Pattern
+
+Anthropic's documentation states: "Providing extremely detailed descriptions is by far the most important factor in tool performance." The current `search_contacts` description is two sentences. It needs to be rewritten to explain:
+
+- What it does
+- When to use it (and that it should be used FIRST, before other tools)
+- What each parameter does
+- What the results contain
+
+**Current description (insufficient):**
+```python
+"description": "Search for contacts by name, email, or filter by source. Returns matching contacts. The query matches against first name, last name, email, and full name (first + last). You can search with a full name like 'John Doe' or just a first/last name."
+```
+
+**Recommended description:**
+```python
+"description": (
+    "Search for contacts by name, partial name, or email. This is the FIRST tool "
+    "to call whenever the user mentions a contact by any name — full name, first "
+    "name only, last name only, or nickname. You must call this tool to get the "
+    "contact_id before calling any other tool that requires a contact_id. "
+    "The query is matched case-insensitively against first_name, last_name, "
+    "email, and the concatenated full name (first + last). A partial name like "
+    "'Rohan' or 'Batre' will find 'Rohan Batre'. To find the most recently added "
+    "contact, call this tool with no query and limit=5, then use the entry with "
+    "the latest created_at. Returns: id (UUID to use in other tools), first_name, "
+    "last_name, email, phone, source, created_at, last_activity_at."
+),
+```
+
+### Why This Works
+
+Tool descriptions are the primary signal Claude uses to decide which tool to call and when. The phrase "This is the FIRST tool to call whenever" directly encodes the sequential dependency. Describing what the return value contains (`id (UUID to use in other tools)`) teaches Claude that the result is an input to a downstream call, which reinforces the multi-step pattern.
+
+The "no query + limit=5 for most recent contact" heuristic is a concrete instruction for the "my last contact" case. Without this, Claude cannot know that recency is sortable this way.
 
 ---
 
-## 6. Implementation Notes
+## Technique 3: Few-Shot Examples in the System Prompt
 
-### What Already Exists
+**Confidence: HIGH** — Verified against Anthropic's Claude 4.x prompting docs.
 
-- `frontend-design` and `ui-ux-pro-max` are already enabled in `.claude/settings.json` as plugins
-- The existing `frontend-page` agent (`.claude/agents/frontend-page.md`) handles page creation but does NOT reference any of these skills -- it operates independently
-- The GSD command system has its own routing via `/gsd:do` which dispatches to workflows, not to these design tools
-- No existing CLAUDE.md content references `frontend-design`, `ui-ux-pro-max`, Stitch, Gemini, or 21st.dev
+### The Core Pattern
 
-### Integration Considerations
+"Examples are one of the most reliable ways to steer Claude's output format, tone, and structure." This applies equally to tool-calling sequences. Adding concrete before/after examples inside `<examples>` tags directly teaches the pattern.
 
-1. **GSD + Tool Routing:** The GSD executor (`/gsd:execute-phase`) may trigger frontend work. The CLAUDE.md routing rules should apply regardless of whether work is initiated manually or via GSD.
+```python
+examples_block = (
+    "<examples>\n"
+    "<example>\n"
+    "User: Email Rohan to follow up on the showing\n"
+    "Correct behavior: Call search_contacts(query='Rohan'), get back Rohan Batre's UUID, "
+    "then call draft_email(to=rohan_email, contact_id=uuid, context='follow up on showing').\n"
+    "Wrong behavior: Calling draft_email without searching first.\n"
+    "</example>\n\n"
+    "<example>\n"
+    "User: What's the status of my last contact?\n"
+    "Correct behavior: Call search_contacts(limit=5) with no query, take the result "
+    "with the most recent created_at, then call get_contact_details(contact_id=that_uuid).\n"
+    "Wrong behavior: Responding without searching, or asking the user for a name.\n"
+    "</example>\n\n"
+    "<example>\n"
+    "User: Log a call with John\n"
+    "Correct behavior: Call search_contacts(query='John'). If one result, use that UUID. "
+    "If multiple Johns, ask: 'I found 3 contacts named John — John Smith, John Doe, and "
+    "John Williams. Which one did you call?'\n"
+    "Wrong behavior: Picking the first result without clarifying multiple matches.\n"
+    "</example>\n"
+    "</examples>\n\n"
+)
+```
 
-2. **Agent Files:** The `.claude/agents/frontend-page.md` agent could be updated to reference `frontend-design` skill, but this is a separate change from CLAUDE.md routing rules.
+### Why This Works
 
-3. **Hooks:** The existing `PostToolUse` hook runs Prettier on `.tsx` files. This will continue to work alongside skill-based routing with no conflicts.
+The documentation recommends 3-5 examples that cover edge cases and vary enough that Claude does not pick up unintended patterns. The three examples above cover the three problem cases in the requirements: partial name, recency reference, and ambiguous multi-match. The "Wrong behavior" annotation tells Claude explicitly what the failure mode looks like, reducing the chance it defaults to that behavior.
 
-4. **Stitch and Gemini:** These tools are not currently listed in `.claude/settings.json` `enabledPlugins`. They may need to be added there as well, or they may be available as MCP tools. Verify their availability before writing routing rules that reference them.
+---
 
-5. **21st.dev:** Same as above -- verify this is available as a tool/plugin before writing routing rules.
+## Technique 4: `contact_id` Parameter Descriptions on Downstream Tools
 
-### Recommended Order of Operations
+**Confidence: HIGH** — Verified against Anthropic tool-use docs.
 
-1. Verify Stitch, Gemini, and 21st.dev are accessible as tools/plugins
-2. Add them to `.claude/settings.json` if needed
-3. Add the `## Tool & Skill Routing` section to CLAUDE.md using the imperative format from section 4.2
-4. Add the routing table from section 4.1 as a quick-reference within that section
-5. Add the disambiguation directive from section 4.3
-6. Test by issuing tasks in each category and verifying correct tool invocation
+### The Core Pattern
+
+Every tool that requires a `contact_id` should say in its parameter description that the UUID must come from `search_contacts` or `get_contact_details`. This creates a semantic chain: the model can trace the required sequence just from reading the tool schemas.
+
+**Current (insufficient):**
+```python
+"contact_id": {"type": "string", "description": "UUID of the contact"}
+```
+
+**Recommended for all downstream tools:**
+```python
+"contact_id": {
+    "type": "string",
+    "description": "UUID of the contact. Get this by calling search_contacts first — never guess or fabricate this value."
+}
+```
+
+Apply this to: `get_contact_details`, `get_contact_activities`, `get_buyer_profile`, `create_buyer_profile`, `update_buyer_profile`, `log_activity`, `create_deal`, `list_deals`, `draft_email`, `send_email`, `create_task`, `update_contact`, `delete_contact`.
+
+### Why This Works
+
+Each tool description is independently readable context for Claude. When Claude is deciding whether to call `log_activity` with a guessed UUID versus searching first, the parameter description is the last-chance instruction. This creates defense-in-depth: the system prompt procedure block, the `search_contacts` tool description, and the downstream parameter descriptions all point to the same required behavior.
+
+---
+
+## Technique 5: Disable Parallel Tool Calls for Dependent Operations
+
+**Confidence: MEDIUM** — Pattern confirmed in official docs; not yet tested against this specific codebase.
+
+### The Core Pattern
+
+Claude Haiku 4.5 supports parallel tool calling. For the resolution pipeline, this is a liability: Claude might simultaneously call `search_contacts` and `log_activity` before the search returns. Anthropic's docs provide an explicit API flag:
+
+```python
+response = await client.messages.create(
+    model=MODEL,
+    max_tokens=4096,
+    system=system,
+    messages=messages,
+    tools=TOOL_DEFINITIONS,
+    betas=["disable_parallel_tool_use"],  # Forces sequential: one tool per round
+)
+```
+
+Alternatively, add to the system prompt:
+
+```python
+"When a user's request requires looking up a contact before taking action, "
+"complete the search first, then take the action in the next step. "
+"Do not call a search tool and an action tool in the same step."
+```
+
+### Why to Use the System Prompt Approach Over the API Flag
+
+The `betas` flag disables parallel tool calling globally, which would hurt the morning briefing workflow where 4 tools are intentionally called in parallel. The system prompt instruction scopes the restriction to contact-dependent actions only. Use the prompt approach unless the beta flag becomes stable and context-aware.
+
+---
+
+## What NOT to Do
+
+| Anti-Pattern | Why | Instead |
+|---|---|---|
+| Add fuzzy/phonetic search to the DB | The requirements explicitly exclude this; ILIKE already works | Improve the AI instructions so it uses ILIKE correctly |
+| Bump to Claude Sonnet for this fix | Cost/latency constraint; this is a prompt engineering problem, not a model capability problem | Fix the prompt first; model upgrade is a separate decision |
+| Add a "pre-processing" step that splits names before sending to Claude | Creates a fragile NLP layer before the model that duplicates what the prompt can do | Teach Claude to split names via the procedure block |
+| Use ALL-CAPS or CRITICAL prefix in prompt instructions | Official Anthropic docs say this causes overtriggering in 4.x models | Use clear, direct instructions without alarm language |
+| Inject examples as prose narrative | Claude misses examples embedded in paragraphs | Wrap examples in `<examples>` and `<example>` XML tags |
+| Write one long prose paragraph for the contact resolution rule | Prose is harder for Claude to parse as a procedural rule | Use a numbered list inside a named XML tag |
+| Make `search_contacts` required=["query"] | This breaks the "find my most recent contact" use case that requires querying with no arguments | Keep all parameters optional; teach the recency heuristic in the description |
+
+---
+
+## Implementation Order
+
+1. **Enrich `search_contacts` tool description** (Technique 2) — highest impact per token cost, zero risk of regressions.
+2. **Add `contact_id` parameter descriptions** (Technique 4) — low effort, high signal.
+3. **Add `<contact_resolution>` block** (Technique 1) — the primary behavioral instruction.
+4. **Add `<examples>` block** (Technique 3) — adds token cost but highest reliability for edge cases.
+5. **Add sequential-step instruction for parallel tool control** (Technique 5) — last, because Techniques 1-4 may be sufficient.
+
+Test after step 3 before adding step 4. The procedure block often produces the correct behavior without examples. Adding examples when they are not needed increases token cost on every request.
+
+---
+
+## Token Budget Considerations
+
+The current system prompt is already long (~300 lines). Each addition has a cost at every API call.
+
+| Addition | Estimated Tokens | Risk if Omitted |
+|---|---|---|
+| `<contact_resolution>` procedure block | ~120 tokens | High — this is the core fix |
+| Enriched `search_contacts` description | ~80 tokens | High — tool description is primary signal |
+| `contact_id` parameter descriptions (all tools) | ~200 tokens | Medium — defense in depth |
+| `<examples>` block (3 examples) | ~180 tokens | Medium — needed for edge cases |
+| Sequential-step instruction | ~30 tokens | Low — only if parallel calling is observed |
+
+Total worst-case addition: ~610 tokens per call. At Haiku 4.5 pricing, this is negligible. At 200 conversations/day averaging 10 messages each, the cost delta is under $0.50/day.
+
+---
+
+## Sources
+
+- [Anthropic Claude 4.x Prompting Best Practices](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-4-best-practices) — HIGH confidence, official current docs
+- [Anthropic Tool Use Implementation Guide](https://platform.claude.com/docs/en/agents-and-tools/tool-use/implement-tool-use) — HIGH confidence, official current docs
+- [Anthropic Agent Skill Authoring Best Practices](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices) — HIGH confidence, official current docs
+- [Anthropic: Effective Context Engineering for AI Agents](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents) — HIGH confidence, official Anthropic engineering blog
+- [Anthropic: Advanced Tool Use](https://www.anthropic.com/engineering/advanced-tool-use) — HIGH confidence, official Anthropic engineering blog

@@ -131,6 +131,11 @@ func run() error {
 		r.Get("/api/dashboard/layout", handlers.GetDashboardLayout(pool))
 		r.Put("/api/dashboard/layout", handlers.SaveDashboardLayout(pool))
 
+		// Demo Data
+		r.Get("/api/demo-data", handlers.GetDemoDataStatus(pool))
+		r.Post("/api/demo-data", handlers.SeedDemoData(pool))
+		r.Delete("/api/demo-data", handlers.ClearDemoData(pool))
+
 		// Contacts
 		r.Get("/api/contacts", handlers.ListContacts(pool))
 		r.Post("/api/contacts", handlers.CreateContact(pool))

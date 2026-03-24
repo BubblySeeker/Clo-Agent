@@ -120,7 +120,7 @@ function detectKVBlocks(text: string): RichBlock[] {
   let lastEndIdx = -1;
 
   for (const run of kvRuns) {
-    let preStart = lastEndIdx + 1;
+    const preStart = lastEndIdx + 1;
     let runStart = run.startIdx;
 
     if (run.title) {

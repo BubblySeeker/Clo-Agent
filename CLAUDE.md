@@ -523,3 +523,368 @@ OPENAI_API_KEY=sk-...
 AI_SERVICE_SECRET=<same-shared-secret>
 BACKEND_URL=http://localhost:8080
 ```
+
+<!-- GSD:project-start source:PROJECT.md -->
+## Project
+
+**AI Contact Intelligence**
+
+A focused improvement to CloAgent's AI assistant that makes it smarter about finding, resolving, and reasoning about contacts. Currently the AI fails on basic contact operations — it can't split "Rohan Batre" into first/last name for search, can't find "my last contact," and returns empty results for partial name lookups like "email Rohan." This milestone fixes the AI's contact resolution so it behaves like a competent human assistant.
+
+**Core Value:** When a user references a contact by any natural description (name, partial name, recency, relationship), the AI finds the right contact and acts on it — every time.
+
+### Constraints
+
+- **Model**: Claude Haiku 4.5 — must work within this model's capabilities (can't rely on stronger reasoning)
+- **Tool rounds**: Max 5 per message — contact resolution may consume 1-2 rounds, leaving 3-4 for actual work
+- **Backward compatible**: Changes must not break existing working AI interactions (deals, tasks, activities)
+<!-- GSD:project-end -->
+
+<!-- GSD:stack-start source:codebase/STACK.md -->
+## Technology Stack
+
+## Languages
+- TypeScript 5.x - Frontend (Next.js), type safety in all client code
+- Go 1.25.0 - Backend API server, chi router, pgx driver
+- Python 3.11 - AI Service, FastAPI, Claude API integration, embeddings
+- SQL - PostgreSQL migrations and queries (15 migrations total across schema changes)
+- JavaScript - Node.js build tooling, build scripts
+## Runtime
+- Node.js 20 (Alpine) - Frontend development and production
+- Go 1.25.0 (Alpine) - Backend compilation and runtime
+- Python 3.11-slim - AI service runtime
+- PostgreSQL 15 - Primary data store with pgvector extension
+- Redis 7-alpine - Configured but unused
+- npm - Frontend dependencies (package.json, package-lock.json)
+- go mod - Backend dependencies (go.mod, go.sum)
+- pip - AI service dependencies (requirements.txt)
+## Frameworks
+- Next.js 14.2.35 - Frontend framework, App Router, SSR, static generation
+- Chi v5.2.5 - Go HTTP router and middleware
+- FastAPI 0.135.1 - AI service REST API framework
+- React 18.x - UI library (frontend)
+- No testing framework detected in monorepo (not applicable for current focus)
+- Uvicorn 0.41.0 - Python ASGI server for AI service
+- TypeScript compiler 5.x - Type checking
+- ESLint 8.x - Frontend linting (Next.js config preset)
+- Prettier 3.8.1 - Frontend code formatting with Tailwind plugin
+## Key Dependencies
+- `@clerk/nextjs` 5.7.5 - User authentication, JWT token management, session handling
+- `@tanstack/react-query` 5.90.21 - Server state management, caching, data sync
+- `zustand` 5.0.11 - UI state management (sidebar, chat bubble visibility)
+- `react-hook-form` 7.71.2 - Form state and validation
+- `zod` 4.3.6 - Schema validation (installed but primarily used with react-hook-form)
+- `github.com/clerkinc/clerk-sdk-go` 1.49.1 - JWT validation, user sync
+- `github.com/jackc/pgx/v5` 5.8.0 - PostgreSQL connection pool, high-performance driver
+- `github.com/go-chi/chi/v5` 5.2.5 - HTTP routing, middleware composition
+- `anthropic` 0.84.0 - Claude API client (Haiku 4.5 model for inference)
+- `psycopg2-binary` 2.9.11 - PostgreSQL sync driver for AI service database access
+- `pgvector` 0.4.2 - pgvector type support for embeddings
+- `fastapi` 0.135.1 - Web framework for AI endpoints
+- `openai` 2.26.0 - OpenAI embeddings (text-embedding-3-small for vector search)
+- `requests` 2.32.5 - Sync HTTP client for backend→AI communication
+- `httpx` 0.28.1 - Async HTTP client (FastAPI context)
+- `pydantic` 2.12.5 - Data validation and serialization (FastAPI models)
+- `tailwindcss` 3.4.1 - Utility-first CSS framework
+- `lucide-react` 0.577.0 - Icon library (18 icons per UI pattern)
+- `recharts` 3.8.0 - Charts and analytics visualizations
+- `@radix-ui/react-*` 1.x - Unstyled, accessible primitives (15+ components: avatar, checkbox, dialog, dropdown, tabs, etc.)
+- `framer-motion` 11.18.2 - Animation library
+- `@react-spring/web` 10.0.3 - Physics-based animations
+- `react-parallax-tilt` 1.7.320 - 3D tilt effect component
+- `cobe` 0.6.5 - 3D globe visualization (marketing pages)
+- `@dnd-kit/core` 6.3.1 - Installed but not used; native drag-drop in Kanban board
+- `@dnd-kit/sortable` 10.0.0 - Installed but not used
+- `@dnd-kit/utilities` 3.2.2 - Installed but not used
+- `react-markdown` 10.1.0 - Markdown rendering (AI chat messages)
+- `remark-gfm` 4.0.1 - GitHub-flavored markdown parsing
+- `date-fns` 4.1.0 - Date manipulation utilities
+- `react-day-picker` 9.14.0 - Date picker component
+- `class-variance-authority` 0.7.1 - Component variant patterns
+- `clsx` 2.1.1 - Conditional classnames
+- `tailwind-merge` 3.5.0 - Tailwind class name merging
+- `uuid` (Go stdlib) - UUID generation
+- `google.uuid` (via clerk-sdk-go) - UUID utilities
+## Configuration
+- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` - Clerk public key (build-time, client-side)
+- `CLERK_SECRET_KEY` - Clerk secret (server-side, runtime)
+- `NEXT_PUBLIC_API_URL` - Backend API endpoint (default: http://localhost:8080)
+- `DATABASE_URL` - PostgreSQL connection string (required)
+- `CLERK_SECRET_KEY` - Clerk secret for JWT validation (required)
+- `AI_SERVICE_SECRET` - Shared secret for backend→AI communication (required)
+- `REDIS_URL` - Redis connection (optional, configured but unused)
+- `PORT` - Server port (default: 8080)
+- `AI_SERVICE_URL` - AI service endpoint (default: http://localhost:8000)
+- `GOOGLE_CLIENT_ID` - OAuth 2.0 client ID for Gmail integration
+- `GOOGLE_CLIENT_SECRET` - OAuth 2.0 client secret for Gmail integration
+- `GOOGLE_REDIRECT_URI` - OAuth callback URL (default: http://localhost:8080/api/auth/google/callback)
+- `FRONTEND_URL` - Frontend origin for CORS (default: http://localhost:3000)
+- `ENCRYPTION_KEY` - Key for encrypting sensitive data (OAuth tokens)
+- `DATABASE_URL` - PostgreSQL connection string (required)
+- `ANTHROPIC_API_KEY` - Claude API key (required)
+- `OPENAI_API_KEY` - OpenAI embeddings key (optional for semantic search)
+- `AI_SERVICE_SECRET` - Shared secret validation (required)
+- `BACKEND_URL` - Backend API endpoint for proxied requests (default: http://localhost:8080)
+- `ANTHROPIC_MODEL` - Model selection (default: claude-haiku-4-5-20251001)
+- `frontend/tsconfig.json` - TypeScript compiler: strict mode, path aliases (`@/*` → `src/*`)
+- `frontend/next.config.mjs` - Next.js output mode (standalone in production)
+- `frontend/tailwind.config.ts` - Tailwind customization (colors, animations, spacing)
+- `frontend/postcss.config.mjs` - PostCSS plugins (Tailwind, Autoprefixer)
+- `frontend/.prettierrc` - Prettier: semi: true, singleQuote: false, Tailwind class sorting
+- `backend/cmd/api/main.go` - Entry point, router initialization, middleware stack
+- `ai-service/app/main.py` - FastAPI app, router registration
+## Platform Requirements
+- Node.js 20+ (for frontend build and local dev)
+- Go 1.25.0+ (for backend compilation)
+- Python 3.11+ (for AI service)
+- Docker & Docker Compose (recommended for local database setup)
+- PostgreSQL 15 (local dev or containerized)
+- Redis 7 (containerized, optional)
+- Docker & Docker Compose (containerized deployment)
+- PostgreSQL 15 + pgvector extension
+- Redis 7 (configured, not required)
+- Environment variable provisioning (secrets manager integration)
+- HTTPS/TLS termination (reverse proxy recommended)
+- OAuth 2.0 provider access (Clerk, Google)
+- Frontend → Backend: HTTP/HTTPS (port 8080)
+- Backend → AI Service: HTTP (internal, port 8000)
+- All services → PostgreSQL: TCP (port 5432)
+- Clerk cloud: HTTPS API calls for JWT validation and user sync
+<!-- GSD:stack-end -->
+
+<!-- GSD:conventions-start source:CONVENTIONS.md -->
+## Conventions
+
+## Naming Patterns
+- Go handlers: PascalCase (e.g., `contacts.go`, `deals.go`, `workflows.go`)
+- TypeScript/React: PascalCase for components (e.g., `AIChatBubble.tsx`, `CommandPalette.tsx`), camelCase for utilities and API modules (e.g., `client.ts`, `contacts.ts`)
+- Python files: snake_case (e.g., `agent.py`, `workflow_engine.py`, `tools.py`)
+- Go: PascalCase (exported), camelCase (unexported). Handler factory functions return `http.HandlerFunc` (e.g., `ListContacts()`, `CreateDeal()`, `scanDeal()`)
+- TypeScript: camelCase for functions and hooks (e.g., `listContacts()`, `createContact()`, `getColor()`, `initials()`)
+- Python: snake_case for all functions (e.g., `find_matching_workflows()`, `execute_step()`, `load_history()`)
+- Go: camelCase (e.g., `agentID`, `contactName`, `stageID`)
+- TypeScript: camelCase (e.g., `firstName`, `folderSearch`, `selectedContacts`)
+- Python: snake_case (e.g., `trigger_type`, `agent_id`, `conversation_id`)
+- Go: PascalCase struct names with `json` tags for field mapping (e.g., `Contact struct { FirstName string json:"first_name" }`)
+- TypeScript: PascalCase for interfaces and types (e.g., `interface Contact {}`, `type ViewMode = "table" | "grid"`)
+- Python: PascalCase for Pydantic models (e.g., `class SendMessageRequest(BaseModel)`)
+- Go: ALL_CAPS (e.g., `ErrCodeNotFound`, `UserIDKey`, `MAX_TOOL_ROUNDS`)
+- TypeScript: ALL_CAPS for constants and const objects (e.g., `AVATAR_COLORS`, `SOURCES`, `DATE_OPTIONS`)
+- Python: ALL_CAPS for module-level constants (e.g., `TOOL_DEFINITIONS`, `MODEL`, `MAX_TOOL_ROUNDS`)
+## Code Style
+- Go: Standard `gofmt` style, 4-space indentation via tabs
+- TypeScript/React: Prettier with 2-space indentation, semi-colons enabled, double quotes, trailing commas (es5)
+- Python: PEP 8 style (implied, no formatter enforced)
+- Go: No explicit linter configured; standard Go formatting
+- TypeScript: ESLint with Next.js config (`eslint-config-next` preset) + custom rule for unescaped entities
+- Python: No explicit linter configured
+- All frontend styling uses Tailwind utility classes inline in JSX
+- No CSS files; all styling declarative in components
+- `prettier-plugin-tailwindcss` auto-sorts class names
+- Colors via design tokens (e.g., `bg-blue-500`, `text-gray-700`)
+- Responsive utilities: `md:`, `lg:`, `xl:` prefixes
+## Import Organization
+- TypeScript: `@/*` maps to `src/*` (configured in `frontend/tsconfig.json`)
+- Used everywhere in frontend code for cleaner imports
+## Error Handling
+- Handler factory functions return `http.HandlerFunc` that capture the pool via closure
+- Error handling is silent with generic error messages: `respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)`
+- No error wrapping beyond HTTP response; errors logged at the HTTP level
+- Error responses are structured: `{"error": "message", "code": "ERR_DATABASE"}`
+- Status codes match HTTP semantics (201 Created, 204 No Content, 404 Not Found, 400 Bad Request, 500 Internal Server Error)
+- FastAPI `HTTPException` with `status_code` and `detail` parameters
+- Unhandled exceptions return 500 via FastAPI middleware
+- No explicit error logging in business logic; FastAPI middleware logs requests
+## Logging
+- Structured JSON logging via `log/slog` with `JSONHandler`
+- Log level: `LevelInfo` by default
+- Pattern: `slog.Info("event", "key", value)` or `slog.Error("event", "error", err)`
+- Browser console logging only (no structured logging)
+- Error logging in page components on mutation failure
+- TanStack Query logs in development mode
+- FastAPI middleware logs HTTP requests via Uvicorn stdout
+- No explicit custom logging in business logic
+- Module-level `logger` initialized with `logging.getLogger(__name__)` but not actively used in visible patterns
+## Comments
+- Comments explain **why**, not what the code does
+- Docstrings on functions/methods describe purpose, inputs, and returns
+- TODO/FIXME comments are sparse and specific
+- Docstrings present on FastAPI endpoints (brief explanation of behavior)
+- TypeScript: Minimal use; types are self-documenting via interfaces
+- Exported functions have comment explanations (not strict in all handlers)
+- Struct tags document JSON field mappings via `json:"field_name"`
+- Module-level docstring at top of file
+- Function docstrings explain flow (e.g., in `agent.py`: "Load conversation history → Build system prompt → Call Claude → Stream response")
+## Function Design
+- Go handlers tend to be 50–150 lines (query building + scanning + response)
+- TypeScript page components are 200–400 lines (state setup, hooks, JSX)
+- Python service functions are 30–80 lines (focused operations)
+- Go: Handler factories take `*pgxpool.Pool` and return `http.HandlerFunc`
+- TypeScript: Functions take typed arguments (filters object, token string, ids)
+- Python: Functions take explicit parameters; requests modeled via Pydantic
+- Go: Functions that may fail return `(T, error)` or write to `http.ResponseWriter` directly
+- TypeScript: API functions return `Promise<T>` (errors thrown)
+- Python: Async functions return results or raise `HTTPException`
+- Go: `r.Context()` passed to all DB queries; RLS setup via `BeginWithRLS(ctx, pool, agentID)`
+- TypeScript: Clerk context via `useAuth()` hook; no explicit context passing
+- Python: Agent ID extracted from request and used as a parameter
+## Module Design
+- Go: Exported functions (PascalCase) are handlers or helpers; unexported (camelCase) are internal utilities
+- TypeScript: Named exports for interfaces and functions (no default exports for utilities)
+- Python: FastAPI routers are `APIRouter()` instances; tools defined in module-level lists
+- TypeScript: No barrel files (`index.ts` pattern) used; direct imports preferred
+- Go: Package-level organization (each domain gets a file: `contacts.go`, `deals.go`, etc.)
+- Python: Routes organized in `app/routes/` with routers included in `main.py`
+## Cross-Service Patterns
+- Always `snake_case` (e.g., `first_name`, `agent_id`, `created_at`)
+- Always `snake_case` (e.g., `"first_name": "John"`)
+- PascalCase interfaces: `interface Contact {}`
+- camelCase field access (mapped from API response)
+- Frontend: Clerk `useAuth()` → `getToken()` → Bearer token in `Authorization` header
+- Backend: Clerk JWT validation in middleware; user ID extracted to context
+- Inter-service: `X-AI-Service-Secret` header for Go ↔ Python communication; `X-Agent-ID` for agent identification
+## Transaction Pattern (Go)
+## Data Type Nullable Patterns
+- Pointers for nullable fields: `*string`, `*float64`, `*int` in structs
+- JSON tags preserve field names: `json:"email"` (not `json:"email,omitempty"` — null is explicit)
+- Union with null: `string | null` (not optional `?string`)
+- Zod schemas use `.nullable()` for nullable fields
+- Pydantic models use `Optional[Type]` or `Type | None`
+- Database results handle NULL as None
+## Testing Conventions
+- **Go:** Tests live in same package with `_test.go` suffix; use `httptest` for handler testing
+- **TypeScript:** Tests not extensively used; TanStack Query integration tests via component testing
+- **Python:** Pytest-style tests; metadata-focused tests (tool definitions, schema validation) preferred
+<!-- GSD:conventions-end -->
+
+<!-- GSD:architecture-start source:ARCHITECTURE.md -->
+## Architecture
+
+## Pattern Overview
+- Frontend is single entry point; never communicates directly with AI service
+- Backend proxies all AI requests to Python service using shared secret (`X-AI-Service-Secret` header)
+- Row-level security policies enforce agent-scoped data access at database layer
+- Agentic loop with tool-calling (max 5 rounds per message) returns confirmation requests before executing write tools
+- Async background workers handle email syncing and workflow triggers
+## Layers
+- Purpose: UI rendering, form handling, data display, authentication via Clerk
+- Location: `frontend/src/app/` (page routes), `frontend/src/components/` (UI components), `frontend/src/lib/api/` (API client modules)
+- Contains: React pages, components, API client functions, Zustand store for UI state
+- Depends on: Backend (`/api/*` endpoints), Clerk SDK for authentication
+- Used by: User browsers
+- Purpose: Request routing, authentication/authorization, data persistence, request validation, email/Gmail integration
+- Location: `backend/cmd/api/main.go` (entry), `backend/internal/handlers/` (14+ handler files), `backend/internal/middleware/` (auth, user sync, CORS)
+- Contains: HTTP handlers (factory functions), middleware stack, database transactions with RLS
+- Depends on: PostgreSQL connection pool, Clerk SDK for token validation, AI service for agentic requests
+- Used by: Frontend (HTTP requests), AI service (service-to-service with shared secret)
+- Purpose: Claude API integration, agentic loop, tool execution, semantic search, document processing, email operations
+- Location: `ai-service/app/main.py` (entry), `ai-service/app/routes/` (chat, profiles, search, workflows, documents, emails), `ai-service/app/services/` (agent loop, embeddings, document processing, workflow engine)
+- Contains: FastAPI routers, Claude integration, tool definitions and execution, database queries
+- Depends on: PostgreSQL (psycopg2), Anthropic API (Claude Haiku 4.5), OpenAI API (embeddings, disabled)
+- Used by: Backend (via HTTP proxy), background workers (workflow triggers)
+- Purpose: Multi-tenant data storage with built-in security via RLS
+- Location: `backend/migrations/` (9 migration files)
+- Contains: 15 tables, RLS policies, indexes, triggers, pgvector extension
+- Depends on: None (foundational)
+- Used by: Backend (direct connection pool), AI service (psycopg2 pool)
+## Data Flow Patterns
+```
+```
+```
+```
+```
+```
+```
+```
+```
+```
+```
+```
+## Key Abstractions
+- Purpose: Ensure all queries run scoped to authenticated agent, preventing cross-agent data leakage
+- Examples: `backend/internal/database/rls.go` - `BeginWithRLS()` function
+- Pattern: `tx, _ := BeginWithRLS(ctx, pool, agentID)` → execute queries → `tx.Commit(ctx)` or `defer tx.Rollback(ctx)`
+- Called by: Every handler that touches agent-scoped data
+- Purpose: Encapsulate HTTP handler as closure with dependency injection (connection pool)
+- Examples: `backend/internal/handlers/contacts.go` - `ListContacts(pool)` returns `http.HandlerFunc`
+- Pattern:
+- Called by: Chi router in `main.go`
+- Purpose: Type-safe, reusable API functions with Clerk token injection
+- Examples: `frontend/src/lib/api/contacts.ts`, `frontend/src/lib/api/deals.ts`, etc.
+- Pattern:
+- Called by: Page components via `useQuery({ queryFn: () => listContacts(token!, filters) })`
+- Purpose: Allow AI service to call backend handlers without Clerk JWT (e.g., send_email tool)
+- Examples: `backend/internal/middleware/auth.go` - ClerkAuth checks `X-AI-Service-Secret` header
+- Pattern: AI service passes `X-AI-Service-Secret: {SHARED_SECRET}` + `X-Agent-ID: {uuid}` → backend extracts agent ID from header instead of JWT
+- Called by: AI service when executing write tools that need backend (send_email)
+- Purpose: Stream Claude response word-by-word and emit tool confirmation events
+- Examples: `ai-service/app/routes/chat.py` - `/ai/messages` endpoint
+- Pattern: Generator yields `data: {json}\n\n` for each event (text, tool_call, confirmation, error)
+- Called by: Frontend fetch with `response.body.getReader()` → parse newline-delimited JSON
+- Purpose: Persist write tool confirmations (10-min TTL) so user can review before execution
+- Examples: `ai-service/app/tools.py` - `queue_write_tool()` stores JSONB in `pending_actions` table
+- Pattern: `pending_actions` row contains `{agent_id, tool, input, expires_at}` → on confirm, AI service re-executes tool → returns result
+- Called by: Write tools, confirmation endpoint
+- Purpose: Centralized UI state (sidebar collapse, chat bubble open/close, citation viewer state)
+- Examples: `frontend/src/store/ui-store.ts`
+- Pattern: Single store instance with typed getters/setters, no external dependencies
+- Called by: Layout, AIChatBubble, pages that toggle UI elements
+- Purpose: Define Claude tool schema and bind to execution function
+- Examples: `ai-service/app/tools.py` - `TOOL_DEFINITIONS` list + `execute_read_tool()` / `queue_write_tool()`
+- Pattern: Tool has `name`, `description`, `input_schema` (Anthropic format) → on Claude tool call, look up function and execute
+- Called by: Agent loop in `services/agent.py`
+## Entry Points
+- Location: `frontend/src/app/layout.tsx`
+- Triggers: Browser requests `/` or `/dashboard/*`
+- Responsibilities: Wrap app in Clerk provider, set up Providers (TanStack Query), load fonts, render route
+- Location: `backend/cmd/api/main.go` - `main()` function
+- Triggers: Container starts
+- Responsibilities: Load config, connect to database, initialize Clerk client, register middleware, register routes, start HTTP server with graceful shutdown
+- Location: `ai-service/app/main.py` - FastAPI app instantiation
+- Triggers: Container starts
+- Responsibilities: Include routers (chat, profiles, search, workflows, documents, emails), startup cleanup of expired pending actions
+- Location: `frontend/src/middleware.ts`
+- Triggers: Every page request
+- Responsibilities: Redirect unauthenticated users to `/sign-in`, allow public routes (marketing pages, portal), protect `/dashboard/*`
+## Error Handling
+```go
+```
+```typescript
+```
+```python
+```
+## Cross-Cutting Concerns
+- Backend: `slog` JSON handler writes structured logs to stdout (timestamp, level, message, key-value fields)
+- Frontend: `console.error()` for errors in try-catch blocks
+- AI Service: Uvicorn access logs via stdout, no explicit custom logging
+- Frontend: react-hook-form + Zod (forms only, no API response validation)
+- Backend: Manual parsing + strconv.Atoi() with defaults; no schema validation
+- AI Service: Pydantic models on request/response, no explicit input validation
+- Frontend: Clerk sign-in/sign-up, session token stored in browser
+- Backend: Clerk SDK verifies JWT signature, extracts subject, stores in context
+- AI Service: Shared secret header validation for service-to-service calls
+- Every query in agent-scoped tables wrapped in `BeginWithRLS(agentID)`
+- PostgreSQL `app.current_agent_id` GUC variable set per transaction
+- RLS policies filter `WHERE agent_id = current_setting('app.current_agent_id')`
+- Prevents cross-agent data leakage at database layer, not application layer
+<!-- GSD:architecture-end -->
+
+<!-- GSD:workflow-start source:GSD defaults -->
+## GSD Workflow Enforcement
+
+Before using Edit, Write, or other file-changing tools, start work through a GSD command so planning artifacts and execution context stay in sync.
+
+Use these entry points:
+- `/gsd:quick` for small fixes, doc updates, and ad-hoc tasks
+- `/gsd:debug` for investigation and bug fixing
+- `/gsd:execute-phase` for planned phase work
+
+Do not make direct repo edits outside a GSD workflow unless the user explicitly asks to bypass it.
+<!-- GSD:workflow-end -->
+
+<!-- GSD:profile-start -->
+## Developer Profile
+
+> Profile not yet configured. Run `/gsd:profile-user` to generate your developer profile.
+> This section is managed by `generate-claude-profile` -- do not edit manually.
+<!-- GSD:profile-end -->

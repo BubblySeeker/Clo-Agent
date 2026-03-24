@@ -2,60 +2,78 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 3
-status: completed
-last_updated: "2026-03-17T14:48:36.562Z"
+status: v1.0 milestone complete
+stopped_at: Completed 02-context-awareness-and-hardening/02-01-PLAN.md
+last_updated: "2026-03-24T15:58:55.090Z"
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 3
-  completed_plans: 3
+  total_phases: 2
+  completed_phases: 2
+  total_plans: 2
+  completed_plans: 2
 ---
 
-# Project State: CloAgent Tool Routing
+# Project State
 
-**Current Phase:** 3
-**Status:** Milestone complete
-**Last Updated:** 2026-03-17
+## Project Reference
 
----
+See: .planning/PROJECT.md (updated 2026-03-24)
 
-## Phase Progress
+**Core value:** When a user references a contact by any natural description, the AI finds the right contact and acts on it — every time.
+**Current focus:** v1.0 milestone complete — planning next milestone
 
-| Phase | Name | Status | Started | Completed |
-|-------|------|--------|---------|-----------|
-| 1 | Integration & Structure | NOT STARTED | — | — |
-| 2 | Tool Defaults & Routing Rules | BLOCKED (depends on Phase 1) | — | — |
-| 3 | Hard Constraints & Exclusions | BLOCKED (depends on Phase 1) | — | — |
+## Current Position
 
-## Requirement Status
+Phase: 02
+Plan: Not started
 
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| INTG-01 | 1 | Pending |
-| INTG-02 | 1 | Pending |
-| TOOL-01 | 2 | Pending |
-| TOOL-02 | 2 | Pending |
-| TOOL-03 | 2 | Pending |
-| TOOL-04 | 2 | Pending |
-| TOOL-05 | 2 | Pending |
-| CNST-01 | 3 | Pending |
-| CNST-02 | 3 | Pending |
-| CNST-03 | 3 | Pending |
+## Performance Metrics
 
-## Completed Phases
+**Velocity:**
 
-(none yet)
+- Total plans completed: 0
+- Average duration: -
+- Total execution time: 0 hours
 
-## Blockers
+**By Phase:**
 
-(none)
+| Phase | Plans | Total | Avg/Plan |
+|-------|-------|-------|----------|
+| - | - | - | - |
 
-## Notes
+**Recent Trend:**
 
-- All work targets a single file: CLAUDE.md
-- No application code changes required
-- Research phase identified path-based routing as the primary signal
+- Last 5 plans: -
+- Trend: -
 
----
-*Initialized: 2026-03-17*
+*Updated after each plan completion*
+| Phase 01-core-resolution-protocol P01 | 1 | 2 tasks | 2 files |
+| Phase 02-context-awareness-and-hardening P01 | 8 | 2 tasks | 1 files |
+
+## Accumulated Context
+
+### Decisions
+
+Decisions are logged in PROJECT.md Key Decisions table.
+Recent decisions affecting current work:
+
+- Fix via system prompt + tool descriptions first (cheapest, fastest; search SQL already works)
+- Keep Haiku 4.5 model (cost/speed constraints for real-time chat)
+- [Phase 01-core-resolution-protocol]: Used XML tags (<contact_resolution>) for behavioral contract in system prompt — XML triggers native pattern recognition in Claude Haiku 4.5
+- [Phase 01-core-resolution-protocol]: Contact resolution protocol placed before IMPORTANT GUIDELINES for maximum Haiku attention (early placement is critical for instruction following)
+- [Phase 02-context-awareness-and-hardening]: Rule 8 added as standalone (not merged into Rule 6) — keeps pronoun resolution atomic and separately testable
+- [Phase 02-context-awareness-and-hardening]: Full 20-message window used for pronoun lookback — no arbitrary limit, 'earlier in this conversation' instructs Haiku naturally
+
+### Pending Todos
+
+None yet.
+
+### Blockers/Concerns
+
+- Token budget risk: adding ~610 tokens to a 200+ line system prompt may degrade Haiku instruction-following for rules mid-document. Mitigated by XML tags and top-of-prompt placement — validate during Phase 1 testing.
+- Parallel tool call behavior: confirm no parallel search+write calls occur after prompt changes ship.
+
+## Session Continuity
+
+Last session: 2026-03-24T15:52:44.800Z
+Stopped at: Completed 02-context-awareness-and-hardening/02-01-PLAN.md
+Resume file: None

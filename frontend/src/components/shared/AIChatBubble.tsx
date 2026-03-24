@@ -14,7 +14,7 @@ import {
 import { useUIStore } from "@/store/ui-store";
 import { toolLabel, confirmLabel, formatPreview } from "@/lib/ai-chat-helpers";
 import MessageContent from "./MessageContent";
-import CitationBadge from "@/components/shared/CitationBadge";
+// CitationBadge available for future use
 
 export default function AIChatBubble() {
   const { getToken } = useAuth();

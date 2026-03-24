@@ -1,78 +1,83 @@
-# CloAgent — Tool Routing Configuration
+# AI Contact Intelligence
 
 ## What This Is
 
-A CLAUDE.md configuration update for CloAgent that maps specific development tasks to the correct AI tools and skills. This ensures Claude Code automatically uses the right skill/tool depending on what's being built — frontend components, landing pages, images, 3D elements, or design work.
+A focused improvement to CloAgent's AI assistant that makes it smarter about finding, resolving, and reasoning about contacts. The AI previously failed on basic contact operations — couldn't split "Rohan Batre" into first/last name for search, couldn't find "my last contact," and returned empty results for partial name lookups like "email Rohan." v1.0 shipped a complete contact resolution protocol via system prompt engineering — 8 rules covering name parsing, recency, ambiguity, and pronoun resolution.
 
 ## Core Value
 
-Claude Code should always use the most appropriate specialized tool for each task type, without the developer needing to manually invoke skills every time.
+When a user references a contact by any natural description (name, partial name, recency, relationship), the AI finds the right contact and acts on it — every time.
 
 ## Requirements
 
 ### Validated
 
-- Auth (Clerk sign-in/up, JWT, user sync) — existing
-- Contacts CRUD (list, create, edit, delete) — existing
-- Contact Detail (overview, activities, deals, buyer profile, AI profile tabs) — existing
-- Deals CRUD with stage management — existing
-- Pipeline Kanban with drag-drop — existing
-- Activities (call/email/note/showing/task) — existing
-- Dashboard with metrics, charts, widget customization — existing
-- AI Chat Bubble (floating, global) with SSE streaming — existing
-- AI Chat Full Page with conversation management — existing
-- AI Tools (23 total: 11 read, 12 write) — existing
-- AI Profile Generation — existing
-- Analytics (KPI cards, pipeline/activities/contacts charts) — existing
-- Tasks Page (full-stack with DB support) — existing
-- Marketing Pages (home, about, features, pricing, team, mission) — existing
-- Buyer Profile (frontend + backend) — existing
-- Notifications (real recent activities from API) — existing
-- Settings Page (partial — pipeline stages, commission localStorage) — existing
+- ✓ Contact CRUD (list, create, edit, delete) — existing
+- ✓ Contact search by name/email/source with ILIKE — existing
+- ✓ Full-name concatenation search (first || ' ' || last) — existing
+- ✓ AI tool calling with 34 tools — existing
+- ✓ System prompt with action-oriented guidelines — existing
+- ✓ Contact-scoped conversations with pre-loaded context — existing
+- ✓ AI always searches for contacts before passing IDs to other tools — Validated in Phase 1: Core Resolution Protocol
+- ✓ AI splits multi-word names into searchable terms — Validated in Phase 1: Core Resolution Protocol
+- ✓ AI resolves "my last contact" via limit=1 sorted DESC — Validated in Phase 1: Core Resolution Protocol
+- ✓ AI resolves partial names by searching and selecting best match — Validated in Phase 1: Core Resolution Protocol
+- ✓ AI handles ambiguous matches (presents candidates, asks user to clarify) — Validated in Phase 1: Core Resolution Protocol
+- ✓ AI resolves pronoun references ("him", "her", "them") using conversation context — Validated in Phase 2: Context Awareness and Hardening
 
 ### Active
 
-- [ ] Add tool-routing rules to CLAUDE.md for frontend skill
-- [ ] Add tool-routing rules to CLAUDE.md for UI/UX Pro Max skill (landing/marketing pages)
-- [ ] Add tool-routing rules to CLAUDE.md for Stitch (component design + styling)
-- [ ] Add tool-routing rules to CLAUDE.md for Gemini (nano banana 2) image generation
-- [ ] Add tool-routing rules to CLAUDE.md for 21st.dev 3D components (landing page only)
+(No active requirements — all milestone phases complete)
 
 ### Out of Scope
 
-- Backend Go changes — this is a CLAUDE.md/instruction file update only
-- AI service Python changes — not relevant to tool routing
-- Database schema changes — not relevant to tool routing
-- New frontend features — this is about configuring how Claude builds, not what it builds
+- Other AI tool improvements beyond contact resolution — separate milestone
+- New contact search backend features (fuzzy search, phonetic matching) — current ILIKE is sufficient
+- AI chat UI changes — this is purely AI behavior
+- Performance optimization — not the issue here
 
-## Context
+## Current State
 
-CloAgent is a brownfield project with a mature three-tier architecture (Next.js 14 + Go/Chi + FastAPI/Python) and an extensive feature set already built. The project uses several specialized skills/tools available to Claude Code:
+**v1.0 shipped 2026-03-24.** Two files changed, 40 lines added:
+- `ai-service/app/services/agent.py` — 8-rule `<contact_resolution>` XML protocol in system prompt (11,576 chars total)
+- `ai-service/app/tools.py` — search_contacts tool description updated with UUID safety and resolution guidance
 
-- **`frontend-design` skill** — for building dashboard/app UI components and pages
-- **`ui-ux-pro-max` skill** — for landing pages, marketing pages, and high-design work
-- **Stitch** — design component tool for any frontend styling and new component creation
-- **Gemini (nano banana 2)** — AI image generation for any image assets needed (marketing, app placeholders, icons)
-- **21st.dev** — pre-built 3D component library, used exclusively on landing/marketing pages
+The fix is entirely in the prompt and tool description layer — no backend code, no migrations, no frontend changes. All 12 v1 requirements validated. 6 human verification items tracked in UAT files (require live Haiku 4.5 sessions).
 
-The goal is a section in CLAUDE.md that acts as a routing table so Claude Code automatically invokes the correct tool based on the task context.
+Key files:
+- `ai-service/app/services/agent.py` — system prompt construction, agent loop
+- `ai-service/app/tools.py` — tool definitions and execution
 
 ## Constraints
 
-- **File**: Must be CLAUDE.md additions (not a separate file)
-- **Scope**: Tool routing rules only — no changes to application code
-- **3D scope**: 21st.dev 3D components are landing page only, never in dashboard
-- **Stitch scope**: Used for any frontend styling work and new component creation
-- **Gemini scope**: Used whenever any image asset is needed anywhere in the project
+- **Model**: Claude Haiku 4.5 — must work within this model's capabilities (can't rely on stronger reasoning)
+- **Tool rounds**: Max 5 per message — contact resolution may consume 1-2 rounds, leaving 3-4 for actual work
+- **Backward compatible**: Changes must not break existing working AI interactions (deals, tasks, activities)
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| CLAUDE.md additions (not separate file) | Keep all instructions in one place, simpler to maintain | -- Pending |
-| 21st.dev landing-only restriction | 3D elements would be distracting in a CRM dashboard | -- Pending |
-| Gemini for all image needs | Single tool for consistency across marketing and app assets | -- Pending |
-| Stitch for all styling + components | Ensures consistent design language across the project | -- Pending |
+| Fix via system prompt + tool descriptions first | Cheapest, fastest approach; search SQL already works | ✓ Validated in Phases 1 & 2 |
+| Keep Haiku 4.5 model | Cost/speed constraints for real-time chat | ✓ Confirmed |
+| Pronoun resolution via prompt rules (not code) | Gender inference from first names keeps it simple; sub-rules handle edge cases | ✓ Validated in Phase 2 |
+
+## Evolution
+
+This document evolves at phase transitions and milestone boundaries.
+
+**After each phase transition** (via `/gsd:transition`):
+1. Requirements invalidated? → Move to Out of Scope with reason
+2. Requirements validated? → Move to Validated with phase reference
+3. New requirements emerged? → Add to Active
+4. Decisions to log? → Add to Key Decisions
+5. "What This Is" still accurate? → Update if drifted
+
+**After each milestone** (via `/gsd:complete-milestone`):
+1. Full review of all sections
+2. Core Value check — still the right priority?
+3. Audit Out of Scope — reasons still valid?
+4. Update Context with current state
 
 ---
-*Last updated: 2026-03-17 after initialization*
+*Last updated: 2026-03-24 after v1.0 milestone — AI Contact Intelligence shipped*

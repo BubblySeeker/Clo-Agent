@@ -112,6 +112,7 @@ function StatusBadge({ doc }: { doc: DocType }) {
 
 type CategoryType = "general" | "contact" | "property" | string;
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 interface UploadResult {
   docId: string;
   isNewProperty: boolean;
