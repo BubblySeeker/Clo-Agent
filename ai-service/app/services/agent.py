@@ -10,6 +10,7 @@ Flow:
 """
 import asyncio
 import json
+import logging
 import re
 from datetime import date, timedelta
 from typing import AsyncGenerator
@@ -21,12 +22,16 @@ from app.config import ANTHROPIC_API_KEY, ANTHROPIC_MODEL
 from app.database import get_conn, run_query
 from app.tools import (
     TOOL_DEFINITIONS, READ_TOOLS, WRITE_TOOLS,
-    execute_read_tool, queue_write_tool,
+    execute_read_tool, queue_write_tool, execute_write_tool_immediate,
     check_gmail_status, get_recent_emails_for_contact,
 )
 
+logger = logging.getLogger(__name__)
+
 MODEL = ANTHROPIC_MODEL
-MAX_TOOL_ROUNDS = 5  # safety limit
+MAX_TOOL_ROUNDS = 5  # safety limit for chat
+
+ALWAYS_CONFIRM_TOOLS = {"delete_contact", "delete_deal", "delete_property"}
 
 
 def sse(event: dict) -> str:
@@ -137,21 +142,27 @@ def _save_assistant_message(conversation_id: str, agent_id: str, content: str, t
 
 
 # ---------------------------------------------------------------------------
-# System prompts
+# System prompt composable blocks
 # ---------------------------------------------------------------------------
 
-def _build_system_prompt(agent_name: str, contact_context: str = "", gmail_status: dict | None = None) -> str:
+def _base_block(agent_name: str) -> str:
+    """Agent identity, date context, and capabilities."""
     today = date.today()
     tomorrow = today + timedelta(days=1)
-    day_name = today.strftime("%A")  # e.g. "Monday"
-
-    base = (
+    day_name = today.strftime("%A")
+    return (
         f"You are CloAgent AI, a smart CRM assistant for real estate agent {agent_name}. "
         f"Today is {day_name}, {today.isoformat()}. Tomorrow is {tomorrow.isoformat()}. "
         "You have full access to their CRM data and can do everything they can do: "
         "search and view contacts, manage buyer profiles, create/edit/delete deals, "
         "log activities, move deals through pipeline stages, view analytics, "
-        "and search/send emails via Gmail.\n\n"
+        "and search/send emails via Gmail."
+    )
+
+
+def _contact_resolution_block() -> str:
+    """Contact search and resolution rules."""
+    return (
         "<contact_resolution>\n"
         "CONTACT RESOLUTION PROTOCOL — follow this before every contact operation:\n\n"
         "1. ALWAYS call search_contacts before using a contact_id in any tool. Never guess, invent, or reuse a UUID you are not certain is current.\n\n"
@@ -183,7 +194,13 @@ def _build_system_prompt(agent_name: str, contact_context: str = "", gmail_statu
         "by name and ask the user to confirm which one they mean.\n"
         "   Pronoun resolution happens in your reasoning — never call a tool solely to "
         "resolve a pronoun that is already answered by the conversation above.\n"
-        "</contact_resolution>\n\n"
+        "</contact_resolution>"
+    )
+
+
+def _guidelines_block() -> str:
+    """Action-oriented behavior, date resolution, task defaults."""
+    return (
         "IMPORTANT GUIDELINES:\n"
         "- Be action-oriented. When the user's intent is clear, use your tools immediately — "
         "do NOT ask clarifying questions you can answer yourself.\n"
@@ -200,7 +217,13 @@ def _build_system_prompt(agent_name: str, contact_context: str = "", gmail_statu
         "and warn them about what data will be lost.\n"
         "- When asked to draft an email, use the draft_email tool to generate it. "
         "The user can review and edit before sending.\n"
-        "- Be concise. Skip preamble. Lead with action.\n"
+        "- Be concise. Skip preamble. Lead with action."
+    )
+
+
+def _document_citation_block() -> str:
+    """Document search accuracy and citation rules."""
+    return (
         "- When you use the search_documents tool and find relevant information, ALWAYS cite your sources "
         "using this exact format: [Doc: filename, Page X][[chunk:CHUNK_UUID::DOC_UUID]] where CHUNK_UUID is the chunk_id "
         "and DOC_UUID is the document_id from the search results. The [[chunk:...]] part is a hidden reference — "
@@ -230,64 +253,226 @@ def _build_system_prompt(agent_name: str, contact_context: str = "", gmail_statu
         "Quote the document's own phrasing for numerical facts.\n"
         "  7. When answering a specific factual question (e.g. 'how many floors?'), you MUST call "
         "search_documents to find the answer fresh — do NOT rely on previous tool call results "
-        "or conversation context for document facts. Always search again to get the exact wording.\n\n"
+        "or conversation context for document facts. Always search again to get the exact wording."
+    )
+
+
+def _formatting_block() -> str:
+    """Markdown formatting rules for responses."""
+    return (
         "RESPONSE FORMATTING:\n"
         "- Use markdown tables (| col | col |) when presenting comparisons or lists of items with shared fields.\n"
         "- Use ## and ### headers to separate distinct topics. Never use # (too large for chat).\n"
         "- Use **Label:** format for key-value pairs (e.g. **Budget:** $500,000).\n"
         "- Format currency with $ and commas. Always include % for percentages.\n"
         "- Use bullet lists (-) for 3+ items. Use numbered lists only for ordered sequences.\n"
-        "- ALWAYS use `-` for bullet points, NEVER em-dashes (–) or other dash characters.\n"
+        "- ALWAYS use `-` for bullet points, NEVER em-dashes (\u2013) or other dash characters.\n"
         "- For nested bullet lists, use 2-space indentation. NEVER indent with 4+ spaces "
         "(markdown treats 4-space indented text as code blocks, which breaks formatting).\n"
         "- When reporting multiple KPIs, put each on its own line with bold labels.\n"
         "- For hierarchical structures (ownership chains, entity structures, org charts), "
-        "use nested markdown bullet lists with **bold entity names**. Include ALL entities — "
+        "use nested markdown bullet lists with **bold entity names**. Include ALL entities \u2014 "
         "sponsors, funds, GPs, LPs, SPEs, properties, managers, lenders. "
-        "NEVER use ASCII art or box-drawing characters for diagrams.\n\n"
+        "NEVER use ASCII art or box-drawing characters for diagrams."
+    )
+
+
+def _briefing_block() -> str:
+    """Morning briefing instructions."""
+    return (
         "MORNING BRIEFING:\n"
         "When the user sends a message like 'brief me', 'morning briefing', 'daily briefing', "
         "'start my day', 'what do I have today', 'catch me up', or any similar request for a "
         "day-start summary, respond with a structured morning briefing. To generate it, chain "
         "these tool calls in order:\n"
-        "  1. get_dashboard_summary — overall pipeline health and metrics\n"
-        "  2. get_overdue_tasks — tasks that are past due and not completed\n"
-        "  3. get_all_activities with limit=10 — what happened recently\n"
-        "  4. list_deals — scan for stale deals (same stage 14+ days) and deals at risk\n"
+        "  1. get_dashboard_summary \u2014 overall pipeline health and metrics\n"
+        "  2. get_overdue_tasks \u2014 tasks that are past due and not completed\n"
+        "  3. get_all_activities with limit=10 \u2014 what happened recently\n"
+        "  4. list_deals \u2014 scan for stale deals (same stage 14+ days) and deals at risk\n"
         "Format the briefing with these sections:\n"
         "  ## Good morning! Here's your briefing for {today}\n"
-        "  ### Overview — key metrics from get_dashboard_summary (active deals, pipeline value, "
+        "  ### Overview \u2014 key metrics from get_dashboard_summary (active deals, pipeline value, "
         "contacts, activity this week)\n"
-        "  ### Action Items — overdue tasks (from get_overdue_tasks) listed with their due date "
+        "  ### Action Items \u2014 overdue tasks (from get_overdue_tasks) listed with their due date "
         "and priority; deals that appear stale (no stage change in 14+ days based on updated_at) "
         "flagged with the contact name and current stage\n"
-        "  ### Recent Activity — summary of the last 10 activities (calls, emails, notes, showings) "
+        "  ### Recent Activity \u2014 summary of the last 10 activities (calls, emails, notes, showings) "
         "from get_all_activities, grouped or highlighted by significance\n"
-        "  ### Today's Focus — 2-3 specific, actionable recommendations based on what you found "
-        "(e.g. 'Follow up with Jane Smith — no contact in 9 days', 'Move the Doe deal out of "
-        "Offer stage — it has been 18 days')\n"
+        "  ### Today's Focus \u2014 2-3 specific, actionable recommendations based on what you found "
+        "(e.g. 'Follow up with Jane Smith \u2014 no contact in 9 days', 'Move the Doe deal out of "
+        "Offer stage \u2014 it has been 18 days')\n"
         "Be concise but complete. Each section should be scannable in under 10 seconds. "
-        "If a section has nothing to report (e.g. no overdue tasks), say so briefly and move on.\n"
+        "If a section has nothing to report (e.g. no overdue tasks), say so briefly and move on."
     )
 
-    # Gmail connection status
-    if gmail_status:
-        if gmail_status.get("connected"):
-            synced = gmail_status.get("last_synced_at")
-            sync_info = f", last synced {synced.strftime('%b %d %H:%M')}" if synced else ""
-            base += f"\n\nGmail: Connected ({gmail_status.get('gmail_address', 'unknown')}{sync_info}). "
-            base += (
-                "You can search emails, read threads, draft emails, and send emails. "
-                "IMPORTANT EMAIL RULES:\n"
-                "- When asked about emails from contacts, ALWAYS use search_emails with contacts_only=true. "
-                "This filters to only emails linked to CRM contacts and skips spam/marketing.\n"
-                "- When asked about specific topics or senders, use the query parameter.\n"
-                "- Never assume — always call the tool first."
-            )
-        else:
-            base += "\n\nGmail: Not connected. If the user asks about emails, tell them to connect Gmail in Settings first."
 
-    return base + contact_context
+def _gmail_block(gmail_status: dict) -> str:
+    """Gmail connection status and email tool instructions."""
+    if gmail_status.get("connected"):
+        synced = gmail_status.get("last_synced_at")
+        sync_info = f", last synced {synced.strftime('%b %d %H:%M')}" if synced else ""
+        return (
+            f"Gmail: Connected ({gmail_status.get('gmail_address', 'unknown')}{sync_info}). "
+            "You can search emails, read threads, draft emails, and send emails. "
+            "IMPORTANT EMAIL RULES:\n"
+            "- When asked about emails from contacts, ALWAYS use search_emails with contacts_only=true. "
+            "This filters to only emails linked to CRM contacts and skips spam/marketing.\n"
+            "- When asked about specific topics or senders, use the query parameter.\n"
+            "- Never assume \u2014 always call the tool first."
+        )
+    else:
+        return "Gmail: Not connected. If the user asks about emails, tell them to connect Gmail in Settings first."
+
+
+def _workflow_creation_block() -> str:
+    """Prompt for AI-assisted workflow creation."""
+    return (
+        "## Workflow Creation Mode\n\n"
+        "The user wants to create or edit an automated workflow. Guide them through it:\n\n"
+        "1. **Understand the goal**: Ask what they want automated and when it should run.\n"
+        "2. **Determine the trigger**: Ask what should kick off the workflow:\n"
+        "   - `manual` — user runs it on demand\n"
+        "   - `scheduled` — runs on a time schedule (daily, weekly, etc.)\n"
+        "   - `contact_created` — when a new contact is added\n"
+        "   - `deal_stage_changed` — when a deal moves stages\n"
+        "   - `activity_logged` — when an activity is logged\n"
+        "   - `email_sent` — after an email is sent\n"
+        "3. **Write the instruction**: Compose a clear, actionable instruction "
+        "describing what the workflow should do step by step. Write it as if "
+        "you're telling another assistant what to do.\n"
+        "4. **Set approval mode**: Ask if actions should require review before "
+        "executing (`review`) or run automatically (`auto_approve`).\n"
+        "5. **Schedule** (if applicable): If trigger_type is 'scheduled', ask about "
+        "frequency (daily/weekly/biweekly/monthly), day, time, and timezone.\n"
+        "6. **Create it**: Call `save_workflow` with all the details. The user will "
+        "confirm via the standard confirmation card.\n\n"
+        "**Tips:**\n"
+        "- Keep instructions under 5000 characters\n"
+        "- Be specific: 'Send a welcome email to the new contact with their name' "
+        "is better than 'email them'\n"
+        "- If the user describes something they just did, suggest using "
+        "`save_conversation_as_workflow` to turn it into a repeatable workflow\n"
+    )
+
+
+def _workflow_execution_block() -> str:
+    """Prompt for AI-native workflow execution."""
+    return (
+        "## Workflow Execution Mode\n\n"
+        "You are executing an automated workflow for this real estate agent. "
+        "The user message contains the workflow instruction — follow it precisely.\n\n"
+        "**Rules:**\n"
+        "- Execute the instruction step by step using your available tools\n"
+        "- Be thorough: search for contacts/deals before acting on them\n"
+        "- If a contact or deal is referenced, resolve it first using search tools\n"
+        "- Report what you accomplished at the end with a brief summary\n"
+        "- If you cannot complete a step, explain why and continue with remaining steps\n"
+        "- Do NOT ask clarifying questions — interpret the instruction as best you can\n"
+        "- If trigger context is provided, use it to scope your actions (e.g. act on the triggered contact)\n"
+    )
+
+
+def _workflow_awareness_block(workflows: list) -> str:
+    """Lists agent's workflows in system prompt so AI can reference them."""
+    if not workflows:
+        return ""
+
+    lines = ["## Your Workflows\n", "You have the following active workflows:\n"]
+    for wf in workflows[:20]:  # cap at 20 to keep prompt manageable
+        trigger = wf.get("trigger_type", "manual")
+        name = wf.get("name", "Unnamed")
+        wf_id = wf.get("id", "")
+        enabled = "enabled" if wf.get("enabled") else "disabled"
+        schedule = ""
+        if trigger == "scheduled" and wf.get("schedule_config"):
+            sc = wf["schedule_config"]
+            schedule = f" ({sc.get('frequency', '')} at {sc.get('time', '')})"
+        lines.append(f"- **{name}** (id: {wf_id}) — trigger: {trigger}{schedule}, {enabled}")
+
+    lines.append(
+        "\nYou can reference these workflows when the user asks about them. "
+        "Use `update_workflow` to modify them."
+    )
+    return "\n".join(lines)
+
+
+def build_system_prompt(
+    mode: str,
+    agent_name: str,
+    contact_context: str = "",
+    gmail_status: dict | None = None,
+    workflows: list | None = None,
+) -> str:
+    """Compose system prompt from blocks based on mode.
+
+    Modes:
+    - "chat": Full prompt with all blocks (default for AI chat)
+    - "workflow_creation": Base + workflow creation instructions
+    - "workflow_execution": Base + workflow execution instructions
+    """
+    blocks = [_base_block(agent_name)]
+
+    if mode == "chat":
+        blocks += [
+            _contact_resolution_block(),
+            _guidelines_block(),
+            _document_citation_block(),
+            _formatting_block(),
+            _briefing_block(),
+        ]
+        if workflows:
+            block = _workflow_awareness_block(workflows)
+            if block:
+                blocks.append(block)
+    elif mode == "workflow_creation":
+        block = _workflow_creation_block()
+        if block:
+            blocks.append(block)
+    elif mode == "workflow_execution":
+        block = _workflow_execution_block()
+        if block:
+            blocks.append(block)
+
+    if gmail_status:
+        blocks.append(_gmail_block(gmail_status))
+
+    if contact_context:
+        blocks.append(contact_context.lstrip("\n"))
+
+    return "\n\n".join(blocks)
+
+
+# ---------------------------------------------------------------------------
+# Tool dispatch
+# ---------------------------------------------------------------------------
+
+async def dispatch_tool(
+    tool_name: str,
+    tool_input: dict,
+    agent_id: str,
+    approval_mode: str | None = None,
+    is_dry_run: bool = False,
+):
+    """Route a tool call based on tool type and execution mode.
+
+    Returns the tool result dict. Caller inspects the result to determine type:
+    - "pending_id" in result -> write tool queued for confirmation
+    - "preview" in result -> dry run preview
+    - "error" in result -> unknown tool or error
+    - otherwise -> read tool result or auto-executed write result
+    """
+    if tool_name in READ_TOOLS:
+        return await execute_read_tool(tool_name, tool_input, agent_id)
+    elif tool_name in WRITE_TOOLS:
+        if is_dry_run:
+            return {"preview": True, "tool": tool_name, "would_do": f"Would execute {tool_name} with {tool_input}"}
+        elif approval_mode == "auto" and tool_name not in ALWAYS_CONFIRM_TOOLS:
+            return await execute_write_tool_immediate(tool_name, tool_input, agent_id)
+        else:
+            return queue_write_tool(tool_name, tool_input, agent_id)
+    else:
+        logger.warning(f"Unknown tool requested: {tool_name}")
+        return {"error": f"Unknown tool: {tool_name}"}
 
 
 # ---------------------------------------------------------------------------
@@ -298,12 +483,17 @@ async def run_agent(
     conversation_id: str,
     agent_id: str,
     user_message: str,
+    approval_mode: str | None = None,
+    is_dry_run: bool = False,
+    max_tool_rounds: int | None = None,
+    prompt_mode: str = "chat",
 ) -> AsyncGenerator[str, None]:
     """
     Async generator that yields SSE-formatted strings.
     Caller wraps this in a StreamingResponse.
     """
     client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+    rounds_limit = max_tool_rounds or MAX_TOOL_ROUNDS
 
     # Load history and context from DB
     history, agent_row, conversation_row = await run_query(
@@ -321,7 +511,7 @@ async def run_agent(
     # Check Gmail connection status for email tool awareness
     gmail_status = await run_query(lambda: check_gmail_status(agent_id))
 
-    system = _build_system_prompt(agent_name, contact_context, gmail_status)
+    system = build_system_prompt(prompt_mode, agent_name, contact_context, gmail_status)
 
     # Add document awareness if agent has uploaded documents
     doc_count = await run_query(lambda: _count_agent_documents(agent_id))
@@ -338,7 +528,7 @@ async def run_agent(
     tool_calls_log: list = []
     final_text = ""
 
-    for _round in range(MAX_TOOL_ROUNDS + 1):
+    for _round in range(rounds_limit + 1):
         response = await client.messages.create(
             model=MODEL,
             max_tokens=4096,
@@ -360,7 +550,7 @@ async def run_agent(
                     await asyncio.sleep(0)  # yield to event loop for flush
             break
 
-        # Execute tool use blocks
+        # Execute tool use blocks via dispatch_tool
         tool_results = []
         for tb in tool_use_blocks:
             tool_name = tb.name
@@ -368,27 +558,29 @@ async def run_agent(
 
             yield sse({"type": "tool_call", "name": tool_name, "status": "running"})
 
-            if tool_name in WRITE_TOOLS:
-                confirmation = queue_write_tool(tool_name, tool_input, agent_id)
-                yield sse({"type": "confirmation", **confirmation})
+            result = await dispatch_tool(tool_name, tool_input, agent_id, approval_mode, is_dry_run)
+
+            if "pending_id" in result:
+                # Write tool queued for confirmation
+                yield sse({"type": "confirmation", **result})
                 tool_results.append({
                     "type": "tool_result",
                     "tool_use_id": tb.id,
-                    "content": json.dumps({"status": "pending_confirmation", "pending_id": confirmation["pending_id"]}),
+                    "content": json.dumps({"status": "pending_confirmation", "pending_id": result["pending_id"]}),
                 })
-            elif tool_name in READ_TOOLS:
-                result = await execute_read_tool(tool_name, tool_input, agent_id)
-                yield sse({"type": "tool_result", "name": tool_name, "result": result})
+            elif "error" in result:
                 tool_results.append({
                     "type": "tool_result",
                     "tool_use_id": tb.id,
                     "content": json.dumps(result, default=str),
                 })
             else:
+                # Read result, preview, or auto-executed write
+                yield sse({"type": "tool_result", "name": tool_name, "result": result})
                 tool_results.append({
                     "type": "tool_result",
                     "tool_use_id": tb.id,
-                    "content": json.dumps({"error": f"Unknown tool: {tool_name}"}),
+                    "content": json.dumps(result, default=str),
                 })
 
             tool_calls_log.append({"tool": tool_name, "input": tool_input})

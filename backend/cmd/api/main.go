@@ -206,6 +206,8 @@ func run() error {
 		r.Patch("/api/workflows/{id}", handlers.UpdateWorkflow(pool))
 		r.Delete("/api/workflows/{id}", handlers.DeleteWorkflow(pool))
 		r.Post("/api/workflows/{id}/toggle", handlers.ToggleWorkflow(pool))
+		r.Post("/api/workflows/{id}/run", handlers.RunWorkflow(pool, cfg))
+		r.Post("/api/workflows/{id}/dry-run", handlers.DryRunWorkflow(pool, cfg))
 		r.Get("/api/workflows/{id}/runs", handlers.ListWorkflowRuns(pool))
 
 		// Analytics

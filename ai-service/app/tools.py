@@ -520,6 +520,78 @@ TOOL_DEFINITIONS = [
             "required": ["to", "subject", "body"],
         },
     },
+    # -- Workflow management tools --
+    {
+        "name": "save_workflow",
+        "description": "Create a new automated workflow. Use this when the user wants to set up a recurring or triggered automation.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Short descriptive name for the workflow"},
+                "instruction": {"type": "string", "description": "Plain-English instruction for what the workflow should do (max 5000 chars). Be specific and actionable."},
+                "trigger_type": {
+                    "type": "string",
+                    "description": "What triggers this workflow",
+                    "enum": ["manual", "contact_created", "deal_stage_changed", "activity_logged", "email_sent", "scheduled"],
+                },
+                "trigger_config": {
+                    "type": "object",
+                    "description": "Optional trigger-specific config (e.g. {\"stage\": \"Negotiation\"} for deal_stage_changed)",
+                },
+                "approval_mode": {
+                    "type": "string",
+                    "description": "How write actions are handled during execution",
+                    "enum": ["review", "auto_approve"],
+                },
+                "schedule_config": {
+                    "type": "object",
+                    "description": "Schedule configuration for trigger_type='scheduled'. Format: {\"frequency\": \"daily\"|\"weekly\"|\"biweekly\"|\"monthly\", \"day\": \"monday\", \"time\": \"08:00\", \"timezone\": \"America/New_York\"}",
+                },
+            },
+            "required": ["name", "instruction", "trigger_type"],
+        },
+    },
+    {
+        "name": "update_workflow",
+        "description": "Update an existing workflow's configuration. Use this to modify a workflow's instruction, name, trigger, schedule, or approval mode.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "workflow_id": {"type": "string", "description": "UUID of the workflow to update"},
+                "name": {"type": "string", "description": "New name for the workflow"},
+                "instruction": {"type": "string", "description": "New instruction (max 5000 chars)"},
+                "trigger_type": {
+                    "type": "string",
+                    "enum": ["manual", "contact_created", "deal_stage_changed", "activity_logged", "email_sent", "scheduled"],
+                },
+                "trigger_config": {"type": "object", "description": "New trigger config"},
+                "approval_mode": {"type": "string", "enum": ["review", "auto_approve"]},
+                "schedule_config": {"type": "object", "description": "New schedule config"},
+                "enabled": {"type": "boolean", "description": "Enable or disable the workflow"},
+            },
+            "required": ["workflow_id"],
+        },
+    },
+    {
+        "name": "save_conversation_as_workflow",
+        "description": "Save the current conversation as a reusable workflow. Summarize what you did into a generalizable instruction that can be repeated.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Short descriptive name for the workflow"},
+                "instruction": {"type": "string", "description": "Generalized instruction summarizing what was done in this conversation, written so it can be repeated for similar situations (max 5000 chars)"},
+                "trigger_type": {
+                    "type": "string",
+                    "enum": ["manual", "contact_created", "deal_stage_changed", "activity_logged", "email_sent", "scheduled"],
+                },
+                "approval_mode": {
+                    "type": "string",
+                    "enum": ["review", "auto_approve"],
+                },
+            },
+            "required": ["name", "instruction"],
+        },
+    },
 ]
 
 READ_TOOLS = {
@@ -562,6 +634,9 @@ WRITE_TOOLS = {
     "update_property",
     "delete_property",
     "send_email",
+    "save_workflow",
+    "update_workflow",
+    "save_conversation_as_workflow",
 }
 
 # ---------------------------------------------------------------------------
@@ -860,6 +935,102 @@ def _get_analytics(agent_id: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Workflow management helpers
+# ---------------------------------------------------------------------------
+
+def _save_workflow(agent_id: str, inp: dict) -> dict:
+    instruction = inp.get("instruction", "")
+    if len(instruction) > 5000:
+        return {"error": "Instruction exceeds 5000 character limit"}
+
+    wf_id = str(uuid.uuid4())
+    name = inp["name"]
+    trigger_type = inp.get("trigger_type", "manual")
+    trigger_config = inp.get("trigger_config")
+    approval_mode = inp.get("approval_mode", "review")
+    schedule_config = inp.get("schedule_config")
+
+    # If trigger_type is scheduled, schedule_config is required
+    if trigger_type == "scheduled" and not schedule_config:
+        return {"error": "schedule_config is required for trigger_type='scheduled'"}
+
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            """INSERT INTO workflows
+               (id, agent_id, name, instruction, trigger_type, trigger_config,
+                approval_mode, schedule_config, enabled, created_at, updated_at)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, true, NOW(), NOW())""",
+            (
+                wf_id, agent_id, name, instruction, trigger_type,
+                json.dumps(trigger_config) if trigger_config else None,
+                approval_mode,
+                json.dumps(schedule_config) if schedule_config else None,
+            ),
+        )
+    return {"id": wf_id, "name": name, "message": f"Workflow '{name}' created successfully"}
+
+
+def _update_workflow(agent_id: str, inp: dict) -> dict:
+    wf_id = inp["workflow_id"]
+    instruction = inp.get("instruction")
+    if instruction and len(instruction) > 5000:
+        return {"error": "Instruction exceeds 5000 character limit"}
+
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        # Verify ownership
+        cur.execute(
+            "SELECT id FROM workflows WHERE id = %s AND agent_id = %s",
+            (wf_id, agent_id),
+        )
+        if not cur.fetchone():
+            return {"error": "Workflow not found"}
+
+        # Build dynamic SET clause
+        updates = []
+        params = []
+        for field in ("name", "instruction", "trigger_type", "approval_mode"):
+            if field in inp:
+                updates.append(f"{field} = %s")
+                params.append(inp[field])
+        for json_field in ("trigger_config", "schedule_config"):
+            if json_field in inp:
+                updates.append(f"{json_field} = %s")
+                params.append(json.dumps(inp[json_field]) if inp[json_field] else None)
+        if "enabled" in inp:
+            updates.append("enabled = %s")
+            params.append(inp["enabled"])
+
+        if not updates:
+            return {"error": "No fields to update"}
+
+        updates.append("updated_at = NOW()")
+        params.append(wf_id)
+        params.append(agent_id)
+
+        cur.execute(
+            f"UPDATE workflows SET {', '.join(updates)} WHERE id = %s AND agent_id = %s",
+            params,
+        )
+    return {"id": wf_id, "message": "Workflow updated successfully"}
+
+
+def _save_conversation_as_workflow(agent_id: str, inp: dict) -> dict:
+    """Save the current conversation as a reusable workflow."""
+    instruction = inp.get("instruction", "")
+    if len(instruction) > 5000:
+        return {"error": "Instruction exceeds 5000 character limit"}
+
+    return _save_workflow(agent_id, {
+        "name": inp["name"],
+        "instruction": instruction,
+        "trigger_type": inp.get("trigger_type", "manual"),
+        "approval_mode": inp.get("approval_mode", "review"),
+    })
+
+
+# ---------------------------------------------------------------------------
 # Embedding hooks (fire-and-forget in background)
 # ---------------------------------------------------------------------------
 
@@ -921,6 +1092,65 @@ async def _trigger_workflows_async(
         await run_query(lambda: trigger_workflows(trigger_type, agent_id, trigger_data))
     except Exception as e:
         logger.warning("Workflow trigger failed for %s: %s", trigger_type, e)
+
+
+# ---------------------------------------------------------------------------
+# Write tool: immediate execution (auto mode)
+# ---------------------------------------------------------------------------
+
+async def execute_write_tool_immediate(tool_name: str, tool_input: dict, agent_id: str) -> dict:
+    """Execute a write tool immediately, bypassing the confirmation queue.
+
+    Used when approval_mode='auto' (except for ALWAYS_CONFIRM_TOOLS like deletes).
+    Same dispatch logic as execute_write_tool() but without pending_actions table.
+    """
+    result: dict | None = None
+    if tool_name == "create_contact":
+        result = await run_query(lambda: _create_contact(agent_id, tool_input))
+    elif tool_name == "update_contact":
+        result = await run_query(lambda: _update_contact(agent_id, tool_input))
+    elif tool_name == "delete_contact":
+        result = await run_query(lambda: _delete_contact(agent_id, tool_input))
+    elif tool_name == "log_activity":
+        result = await run_query(lambda: _log_activity(agent_id, tool_input))
+    elif tool_name == "create_deal":
+        result = await run_query(lambda: _create_deal(agent_id, tool_input))
+    elif tool_name == "update_deal":
+        result = await run_query(lambda: _update_deal(agent_id, tool_input))
+    elif tool_name == "delete_deal":
+        result = await run_query(lambda: _delete_deal(agent_id, tool_input))
+    elif tool_name == "create_buyer_profile":
+        result = await run_query(lambda: _create_buyer_profile(agent_id, tool_input))
+    elif tool_name == "update_buyer_profile":
+        result = await run_query(lambda: _update_buyer_profile(agent_id, tool_input))
+    elif tool_name == "create_task":
+        result = await run_query(lambda: _create_task(agent_id, tool_input))
+    elif tool_name == "complete_task":
+        result = await run_query(lambda: _complete_task(agent_id, tool_input))
+    elif tool_name == "reschedule_task":
+        result = await run_query(lambda: _reschedule_task(agent_id, tool_input))
+    elif tool_name == "create_property":
+        result = await run_query(lambda: _create_property(agent_id, tool_input))
+    elif tool_name == "update_property":
+        result = await run_query(lambda: _update_property(agent_id, tool_input))
+    elif tool_name == "delete_property":
+        result = await run_query(lambda: _delete_property(agent_id, tool_input))
+    elif tool_name == "send_email":
+        result = await _proxy_to_backend("POST", "/api/gmail/send", agent_id, tool_input)
+    elif tool_name == "save_workflow":
+        result = await run_query(lambda: _save_workflow(agent_id, tool_input))
+    elif tool_name == "update_workflow":
+        result = await run_query(lambda: _update_workflow(agent_id, tool_input))
+    elif tool_name == "save_conversation_as_workflow":
+        result = await run_query(lambda: _save_conversation_as_workflow(agent_id, tool_input))
+    else:
+        return {"error": f"Unknown write tool: {tool_name}"}
+
+    # Fire workflow triggers (fire-and-forget)
+    if result and "error" not in result:
+        _schedule_workflow_trigger(tool_name, agent_id, tool_input, result)
+
+    return result
 
 
 # ---------------------------------------------------------------------------
