@@ -66,6 +66,13 @@ def execute_step(step: dict, agent_id: str, trigger_data: dict | None) -> dict:
                     (str(uuid.uuid4()), agent_id, contact_id, body, due_date, priority),
                 )
             result["detail"] = f"Created task: {body}"
+            # Fire activity_logged trigger — pass triggered_by_workflow=True to prevent recursion
+            trigger_workflows(
+                "activity_logged",
+                agent_id,
+                {"contact_id": contact_id, "type": "task", "body": body},
+                triggered_by_workflow=True,
+            )
 
         elif step_type == "log_activity":
             activity_type = config.get("activity_type", "note")
@@ -80,6 +87,13 @@ def execute_step(step: dict, agent_id: str, trigger_data: dict | None) -> dict:
                     (str(uuid.uuid4()), agent_id, contact_id, activity_type, body),
                 )
             result["detail"] = f"Logged {activity_type}: {body}"
+            # Fire activity_logged trigger — pass triggered_by_workflow=True to prevent recursion
+            trigger_workflows(
+                "activity_logged",
+                agent_id,
+                {"contact_id": contact_id, "type": activity_type, "body": body},
+                triggered_by_workflow=True,
+            )
 
         elif step_type == "wait":
             days = config.get("days", 1)
@@ -109,6 +123,14 @@ def execute_step(step: dict, agent_id: str, trigger_data: dict | None) -> dict:
                             (*updates.values(), deal_id, agent_id),
                         )
                 result["detail"] = f"Updated deal {deal_id}"
+                # Fire deal_stage_changed trigger if stage was updated — pass triggered_by_workflow=True to prevent recursion
+                if "stage_id" in updates:
+                    trigger_workflows(
+                        "deal_stage_changed",
+                        agent_id,
+                        {"deal_id": deal_id, "stage_name": config.get("stage_name")},
+                        triggered_by_workflow=True,
+                    )
             else:
                 result["status"] = "skipped"
                 result["detail"] = "No deal_id available"
@@ -125,6 +147,13 @@ def execute_step(step: dict, agent_id: str, trigger_data: dict | None) -> dict:
                     (str(uuid.uuid4()), agent_id, contact_id, f"[AI Workflow] {prompt}"),
                 )
             result["detail"] = f"AI message: {prompt}"
+            # Fire activity_logged trigger — pass triggered_by_workflow=True to prevent recursion
+            trigger_workflows(
+                "activity_logged",
+                agent_id,
+                {"contact_id": contact_id, "type": "note", "body": prompt},
+                triggered_by_workflow=True,
+            )
 
         else:
             result["status"] = "skipped"
