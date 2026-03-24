@@ -1,66 +1,115 @@
-# Requirements: CloAgent Tool Routing
+# Requirements: CloAgent v2.0 — Twilio Voice Calling
 
-**Defined:** 2026-03-17
-**Core Value:** Claude Code should automatically use the right specialized tool for each task to produce good design by default.
+**Defined:** 2026-03-23
+**Core Value:** AI-powered voice calling that automatically transcribes conversations and updates the CRM, so real estate agents never miss a follow-up.
 
-## v1 Requirements
+## v2.0 Requirements
 
-### Tool Defaults
+### Call Foundation
 
-- [ ] **TOOL-01**: When building or modifying frontend UI, use the `frontend-design` skill for dashboard/app pages
-- [ ] **TOOL-02**: When building or modifying landing/marketing pages, use the `ui-ux-pro-max` skill
-- [ ] **TOOL-03**: When creating new reusable components or doing styling/theming work, use Stitch
-- [ ] **TOOL-04**: When any image asset is needed (marketing, app, icons, placeholders), use Gemini (nano banana 2)
-- [ ] **TOOL-05**: When 3D interactive components are needed on landing/marketing pages, use 21st.dev
+- [ ] **CALL-01**: Agent can configure their personal phone number in Settings (stored in twilio_config)
+- [ ] **CALL-02**: Agent can initiate an outbound call that rings their real phone first, then bridges to the client (two-leg bridge)
+- [ ] **CALL-03**: Inbound calls to the Twilio number are forwarded to the agent's personal phone with caller ID matching
+- [ ] **CALL-04**: All calls include a recording consent announcement before the conversation begins
+- [ ] **CALL-05**: Call status (ringing, in-progress, completed, no-answer, busy, failed) updates in real-time via StatusCallback
+- [ ] **CALL-06**: All call webhook endpoints validate Twilio signature (X-Twilio-Signature)
+- [ ] **CALL-07**: Existing bugs are fixed: RLS in call handlers, SMS activity type logged as 'call' instead of 'sms'
 
-### Hard Constraints
+### Recording
 
-- [ ] **CNST-01**: 21st.dev is NEVER used in dashboard pages — landing/marketing only
-- [ ] **CNST-02**: Design tools are not invoked for backend (Go), AI service (Python), or pure logic changes (API calls, state management, hooks)
-- [ ] **CNST-03**: All tool output must use Tailwind CSS consistent with existing codebase patterns
+- [ ] **REC-01**: Outbound and inbound calls are recorded in dual-channel format (agent/client on separate channels)
+- [ ] **REC-02**: Recording webhook receives notification when recording is ready and stores metadata in call_logs
+- [ ] **REC-03**: Agent can play back call recordings in the communication page via a proxy endpoint
+- [ ] **REC-04**: Recordings are downloaded from Twilio and stored locally/S3, then deleted from Twilio
+- [ ] **REC-05**: Twilio auth tokens are encrypted at rest in the database
 
-### Integration
+### AI Intelligence
 
-- [ ] **INTG-01**: Rules are added to the existing CLAUDE.md file as a new section
-- [ ] **INTG-02**: Rules are concise — broad defaults with few specific exceptions, not an exhaustive routing table
+- [ ] **AI-01**: Completed call recordings are automatically transcribed using OpenAI gpt-4o-transcribe with speaker diarization via dual-channel split
+- [ ] **AI-02**: Call transcripts are analyzed by Claude to generate a call summary, action items, and CRM update suggestions
+- [ ] **AI-03**: AI-extracted tasks are surfaced as confirmation cards the agent can approve with one click
+- [ ] **AI-04**: AI-suggested deal stage and buyer profile updates are surfaced as confirmation cards
+- [ ] **AI-05**: Recent call transcripts and summaries are loaded into AI chat contact context
+- [ ] **AI-06**: Call transcripts are embedded in pgvector for semantic search
 
-## v2 Requirements
+### Frontend
 
-### Advanced Routing
+- [ ] **FE-01**: Agent can view call transcripts with speaker labels in the communication page
+- [ ] **FE-02**: Agent can play call recordings with an audio player in call detail view
+- [ ] **FE-03**: AI action suggestion cards appear in call detail with confirm/dismiss buttons
+- [ ] **FE-04**: Agent can tag call outcomes (Connected, Voicemail, No Answer)
+- [ ] **FE-05**: Inbound calls include a whisper (agent hears contact name and key context before being connected)
+- [ ] **FE-06**: Outbound calls detect voicemail automatically (MachineDetection)
 
-- **ADV-01**: Multi-tool composition sequencing for complex tasks
-- **ADV-02**: Component reuse awareness (check existing components before creating new ones)
-- **ADV-03**: Brand-specific prompt templates for Gemini image generation
+### Mobile App
+
+- [ ] **MOB-01**: React Native (Expo) app scaffold with Clerk authentication
+- [ ] **MOB-02**: Agent can view and search their contact list from the mobile app
+- [ ] **MOB-03**: Agent can tap a contact to initiate a call (API-triggered, their phone rings)
+- [ ] **MOB-04**: Agent can view call history with status, duration, and transcript summaries
+- [ ] **MOB-05**: Agent can configure their personal phone number in mobile settings
+
+## Future Requirements
+
+### Advanced Voice
+- **ADV-01**: In-app VoIP calling via Twilio Voice SDK (no phone needed)
+- **ADV-02**: iOS push notifications for incoming calls (APNs/PushKit/CallKit)
+- **ADV-03**: Call analytics dashboard (call volume, duration trends, outcome rates)
+- **ADV-04**: Recording archival to S3 with configurable retention policy
+
+### AI Enhancements
+- **AIE-01**: Real-time transcription during calls
+- **AIE-02**: Auto-apply AI suggestions without confirmation (configurable threshold)
+- **AIE-03**: Call coaching suggestions based on transcript patterns
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Backend/AI service changes | This is a CLAUDE.md instruction update only |
-| New frontend features | Configuring how Claude builds, not what it builds |
-| Complex precedence rules | User wants broad defaults, not hyper-specific routing |
-| Per-file routing rules | Brittle; use broad directory/task-type rules instead |
+| Power dialer / auto-dialer | TCPA regulatory risk, wrong use case for solo agents |
+| IVR / phone trees | Over-engineered for solo agents |
+| In-browser WebRTC calling | Agents prefer their real phone; defer to future |
+| Real-time streaming transcription | Post-call is simpler, more reliable, sufficient |
+| Self-hosted Whisper | Needs GPU infrastructure; OpenAI API is cheaper |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INTG-01 | Phase 1 — Integration & Structure | Pending |
-| INTG-02 | Phase 1 — Integration & Structure | Pending |
-| TOOL-01 | Phase 2 — Tool Defaults & Routing Rules | Pending |
-| TOOL-02 | Phase 2 — Tool Defaults & Routing Rules | Pending |
-| TOOL-03 | Phase 2 — Tool Defaults & Routing Rules | Pending |
-| TOOL-04 | Phase 2 — Tool Defaults & Routing Rules | Pending |
-| TOOL-05 | Phase 2 — Tool Defaults & Routing Rules | Pending |
-| CNST-01 | Phase 3 — Hard Constraints & Exclusions | Pending |
-| CNST-02 | Phase 3 — Hard Constraints & Exclusions | Pending |
-| CNST-03 | Phase 3 — Hard Constraints & Exclusions | Pending |
+| CALL-01 | — | Pending |
+| CALL-02 | — | Pending |
+| CALL-03 | — | Pending |
+| CALL-04 | — | Pending |
+| CALL-05 | — | Pending |
+| CALL-06 | — | Pending |
+| CALL-07 | — | Pending |
+| REC-01 | — | Pending |
+| REC-02 | — | Pending |
+| REC-03 | — | Pending |
+| REC-04 | — | Pending |
+| REC-05 | — | Pending |
+| AI-01 | — | Pending |
+| AI-02 | — | Pending |
+| AI-03 | — | Pending |
+| AI-04 | — | Pending |
+| AI-05 | — | Pending |
+| AI-06 | — | Pending |
+| FE-01 | — | Pending |
+| FE-02 | — | Pending |
+| FE-03 | — | Pending |
+| FE-04 | — | Pending |
+| FE-05 | — | Pending |
+| FE-06 | — | Pending |
+| MOB-01 | — | Pending |
+| MOB-02 | — | Pending |
+| MOB-03 | — | Pending |
+| MOB-04 | — | Pending |
+| MOB-05 | — | Pending |
 
 **Coverage:**
-- v1 requirements: 10 total
-- Mapped to phases: 10
-- Unmapped: 0
+- v2.0 requirements: 29 total
+- Mapped to phases: 0 (pending roadmap)
+- Unmapped: 29
 
 ---
-*Requirements defined: 2026-03-17*
-*Last updated: 2026-03-17 after roadmap phase mapping*
+*Requirements defined: 2026-03-23*
