@@ -5,17 +5,21 @@ const isPublicRoute = createRouteMatcher(["/", "/sign-in(.*)", "/sign-up(.*)", "
 const isAuthRoute = createRouteMatcher(["/sign-in(.*)", "/sign-up(.*)"]);
 
 export default clerkMiddleware(async (auth, request) => {
+  if (isPublicRoute(request) && !isAuthRoute(request)) {
+    return;
+  }
+
   const { userId, redirectToSignIn } = await auth();
 
   if (userId && isAuthRoute(request)) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
-  if (!userId && !isPublicRoute(request)) {
+  if (!userId) {
     return redirectToSignIn();
   }
 });
 
 export const config = {
-  matcher: ["/((?!.*\\..*|_next).*)", "/", "/(api|trpc)(.*)"],
+  matcher: ["/((?!.*\\..*|_next|portal).*)", "/", "/(api|trpc)(.*)"],
 };
