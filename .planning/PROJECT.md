@@ -23,10 +23,11 @@ When a user references a contact by any natural description (name, partial name,
 - ✓ AI resolves "my last contact" via limit=1 sorted DESC — Validated in Phase 1: Core Resolution Protocol
 - ✓ AI resolves partial names by searching and selecting best match — Validated in Phase 1: Core Resolution Protocol
 - ✓ AI handles ambiguous matches (presents candidates, asks user to clarify) — Validated in Phase 1: Core Resolution Protocol
+- ✓ AI resolves pronoun references ("him", "her", "them") using conversation context — Validated in Phase 2: Context Awareness and Hardening
 
 ### Active
 
-(No active requirements — Phase 2 items pending)
+(No active requirements — all milestone phases complete)
 
 ### Out of Scope
 
@@ -57,8 +58,9 @@ Key files:
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Fix via system prompt + tool descriptions first | Cheapest, fastest approach; search SQL already works | ✓ Validated in Phase 1 |
+| Fix via system prompt + tool descriptions first | Cheapest, fastest approach; search SQL already works | ✓ Validated in Phases 1 & 2 |
 | Keep Haiku 4.5 model | Cost/speed constraints for real-time chat | ✓ Confirmed |
+| Pronoun resolution via prompt rules (not code) | Gender inference from first names keeps it simple; sub-rules handle edge cases | ✓ Validated in Phase 2 |
 
 ## Evolution
 
@@ -78,4 +80,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-24 after Phase 1 completion — Core Resolution Protocol shipped*
+*Last updated: 2026-03-24 after Phase 2 completion — Context Awareness and Hardening shipped (pronoun resolution)*
