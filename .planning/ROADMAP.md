@@ -75,11 +75,11 @@ Plans:
   3. AI-suggested tasks and deal/buyer-profile updates appear as confirmation cards the agent can approve or dismiss with one click
   4. Asking the AI chat "What did [contact] say about their budget?" returns relevant information from call transcripts
   5. Call transcripts appear in semantic search results when searching for topics discussed on calls
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 06-01: TBD
-- [ ] 06-02: TBD
+- [ ] 06-01-PLAN.md — Transcription pipeline: migration, dual-channel split + transcribe, Claude analysis, Go trigger, FastAPI route
+- [ ] 06-02-PLAN.md — AI tools (get_call_transcript, search_call_transcripts), contact context extension, frontend labels
 
 ### Phase 7: Frontend Call Experience
 **Goal**: The web UI surfaces the full call lifecycle with transcript viewer, audio playback, AI action cards, call outcome tagging, and inbound call intelligence features
@@ -91,11 +91,11 @@ Plans:
   3. AI action suggestion cards (tasks, deal updates, buyer profile updates) appear in call detail with confirm/dismiss buttons that execute real API calls
   4. Agent can tag call outcomes (Connected, Voicemail, No Answer) and the tag persists on the call record
   5. On inbound calls, the agent hears a whisper with the contact's name and key context before being connected; outbound calls detect voicemail automatically
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 07-01: TBD
-- [ ] 07-02: TBD
+- [ ] 07-01-PLAN.md — Backend: migration (outcome + answered_by), PATCH endpoint, whisper TwiML endpoint, AMD webhook, InitiateCall AMD params
+- [ ] 07-02-PLAN.md — Frontend: CallDetailPanel with OutcomeTagDropdown, TranscriptSection, AIActionCard integration, AMD badge
 
 ### Phase 8: React Native Mobile Dialer
 **Goal**: Agent can authenticate, browse contacts, initiate calls, and view call history with transcripts from a mobile app on their phone
@@ -122,8 +122,8 @@ Phases execute in numeric order: 4 -> 5 -> 6 -> 7 -> 8
 |-------|----------------|--------|-----------|
 | 4. Core Call Flow | 2/2 | Complete | 2026-03-24 |
 | 5. Recording Infrastructure | 2/2 | Complete   | 2026-03-24 |
-| 6. AI Transcription & Intelligence | 0/? | Not started | - |
-| 7. Frontend Call Experience | 0/? | Not started | - |
+| 6. AI Transcription & Intelligence | 0/2 | Planning complete | - |
+| 7. Frontend Call Experience | 0/2 | Planning complete | - |
 | 8. React Native Mobile Dialer | 0/? | Not started | - |
 
 ---
