@@ -40,7 +40,10 @@ Plans:
   1. Saying "create a task for him" after discussing a specific contact resolves to that contact without a new search
   2. Saying "call her" in a contact-scoped conversation resolves to the scoped contact without asking for clarification
   3. Phase 1 behavior remains stable under the additional prompt additions
-**Plans**: TBD
+**Plans:** 1 plan
+
+Plans:
+- [ ] 02-01-PLAN.md — Add Rule 8 (PRONOUN RESOLUTION) to contact_resolution block and validate prompt integrity
 
 ## Progress
 
@@ -50,4 +53,4 @@ Phases execute in numeric order: 1 → 2
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Core Resolution Protocol | 0/1 | Not started | - |
-| 2. Context Awareness and Hardening | 0/? | Not started | - |
+| 2. Context Awareness and Hardening | 0/1 | Not started | - |
