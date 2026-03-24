@@ -1,12 +1,15 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -173,15 +176,15 @@ func TwiMLBridge(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 			}
 		}
 
-		// Return TwiML: consent announcement then bridge to client
+		// Return TwiML: consent announcement then bridge to client with dual-channel recording
 		twimlXML := fmt.Sprintf(
 			`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say>This call may be recorded for quality purposes.</Say>
-  <Dial callerId="%s">
+  <Dial callerId="%s" record="record-from-answer-dual" recordingStatusCallback="%s/api/calls/recording-webhook" recordingStatusCallbackEvent="completed">
     <Number>%s</Number>
   </Dial>
-</Response>`, xmlEscape(fromNumber), xmlEscape(clientPhone))
+</Response>`, xmlEscape(fromNumber), xmlEscape(cfg.WebhookBaseURL), xmlEscape(clientPhone))
 
 		w.Header().Set("Content-Type", "text/xml")
 		w.Write([]byte(twimlXML))
@@ -248,16 +251,16 @@ func InboundCallWebhook(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc
 			agentID, callSID, contactID, callerNumber, calledNumber,
 		)
 
-		// Return TwiML: consent announcement then forward to agent's personal phone
+		// Return TwiML: consent announcement then forward to agent's personal phone with dual-channel recording
 		// callerId = callerNumber so agent sees who is calling
 		twimlXML := fmt.Sprintf(
 			`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say>This call may be recorded for quality purposes.</Say>
-  <Dial callerId="%s">
+  <Dial callerId="%s" record="record-from-answer-dual" recordingStatusCallback="%s/api/calls/recording-webhook" recordingStatusCallbackEvent="completed">
     <Number>%s</Number>
   </Dial>
-</Response>`, xmlEscape(callerNumber), xmlEscape(personalPhoneStr))
+</Response>`, xmlEscape(callerNumber), xmlEscape(cfg.WebhookBaseURL), xmlEscape(personalPhoneStr))
 
 		w.Header().Set("Content-Type", "text/xml")
 		w.Write([]byte(twimlXML))
@@ -648,5 +651,156 @@ func CallStatusWebhook(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc 
 
 		tx.Commit(r.Context())
 		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// RecordingWebhook receives Twilio recording status callbacks.
+// POST /api/calls/recording-webhook (PUBLIC)
+func RecordingWebhook(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		callSID := r.FormValue("CallSid")
+		recordingSID := r.FormValue("RecordingSid")
+		recordingURL := r.FormValue("RecordingUrl")
+		recordingDuration := r.FormValue("RecordingDuration")
+		recordingStatus := r.FormValue("RecordingStatus")
+
+		if recordingStatus != "completed" {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		// Look up agent_id from call_logs via CallSid (no RLS needed)
+		var agentID string
+		err := pool.QueryRow(r.Context(),
+			`SELECT agent_id FROM call_logs WHERE twilio_sid = $1`, callSID,
+		).Scan(&agentID)
+		if err != nil {
+			slog.Warn("recording webhook: unknown CallSid", "sid", callSID)
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		// Get auth_token for signature validation via getTwilioConfig
+		_, authToken, _, _, err := getTwilioConfig(r.Context(), pool, agentID, cfg)
+		if err != nil {
+			slog.Warn("recording webhook: no twilio config", "agent_id", agentID)
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		// Validate Twilio signature
+		requestURL := "https://" + r.Host + r.URL.String()
+		if !validateTwilioSignature(authToken, requestURL, r.PostForm, r.Header.Get("X-Twilio-Signature")) {
+			slog.Warn("recording webhook: invalid signature", "sid", callSID)
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+
+		duration, _ := strconv.Atoi(recordingDuration)
+
+		// Store recording metadata with RLS
+		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
+		if err != nil {
+			slog.Error("recording webhook: RLS begin failed", "error", err)
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		defer tx.Rollback(r.Context())
+
+		tx.Exec(r.Context(),
+			`UPDATE call_logs SET recording_sid = $1, recording_url = $2, recording_duration = $3
+			 WHERE twilio_sid = $4`,
+			recordingSID, recordingURL, duration, callSID)
+		tx.Commit(r.Context())
+
+		// Trigger async download in background
+		go downloadAndStoreRecording(pool, cfg, agentID, recordingSID, recordingURL, callSID)
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// downloadAndStoreRecording downloads a recording from Twilio, stores locally, updates DB, then deletes from Twilio.
+func downloadAndStoreRecording(pool *pgxpool.Pool, cfg *config.Config, agentID, recordingSID, recordingURL, callSID string) {
+	ctx := context.Background()
+
+	// Brief delay to avoid 404 race condition (Twilio may not have the file ready)
+	time.Sleep(3 * time.Second)
+
+	// Get Twilio credentials
+	accountSID, authToken, _, _, err := getTwilioConfig(ctx, pool, agentID, cfg)
+	if err != nil {
+		slog.Error("recording download: failed to get config", "error", err, "agent_id", agentID)
+		return
+	}
+
+	// Download recording as MP3 with retry (3 attempts, 2s/4s backoff)
+	downloadURL := fmt.Sprintf("https://api.twilio.com/2010-04-01/Accounts/%s/Recordings/%s.mp3", accountSID, recordingSID)
+	var resp *http.Response
+	for attempt := 0; attempt < 3; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(1<<attempt) * time.Second)
+		}
+		req, _ := http.NewRequestWithContext(ctx, "GET", downloadURL, nil)
+		req.SetBasicAuth(accountSID, authToken)
+		resp, err = http.DefaultClient.Do(req)
+		if err == nil && resp.StatusCode == 200 {
+			break
+		}
+		if resp != nil {
+			resp.Body.Close()
+		}
+		slog.Warn("recording download: retry", "attempt", attempt+1, "recording_sid", recordingSID)
+	}
+	if err != nil || resp == nil || resp.StatusCode != 200 {
+		slog.Error("recording download: all retries failed", "recording_sid", recordingSID)
+		return
+	}
+	defer resp.Body.Close()
+
+	// Ensure recordings directory exists
+	dir := fmt.Sprintf("recordings/%s", agentID)
+	os.MkdirAll(dir, 0755)
+	localPath := fmt.Sprintf("%s/%s.mp3", dir, recordingSID)
+
+	// Write to file
+	file, err := os.Create(localPath)
+	if err != nil {
+		slog.Error("recording download: file create failed", "error", err, "path", localPath)
+		return
+	}
+	_, err = io.Copy(file, resp.Body)
+	file.Close()
+	if err != nil {
+		slog.Error("recording download: write failed", "error", err, "path", localPath)
+		os.Remove(localPath)
+		return
+	}
+
+	// Verify file exists before updating DB
+	if _, err := os.Stat(localPath); err != nil {
+		slog.Error("recording download: file not found after write", "path", localPath)
+		return
+	}
+
+	// Update DB with local path
+	pool.Exec(ctx,
+		`UPDATE call_logs SET local_recording_path = $1 WHERE twilio_sid = $2`,
+		localPath, callSID)
+
+	// Delete from Twilio
+	client := twilio.NewRestClientWithParams(twilio.ClientParams{
+		Username: accountSID,
+		Password: authToken,
+	})
+	if err := client.Api.DeleteRecording(recordingSID, nil); err != nil {
+		slog.Warn("recording download: twilio delete failed (non-fatal)", "error", err, "recording_sid", recordingSID)
+	} else {
+		slog.Info("recording downloaded and deleted from Twilio", "recording_sid", recordingSID, "local_path", localPath)
 	}
 }

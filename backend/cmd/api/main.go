@@ -88,6 +88,7 @@ func run() error {
 	r.Get("/api/calls/twiml/bridge", handlers.TwiMLBridge(pool, cfg))
 	r.Post("/api/calls/twiml/bridge", handlers.TwiMLBridge(pool, cfg))
 	r.Post("/api/calls/inbound-webhook", handlers.InboundCallWebhook(pool, cfg))
+	r.Post("/api/calls/recording-webhook", handlers.RecordingWebhook(pool, cfg))
 
 	// Protected — Clerk JWT + user sync required
 	r.Group(func(r chi.Router) {
