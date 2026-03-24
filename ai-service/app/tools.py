@@ -461,13 +461,14 @@ TOOL_DEFINITIONS = [
     # ----- Gmail / Email tools -----
     {
         "name": "search_emails",
-        "description": "Search synced Gmail emails by subject, sender name, or snippet text. Optionally filter by contact. Requires Gmail to be connected.",
+        "description": "Search synced Gmail emails. Use contacts_only=true when asked about emails from/to contacts (filters out spam/marketing). Without contacts_only, returns all emails including promotional ones.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "query": {"type": "string", "description": "Search term to match against subject, sender name, or snippet"},
                 "contact_id": {"type": "string", "description": "Filter to emails linked to this contact UUID"},
-                "limit": {"type": "integer", "description": "Max results (default 10)"},
+                "contacts_only": {"type": "boolean", "description": "If true, only return emails linked to a CRM contact (excludes spam/marketing). Use this when asked about contact messages."},
+                "limit": {"type": "integer", "description": "Max results (default 10, use higher like 50 when searching across all contacts)"},
             },
             "required": [],
         },
@@ -948,14 +949,15 @@ def cleanup_expired_actions() -> int:
 # Write tool executor (called from /ai/confirm)
 # ---------------------------------------------------------------------------
 
-async def execute_write_tool(pending_id: str) -> dict:
-    # Fetch and delete the pending action atomically
+async def execute_write_tool(pending_id: str, agent_id: str) -> dict:
+    # Fetch and delete the pending action atomically, verifying agent ownership
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute(
-            """DELETE FROM pending_actions WHERE id = %s AND expires_at >= NOW()
+            """DELETE FROM pending_actions
+               WHERE id = %s AND agent_id = %s AND expires_at >= NOW()
                RETURNING tool, input, agent_id""",
-            (pending_id,),
+            (pending_id, agent_id),
         )
         action = cur.fetchone()
     if not action:
@@ -1587,32 +1589,39 @@ async def _proxy_to_backend(method: str, path: str, agent_id: str, payload: dict
 def _search_emails(agent_id: str, inp: dict) -> list:
     query = inp.get("query", "")
     contact_id = inp.get("contact_id")
-    limit = inp.get("limit", 10)
+    contacts_only = inp.get("contacts_only", False)
+    limit = inp.get("limit", 50 if contacts_only else 10)
 
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         params: list = [agent_id]
-        where_clauses = ["agent_id = %s"]
+        where_clauses = ["e.agent_id = %s"]
 
+        if contacts_only:
+            where_clauses.append("e.contact_id IS NOT NULL")
         if query:
             params.extend([f"%{query}%"] * 3)
             where_clauses.append(
-                "(subject ILIKE %s OR from_name ILIKE %s OR snippet ILIKE %s)"
+                "(e.subject ILIKE %s OR e.from_name ILIKE %s OR e.snippet ILIKE %s)"
             )
         if contact_id:
             params.append(contact_id)
-            where_clauses.append("contact_id = %s")
+            where_clauses.append("e.contact_id = %s")
 
         params.append(limit)
         sql = f"""
-            SELECT id, thread_id, subject, snippet, from_name, from_address,
-                   to_addresses, is_read, is_outbound, labels, gmail_date
-            FROM emails
+            SELECT e.id, e.thread_id, e.subject, e.snippet, e.from_name, e.from_address,
+                   e.to_addresses, e.is_read, e.is_outbound, e.labels, e.gmail_date,
+                   e.contact_id,
+                   CASE WHEN c.id IS NOT NULL THEN c.first_name || ' ' || c.last_name ELSE NULL END AS contact_name
+            FROM emails e
+            LEFT JOIN contacts c ON c.id = e.contact_id
             WHERE {' AND '.join(where_clauses)}
-            ORDER BY gmail_date DESC LIMIT %s
+            ORDER BY e.gmail_date DESC LIMIT %s
         """
         cur.execute(sql, params)
-        return [dict(r) for r in cur.fetchall()]
+        results = [dict(r) for r in cur.fetchall()]
+        return results
 
 
 def _get_email_thread(agent_id: str, thread_id: str, limit: int) -> list:

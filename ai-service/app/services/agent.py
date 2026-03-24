@@ -212,7 +212,30 @@ def _build_system_prompt(agent_name: str, contact_context: str = "", gmail_statu
         "- For hierarchical structures (ownership chains, entity structures, org charts), "
         "use nested markdown bullet lists with **bold entity names**. Include ALL entities — "
         "sponsors, funds, GPs, LPs, SPEs, properties, managers, lenders. "
-        "NEVER use ASCII art or box-drawing characters for diagrams.\n"
+        "NEVER use ASCII art or box-drawing characters for diagrams.\n\n"
+        "MORNING BRIEFING:\n"
+        "When the user sends a message like 'brief me', 'morning briefing', 'daily briefing', "
+        "'start my day', 'what do I have today', 'catch me up', or any similar request for a "
+        "day-start summary, respond with a structured morning briefing. To generate it, chain "
+        "these tool calls in order:\n"
+        "  1. get_dashboard_summary — overall pipeline health and metrics\n"
+        "  2. get_overdue_tasks — tasks that are past due and not completed\n"
+        "  3. get_all_activities with limit=10 — what happened recently\n"
+        "  4. list_deals — scan for stale deals (same stage 14+ days) and deals at risk\n"
+        "Format the briefing with these sections:\n"
+        "  ## Good morning! Here's your briefing for {today}\n"
+        "  ### Overview — key metrics from get_dashboard_summary (active deals, pipeline value, "
+        "contacts, activity this week)\n"
+        "  ### Action Items — overdue tasks (from get_overdue_tasks) listed with their due date "
+        "and priority; deals that appear stale (no stage change in 14+ days based on updated_at) "
+        "flagged with the contact name and current stage\n"
+        "  ### Recent Activity — summary of the last 10 activities (calls, emails, notes, showings) "
+        "from get_all_activities, grouped or highlighted by significance\n"
+        "  ### Today's Focus — 2-3 specific, actionable recommendations based on what you found "
+        "(e.g. 'Follow up with Jane Smith — no contact in 9 days', 'Move the Doe deal out of "
+        "Offer stage — it has been 18 days')\n"
+        "Be concise but complete. Each section should be scannable in under 10 seconds. "
+        "If a section has nothing to report (e.g. no overdue tasks), say so briefly and move on.\n"
     )
 
     # Gmail connection status
@@ -221,7 +244,14 @@ def _build_system_prompt(agent_name: str, contact_context: str = "", gmail_statu
             synced = gmail_status.get("last_synced_at")
             sync_info = f", last synced {synced.strftime('%b %d %H:%M')}" if synced else ""
             base += f"\n\nGmail: Connected ({gmail_status.get('gmail_address', 'unknown')}{sync_info}). "
-            base += "You can search emails, read threads, draft emails, and send emails."
+            base += (
+                "You can search emails, read threads, draft emails, and send emails. "
+                "IMPORTANT EMAIL RULES:\n"
+                "- When asked about emails from contacts, ALWAYS use search_emails with contacts_only=true. "
+                "This filters to only emails linked to CRM contacts and skips spam/marketing.\n"
+                "- When asked about specific topics or senders, use the query parameter.\n"
+                "- Never assume — always call the tool first."
+            )
         else:
             base += "\n\nGmail: Not connected. If the user asks about emails, tell them to connect Gmail in Settings first."
 

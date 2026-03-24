@@ -66,6 +66,13 @@ def execute_step(step: dict, agent_id: str, trigger_data: dict | None) -> dict:
                     (str(uuid.uuid4()), agent_id, contact_id, body, due_date, priority),
                 )
             result["detail"] = f"Created task: {body}"
+            # Fire activity_logged trigger — pass triggered_by_workflow=True to prevent recursion
+            trigger_workflows(
+                "activity_logged",
+                agent_id,
+                {"contact_id": contact_id, "type": "task", "body": body},
+                triggered_by_workflow=True,
+            )
 
         elif step_type == "log_activity":
             activity_type = config.get("activity_type", "note")
@@ -80,6 +87,13 @@ def execute_step(step: dict, agent_id: str, trigger_data: dict | None) -> dict:
                     (str(uuid.uuid4()), agent_id, contact_id, activity_type, body),
                 )
             result["detail"] = f"Logged {activity_type}: {body}"
+            # Fire activity_logged trigger — pass triggered_by_workflow=True to prevent recursion
+            trigger_workflows(
+                "activity_logged",
+                agent_id,
+                {"contact_id": contact_id, "type": activity_type, "body": body},
+                triggered_by_workflow=True,
+            )
 
         elif step_type == "wait":
             days = config.get("days", 1)
@@ -109,6 +123,14 @@ def execute_step(step: dict, agent_id: str, trigger_data: dict | None) -> dict:
                             (*updates.values(), deal_id, agent_id),
                         )
                 result["detail"] = f"Updated deal {deal_id}"
+                # Fire deal_stage_changed trigger if stage was updated — pass triggered_by_workflow=True to prevent recursion
+                if "stage_id" in updates:
+                    trigger_workflows(
+                        "deal_stage_changed",
+                        agent_id,
+                        {"deal_id": deal_id, "stage_name": config.get("stage_name")},
+                        triggered_by_workflow=True,
+                    )
             else:
                 result["status"] = "skipped"
                 result["detail"] = "No deal_id available"
@@ -125,6 +147,13 @@ def execute_step(step: dict, agent_id: str, trigger_data: dict | None) -> dict:
                     (str(uuid.uuid4()), agent_id, contact_id, f"[AI Workflow] {prompt}"),
                 )
             result["detail"] = f"AI message: {prompt}"
+            # Fire activity_logged trigger — pass triggered_by_workflow=True to prevent recursion
+            trigger_workflows(
+                "activity_logged",
+                agent_id,
+                {"contact_id": contact_id, "type": "note", "body": prompt},
+                triggered_by_workflow=True,
+            )
 
         else:
             result["status"] = "skipped"
@@ -188,8 +217,25 @@ def run_workflow(workflow: dict, agent_id: str, trigger_data: dict | None = None
     return run_id
 
 
-def trigger_workflows(trigger_type: str, agent_id: str, trigger_data: dict | None = None) -> list[str]:
-    """Find and execute all matching workflows for a trigger event. Returns list of run IDs."""
+def trigger_workflows(
+    trigger_type: str,
+    agent_id: str,
+    trigger_data: dict | None = None,
+    triggered_by_workflow: bool = False,
+) -> list[str]:
+    """Find and execute all matching workflows for a trigger event. Returns list of run IDs.
+
+    If ``triggered_by_workflow`` is True the call originated from inside a running
+    workflow step.  We skip firing new workflows to prevent infinite recursion
+    (e.g. a contact_created workflow that calls create_contact would loop forever).
+    """
+    if triggered_by_workflow:
+        logger.debug(
+            "Skipping workflow trigger '%s' — already executing inside a workflow (recursion guard).",
+            trigger_type,
+        )
+        return []
+
     workflows = find_matching_workflows(trigger_type, agent_id)
     run_ids = []
     for wf in workflows:

@@ -26,6 +26,28 @@ function daysSince(dateStr: string) {
   return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
 }
 
+type HealthStatus = "green" | "yellow" | "red";
+
+function getDealHealth(deal: { updated_at: string; last_activity_at: string | null }): HealthStatus {
+  const daysInStage = daysSince(deal.updated_at);
+  const daysNoActivity = deal.last_activity_at ? daysSince(deal.last_activity_at) : Infinity;
+  if (daysInStage > 14 || daysNoActivity >= 14) return "red";
+  if (daysInStage >= 7 || daysNoActivity >= 7) return "yellow";
+  return "green";
+}
+
+const HEALTH_COLOR: Record<HealthStatus, string> = {
+  green: "#22c55e",
+  yellow: "#eab308",
+  red: "#ef4444",
+};
+
+const HEALTH_LABEL: Record<HealthStatus, string> = {
+  green: "Active",
+  yellow: "Slowing",
+  red: "Stale",
+};
+
 export default function PipelinePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -50,7 +72,7 @@ export default function PipelinePage() {
     },
   });
 
-  const { data: dealsData, isLoading: dealsLoading } = useQuery({
+  const { data: dealsData, isLoading: dealsLoading, isError: dealsError, refetch: refetchDeals } = useQuery({
     queryKey: ["deals"],
     queryFn: async () => {
       const token = await getToken();
@@ -98,6 +120,17 @@ export default function PipelinePage() {
   const stages = stagesData ?? [];
   const deals = dealsData?.deals ?? [];
   const contacts = contactsData?.contacts ?? [];
+
+  if (dealsError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full min-h-[400px] gap-4 p-6 text-center">
+        <p className="text-gray-600 font-medium">Failed to load pipeline</p>
+        <button onClick={() => refetchDeals()} className="px-4 py-2 rounded-xl text-white text-sm font-semibold" style={{ backgroundColor: "#0EA5E9" }}>
+          Try again
+        </button>
+      </div>
+    );
+  }
 
   const dealsByStage: Record<string, Deal[]> = {};
   stages.forEach((s) => {
@@ -329,6 +362,9 @@ export default function PipelinePage() {
                       .join("")
                       .slice(0, 2)
                       .toUpperCase();
+                    const health = getDealHealth(deal);
+                    const healthColor = HEALTH_COLOR[health];
+                    const healthLabel = HEALTH_LABEL[health];
 
                     return (
                       <div
@@ -367,13 +403,20 @@ export default function PipelinePage() {
                           <span className="text-sm font-bold" style={{ color: "#1E3A5F" }}>
                             {formatValue(deal.value)}
                           </span>
-                          <span
-                            className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
-                              isStale ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-500"
-                            }`}
-                          >
-                            {daysOld}d
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              title={healthLabel}
+                              className="w-2 h-2 rounded-full shrink-0"
+                              style={{ backgroundColor: healthColor }}
+                            />
+                            <span
+                              className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
+                                isStale ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-500"
+                              }`}
+                            >
+                              {daysOld}d
+                            </span>
+                          </div>
                         </div>
                         {/* Progress dots */}
                         <div className="flex gap-1 mt-2">

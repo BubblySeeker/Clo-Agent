@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"crypto/subtle"
 	"net/http"
 	"strings"
 
@@ -36,7 +37,7 @@ func ClerkAuth(client clerk.Client, serviceSecret string) func(http.Handler) htt
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Internal service-to-service authentication bypass.
-			if svcSecret := r.Header.Get("X-AI-Service-Secret"); svcSecret != "" && serviceSecret != "" && svcSecret == serviceSecret {
+			if svcSecret := r.Header.Get("X-AI-Service-Secret"); svcSecret != "" && serviceSecret != "" && subtle.ConstantTimeCompare([]byte(svcSecret), []byte(serviceSecret)) == 1 {
 				agentID := r.Header.Get("X-Agent-ID")
 				if agentID == "" {
 					http.Error(w, "X-Agent-ID header is required for service auth", http.StatusBadRequest)

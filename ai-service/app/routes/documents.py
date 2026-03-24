@@ -3,20 +3,15 @@ Document processing and search endpoints.
 Called by Go backend via internal proxy.
 """
 import logging
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.config import AI_SERVICE_SECRET
 from app.database import run_query
+from app.routes import verify_secret
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ai")
-
-
-def verify_secret(x_ai_service_secret: str = Header(...)):
-    if x_ai_service_secret != AI_SERVICE_SECRET:
-        raise HTTPException(status_code=403, detail="Unauthorized")
 
 
 class ProcessDocumentRequest(BaseModel):

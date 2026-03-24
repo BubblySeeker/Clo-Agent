@@ -44,7 +44,7 @@ func ListWorkflows(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -53,7 +53,7 @@ func ListWorkflows(pool *pgxpool.Pool) http.HandlerFunc {
 			`SELECT id, agent_id, name, description, trigger_type, trigger_config, steps, enabled, created_at, updated_at
 			 FROM workflows ORDER BY created_at DESC`)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "query error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "query error", ErrCodeDatabase)
 			return
 		}
 		defer rows.Close()
@@ -63,7 +63,7 @@ func ListWorkflows(pool *pgxpool.Pool) http.HandlerFunc {
 			var wf Workflow
 			if err := rows.Scan(&wf.ID, &wf.AgentID, &wf.Name, &wf.Description, &wf.TriggerType,
 				&wf.TriggerConfig, &wf.Steps, &wf.Enabled, &wf.CreatedAt, &wf.UpdatedAt); err != nil {
-				respondError(w, http.StatusInternalServerError, "scan error")
+				respondErrorWithCode(w, http.StatusInternalServerError, "scan error", ErrCodeDatabase)
 				return
 			}
 			workflows = append(workflows, wf)
@@ -84,7 +84,7 @@ func GetWorkflow(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -96,7 +96,7 @@ func GetWorkflow(pool *pgxpool.Pool) http.HandlerFunc {
 			&wf.ID, &wf.AgentID, &wf.Name, &wf.Description, &wf.TriggerType,
 			&wf.TriggerConfig, &wf.Steps, &wf.Enabled, &wf.CreatedAt, &wf.UpdatedAt)
 		if err != nil {
-			respondError(w, http.StatusNotFound, "workflow not found")
+			respondErrorWithCode(w, http.StatusNotFound, "workflow not found", ErrCodeNotFound)
 			return
 		}
 
@@ -117,11 +117,15 @@ func CreateWorkflow(pool *pgxpool.Pool) http.HandlerFunc {
 			Steps         json.RawMessage `json:"steps"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respondError(w, http.StatusBadRequest, "invalid JSON")
+			respondErrorWithCode(w, http.StatusBadRequest, "invalid JSON", ErrCodeBadRequest)
 			return
 		}
 		if body.Name == "" || body.TriggerType == "" {
-			respondError(w, http.StatusBadRequest, "name and trigger_type are required")
+			respondErrorWithCode(w, http.StatusBadRequest, "name and trigger_type are required", ErrCodeBadRequest)
+			return
+		}
+		if err := validateMaxLen("name", body.Name, 200); err != nil {
+			respondErrorWithCode(w, http.StatusBadRequest, err.Error(), ErrCodeBadRequest)
 			return
 		}
 		if body.TriggerConfig == nil {
@@ -133,7 +137,7 @@ func CreateWorkflow(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -147,7 +151,7 @@ func CreateWorkflow(pool *pgxpool.Pool) http.HandlerFunc {
 		).Scan(&wf.ID, &wf.AgentID, &wf.Name, &wf.Description, &wf.TriggerType,
 			&wf.TriggerConfig, &wf.Steps, &wf.Enabled, &wf.CreatedAt, &wf.UpdatedAt)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "create failed")
+			respondErrorWithCode(w, http.StatusInternalServerError, "create failed", ErrCodeDatabase)
 			return
 		}
 
@@ -163,13 +167,19 @@ func UpdateWorkflow(pool *pgxpool.Pool) http.HandlerFunc {
 
 		var body map[string]interface{}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respondError(w, http.StatusBadRequest, "invalid JSON")
+			respondErrorWithCode(w, http.StatusBadRequest, "invalid JSON", ErrCodeBadRequest)
 			return
+		}
+		if name, ok := body["name"].(string); ok {
+			if err := validateMaxLen("name", name, 200); err != nil {
+				respondErrorWithCode(w, http.StatusBadRequest, err.Error(), ErrCodeBadRequest)
+				return
+			}
 		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -200,7 +210,7 @@ func UpdateWorkflow(pool *pgxpool.Pool) http.HandlerFunc {
 		).Scan(&wf.ID, &wf.AgentID, &wf.Name, &wf.Description, &wf.TriggerType,
 			&wf.TriggerConfig, &wf.Steps, &wf.Enabled, &wf.CreatedAt, &wf.UpdatedAt)
 		if err != nil {
-			respondError(w, http.StatusNotFound, "workflow not found")
+			respondErrorWithCode(w, http.StatusNotFound, "workflow not found", ErrCodeNotFound)
 			return
 		}
 
@@ -216,14 +226,14 @@ func DeleteWorkflow(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
 
 		result, err := tx.Exec(r.Context(), `DELETE FROM workflows WHERE id = $1`, id)
 		if err != nil || result.RowsAffected() == 0 {
-			respondError(w, http.StatusNotFound, "workflow not found")
+			respondErrorWithCode(w, http.StatusNotFound, "workflow not found", ErrCodeNotFound)
 			return
 		}
 
@@ -239,7 +249,7 @@ func ToggleWorkflow(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -251,7 +261,7 @@ func ToggleWorkflow(pool *pgxpool.Pool) http.HandlerFunc {
 		).Scan(&wf.ID, &wf.AgentID, &wf.Name, &wf.Description, &wf.TriggerType,
 			&wf.TriggerConfig, &wf.Steps, &wf.Enabled, &wf.CreatedAt, &wf.UpdatedAt)
 		if err != nil {
-			respondError(w, http.StatusNotFound, "workflow not found")
+			respondErrorWithCode(w, http.StatusNotFound, "workflow not found", ErrCodeNotFound)
 			return
 		}
 
@@ -267,7 +277,7 @@ func ListWorkflowRuns(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -276,7 +286,7 @@ func ListWorkflowRuns(pool *pgxpool.Pool) http.HandlerFunc {
 			`SELECT id, workflow_id, agent_id, trigger_data, status, current_step, step_results, started_at, completed_at
 			 FROM workflow_runs WHERE workflow_id = $1 ORDER BY started_at DESC LIMIT 50`, workflowID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "query error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "query error", ErrCodeDatabase)
 			return
 		}
 		defer rows.Close()
@@ -286,7 +296,7 @@ func ListWorkflowRuns(pool *pgxpool.Pool) http.HandlerFunc {
 			var run WorkflowRun
 			if err := rows.Scan(&run.ID, &run.WorkflowID, &run.AgentID, &run.TriggerData,
 				&run.Status, &run.CurrentStep, &run.StepResults, &run.StartedAt, &run.CompletedAt); err != nil {
-				respondError(w, http.StatusInternalServerError, "scan error")
+				respondErrorWithCode(w, http.StatusInternalServerError, "scan error", ErrCodeDatabase)
 				return
 			}
 			runs = append(runs, run)
