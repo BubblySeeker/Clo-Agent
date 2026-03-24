@@ -1,81 +1,63 @@
-# CloAgent — Tool Routing Configuration
+# AI Contact Intelligence
 
 ## What This Is
 
-A CLAUDE.md configuration update for CloAgent that maps specific development tasks to the correct AI tools and skills. This ensures Claude Code automatically uses the right skill/tool depending on what's being built — frontend components, landing pages, images, 3D elements, or design work.
+A focused improvement to CloAgent's AI assistant that makes it smarter about finding, resolving, and reasoning about contacts. Currently the AI fails on basic contact operations — it can't split "Rohan Batre" into first/last name for search, can't find "my last contact," and returns empty results for partial name lookups like "email Rohan." This milestone fixes the AI's contact resolution so it behaves like a competent human assistant.
 
 ## Core Value
 
-Claude Code should always use the most appropriate specialized tool for each task type, without the developer needing to manually invoke skills every time.
+When a user references a contact by any natural description (name, partial name, recency, relationship), the AI finds the right contact and acts on it — every time.
 
 ## Requirements
 
 ### Validated
 
-- Auth (Clerk sign-in/up, JWT, user sync) — existing
-- Contacts CRUD (list, create, edit, delete) — existing
-- Contact Detail (overview, activities, deals, buyer profile, AI profile tabs) — existing
-- Deals CRUD with stage management — existing
-- Pipeline Kanban with drag-drop — existing
-- Activities (call/email/note/showing/task) — existing
-- Dashboard with metrics, charts, widget customization — existing
-- AI Chat Bubble (floating, global) with SSE streaming — existing
-- AI Chat Full Page with conversation management — existing
-- AI Tools (23 total: 11 read, 12 write) — existing
-- AI Profile Generation — existing
-- Analytics (KPI cards, pipeline/activities/contacts charts) — existing
-- Tasks Page (full-stack with DB support) — existing
-- Marketing Pages (home, about, features, pricing, team, mission) — existing
-- Buyer Profile (frontend + backend) — existing
-- Notifications (real recent activities from API) — existing
-- Settings Page (partial — pipeline stages, commission localStorage) — existing
-
-- Tool routing rules for frontend-design skill — v1.0
-- Tool routing rules for ui-ux-pro-max skill (landing/marketing) — v1.0
-- Tool routing rules for Stitch (component design + styling) — v1.0
-- Tool routing rules for Gemini (nano banana 2) image generation — v1.0
-- Tool routing rules for 21st.dev 3D components (landing page only) — v1.0
+- ✓ Contact CRUD (list, create, edit, delete) — existing
+- ✓ Contact search by name/email/source with ILIKE — existing
+- ✓ Full-name concatenation search (first || ' ' || last) — existing
+- ✓ AI tool calling with 34 tools — existing
+- ✓ System prompt with action-oriented guidelines — existing
+- ✓ Contact-scoped conversations with pre-loaded context — existing
 
 ### Active
 
-(None — next milestone TBD)
+- [ ] AI splits multi-word names into first/last before searching (e.g. "Rohan Batre" → search "Rohan", then confirm match)
+- [ ] AI resolves "my last contact" / "most recent contact" to the contact with the latest created_at or last_activity_at
+- [ ] AI resolves partial names ("email Rohan") by searching and selecting the best match
+- [ ] AI always searches for contacts before passing IDs to other tools (no guessing UUIDs)
+- [ ] AI handles ambiguous matches gracefully (multiple "John" contacts → asks user to clarify)
 
 ### Out of Scope
 
-- Backend Go changes — this is a CLAUDE.md/instruction file update only
-- AI service Python changes — not relevant to tool routing
-- Database schema changes — not relevant to tool routing
-- New frontend features — this is about configuring how Claude builds, not what it builds
+- Other AI tool improvements beyond contact resolution — separate milestone
+- New contact search backend features (fuzzy search, phonetic matching) — current ILIKE is sufficient
+- AI chat UI changes — this is purely AI behavior
+- Performance optimization — not the issue here
 
 ## Context
 
-CloAgent is a brownfield project with a mature three-tier architecture (Next.js 14 + Go/Chi + FastAPI/Python) and an extensive feature set already built. The project uses several specialized skills/tools available to Claude Code:
+The search_contacts tool already supports searching across first_name, last_name, email, and full name concatenation via ILIKE. The SQL is solid. The problem is the AI model (Claude Haiku 4.5) isn't being instructed well enough in the system prompt to:
 
-- **`frontend-design` skill** — for building dashboard/app UI components and pages
-- **`ui-ux-pro-max` skill** — for landing pages, marketing pages, and high-design work
-- **Stitch** — design component tool for any frontend styling and new component creation
-- **Gemini (nano banana 2)** — AI image generation for any image assets needed (marketing, app placeholders, icons)
-- **21st.dev** — pre-built 3D component library, used exclusively on landing/marketing pages
+1. **Always search before acting** — when a user mentions a contact by name, search first, get the UUID, then use it
+2. **Parse natural language references** — "my last contact" means sort by recency; "Rohan" means search by first name
+3. **Handle the search → resolve → act pipeline** — the AI jumps straight to action without the resolve step
 
-Shipped v1.0: CLAUDE.md now contains a "Design & Build Tool Routing" section (50 lines) with tool inventory, routing rules, multi-tool composition, hard constraints, and excluded paths.
+Key files:
+- `ai-service/app/services/agent.py` — system prompt construction, agent loop
+- `ai-service/app/tools.py` — tool definitions and execution (search_contacts at line 649)
 
 ## Constraints
 
-- **File**: Must be CLAUDE.md additions (not a separate file)
-- **Scope**: Tool routing rules only — no changes to application code
-- **3D scope**: 21st.dev 3D components are landing page only, never in dashboard
-- **Stitch scope**: Used for any frontend styling work and new component creation
-- **Gemini scope**: Used whenever any image asset is needed anywhere in the project
+- **Model**: Claude Haiku 4.5 — must work within this model's capabilities (can't rely on stronger reasoning)
+- **Tool rounds**: Max 5 per message — contact resolution may consume 1-2 rounds, leaving 3-4 for actual work
+- **Backward compatible**: Changes must not break existing working AI interactions (deals, tasks, activities)
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| CLAUDE.md additions (not separate file) | Keep all instructions in one place, simpler to maintain | ✓ Good |
-| 21st.dev landing-only restriction | 3D elements would be distracting in a CRM dashboard | ✓ Good |
-| Gemini for all image needs | Single tool for consistency across marketing and app assets | ✓ Good |
-| Stitch for all styling + components | Ensures consistent design language across the project | ✓ Good |
-| Path-based first-match-wins routing | Simple precedence, directory patterns over file-level rules | ✓ Good |
+| Fix via system prompt + tool descriptions first | Cheapest, fastest approach; search SQL already works | — Pending |
+| Keep Haiku 4.5 model | Cost/speed constraints for real-time chat | — Pending |
 
 ## Evolution
 
@@ -95,4 +77,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-24 after v1.0 milestone*
+*Last updated: 2026-03-24 after initialization*
