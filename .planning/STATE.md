@@ -1,61 +1,44 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-current_phase: 3
-status: completed
-last_updated: "2026-03-17T14:48:36.562Z"
+milestone: v2.0
+milestone_name: Twilio Voice Calling
+current_phase: 0
+status: defining_requirements
+last_updated: "2026-03-23"
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 3
-  completed_plans: 3
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
-# Project State: CloAgent Tool Routing
+# Project State: CloAgent — Twilio Voice Calling
 
-**Current Phase:** 3
-**Status:** Milestone complete
-**Last Updated:** 2026-03-17
+**Current Phase:** Not started (defining requirements)
+**Status:** Defining requirements
+**Last Updated:** 2026-03-23
 
 ---
 
-## Phase Progress
+## Current Position
 
-| Phase | Name | Status | Started | Completed |
-|-------|------|--------|---------|-----------|
-| 1 | Integration & Structure | NOT STARTED | — | — |
-| 2 | Tool Defaults & Routing Rules | BLOCKED (depends on Phase 1) | — | — |
-| 3 | Hard Constraints & Exclusions | BLOCKED (depends on Phase 1) | — | — |
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-23 — Milestone v2.0 started
 
-## Requirement Status
+## Accumulated Context
 
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| INTG-01 | 1 | Pending |
-| INTG-02 | 1 | Pending |
-| TOOL-01 | 2 | Pending |
-| TOOL-02 | 2 | Pending |
-| TOOL-03 | 2 | Pending |
-| TOOL-04 | 2 | Pending |
-| TOOL-05 | 2 | Pending |
-| CNST-01 | 3 | Pending |
-| CNST-02 | 3 | Pending |
-| CNST-03 | 3 | Pending |
-
-## Completed Phases
-
-(none yet)
+- v1.0 (Tool Routing) complete — 3 phases, all done
+- Existing call scaffolding in codebase: call_logs table, calls.go handler, calls.ts API client, 3 AI tools, communication page integration — but core call flow is broken
+- Existing SMS integration is fully working and provides the Twilio config pattern to build on
+- User wants: agent calls client normally, AI listens via recording, auto-updates CRM
+- User wants a React Native mobile app as a thin dialer shell
+- Post-call recording approach chosen over real-time streaming
 
 ## Blockers
 
 (none)
 
-## Notes
-
-- All work targets a single file: CLAUDE.md
-- No application code changes required
-- Research phase identified path-based routing as the primary signal
-
 ---
-*Initialized: 2026-03-17*
+*Initialized: 2026-03-23*

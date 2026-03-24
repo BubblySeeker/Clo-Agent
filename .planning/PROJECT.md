@@ -1,78 +1,76 @@
-# CloAgent — Tool Routing Configuration
+# CloAgent — Project Plan
 
 ## What This Is
 
-A CLAUDE.md configuration update for CloAgent that maps specific development tasks to the correct AI tools and skills. This ensures Claude Code automatically uses the right skill/tool depending on what's being built — frontend components, landing pages, images, 3D elements, or design work.
+CloAgent is an AI-powered CRM for real estate agents. Monorepo with three services (Next.js 14 frontend, Go/Chi backend, FastAPI AI service) sharing PostgreSQL 15 + pgvector. Full-stack CRM with contacts, deals, pipeline, activities, AI chat, workflows, Gmail integration, SMS/Twilio integration, and partial voice call scaffolding.
 
 ## Core Value
 
-Claude Code should always use the most appropriate specialized tool for each task type, without the developer needing to manually invoke skills every time.
+AI-powered CRM that automates real estate agent workflows — including communication intelligence that listens to calls, transcribes conversations, and automatically updates the CRM.
 
 ## Requirements
 
-### Validated
+### Validated (v1.0 — Tool Routing)
 
-- Auth (Clerk sign-in/up, JWT, user sync) — existing
-- Contacts CRUD (list, create, edit, delete) — existing
-- Contact Detail (overview, activities, deals, buyer profile, AI profile tabs) — existing
-- Deals CRUD with stage management — existing
-- Pipeline Kanban with drag-drop — existing
-- Activities (call/email/note/showing/task) — existing
-- Dashboard with metrics, charts, widget customization — existing
-- AI Chat Bubble (floating, global) with SSE streaming — existing
-- AI Chat Full Page with conversation management — existing
-- AI Tools (23 total: 11 read, 12 write) — existing
-- AI Profile Generation — existing
-- Analytics (KPI cards, pipeline/activities/contacts charts) — existing
-- Tasks Page (full-stack with DB support) — existing
-- Marketing Pages (home, about, features, pricing, team, mission) — existing
-- Buyer Profile (frontend + backend) — existing
-- Notifications (real recent activities from API) — existing
-- Settings Page (partial — pipeline stages, commission localStorage) — existing
+- Tool routing rules in CLAUDE.md for frontend-design, ui-ux-pro-max, Stitch, Gemini, 21st.dev
+- Hard constraints (21st.dev landing-only, backend exclusions, Tailwind conformance)
+- Integration structure and section placement
 
-### Active
+### Validated (Existing CRM Features)
 
-- [ ] Add tool-routing rules to CLAUDE.md for frontend skill
-- [ ] Add tool-routing rules to CLAUDE.md for UI/UX Pro Max skill (landing/marketing pages)
-- [ ] Add tool-routing rules to CLAUDE.md for Stitch (component design + styling)
-- [ ] Add tool-routing rules to CLAUDE.md for Gemini (nano banana 2) image generation
-- [ ] Add tool-routing rules to CLAUDE.md for 21st.dev 3D components (landing page only)
+- Auth (Clerk sign-in/up, JWT, user sync)
+- Contacts CRUD, Contact Detail (5 tabs), Buyer Profiles
+- Deals CRUD, Pipeline Kanban, Deal Stages
+- Activities (call/email/note/showing/task)
+- Dashboard with metrics, charts, widget customization
+- AI Chat (bubble + full page), 30 AI tools (16 read, 14 write)
+- AI Profile Generation, Semantic Search / Embeddings
+- Analytics, Tasks Page, Workflows, Settings
+- Gmail Integration (auth, sync, send, receive, search, labels)
+- SMS Integration (configure, send, receive, sync, webhook, AI tools)
+- Voice Call scaffolding (broken — initiate endpoint, call_logs table, status webhook, AI tools, but call flow doesn't actually work)
 
-### Out of Scope
+## Current Milestone: v2.0 Twilio Voice Calling
 
-- Backend Go changes — this is a CLAUDE.md/instruction file update only
-- AI service Python changes — not relevant to tool routing
-- Database schema changes — not relevant to tool routing
-- New frontend features — this is about configuring how Claude builds, not what it builds
+**Goal:** Build a fully working end-to-end voice calling system where the agent makes/receives calls through Twilio, the AI listens via post-call recording, transcribes the conversation, and automatically updates the CRM with call notes, tasks, and deal updates.
+
+**Target features:**
+- Fix two-leg bridge call flow (agent phone → client phone)
+- Agent personal phone number in Twilio config
+- Inbound call forwarding to agent's real phone
+- Call recording via Twilio (Record=true)
+- Recording webhook + storage
+- Audio transcription (Whisper or Twilio built-in)
+- AI post-call analysis (Claude summarizes transcript → CRM actions)
+- Auto-log activity with call notes
+- Auto-create follow-up tasks from call content
+- Auto-update deal stage / buyer profile if relevant
+- Call history loaded into AI contact context
+- StatusCallback URL for real-time call status updates
+- React Native mobile dialer app (thin client shell)
 
 ## Context
 
-CloAgent is a brownfield project with a mature three-tier architecture (Next.js 14 + Go/Chi + FastAPI/Python) and an extensive feature set already built. The project uses several specialized skills/tools available to Claude Code:
-
-- **`frontend-design` skill** — for building dashboard/app UI components and pages
-- **`ui-ux-pro-max` skill** — for landing pages, marketing pages, and high-design work
-- **Stitch** — design component tool for any frontend styling and new component creation
-- **Gemini (nano banana 2)** — AI image generation for any image assets needed (marketing, app placeholders, icons)
-- **21st.dev** — pre-built 3D component library, used exclusively on landing/marketing pages
-
-The goal is a section in CLAUDE.md that acts as a routing table so Claude Code automatically invokes the correct tool based on the task context.
+The project has partial call infrastructure from a recent SMS integration sprint. The `call_logs` table, backend handler (`calls.go`), frontend API client (`calls.ts`), communication page integration, and 3 AI tools exist but the core call flow is broken — the TwiML doesn't properly bridge two parties, there's no recording, no transcription, and no AI processing.
 
 ## Constraints
 
-- **File**: Must be CLAUDE.md additions (not a separate file)
-- **Scope**: Tool routing rules only — no changes to application code
-- **3D scope**: 21st.dev 3D components are landing page only, never in dashboard
-- **Stitch scope**: Used for any frontend styling work and new component creation
-- **Gemini scope**: Used whenever any image asset is needed anywhere in the project
+- Must reuse existing `twilio_config` table (shared SMS + voice credentials)
+- Must not modify migration files 012, 013 (referenced in CLAUDE.md constraints)
+- Backend follows existing Go handler patterns (pgxpool, RLS, Chi router)
+- AI service follows existing Python patterns (psycopg2, httpx proxy, tool definitions)
+- Frontend follows existing patterns (TanStack Query, Tailwind, api client module)
+- Mobile app should be a thin shell — all business logic stays in the backend/AI service
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| CLAUDE.md additions (not separate file) | Keep all instructions in one place, simpler to maintain | -- Pending |
-| 21st.dev landing-only restriction | 3D elements would be distracting in a CRM dashboard | -- Pending |
-| Gemini for all image needs | Single tool for consistency across marketing and app assets | -- Pending |
-| Stitch for all styling + components | Ensures consistent design language across the project | -- Pending |
+| Post-call recording (not real-time stream) | Simpler, more reliable, how HubSpot/Close/Salesloft do it | Option A |
+| Two-leg bridge call flow | Agent's real phone rings first, then bridges to client — feels natural | Standard Twilio pattern |
+| Whisper for transcription | Better accuracy than Twilio built-in, supports speaker diarization | Pending research |
+| React Native + Expo for mobile | Cross-platform, reuses JS skills, Twilio has RN Voice SDK | Pending research |
+| Thin mobile client | All intelligence in backend/AI service, app is just a dialer UI | Agreed |
 
 ---
-*Last updated: 2026-03-17 after initialization*
+*Last updated: 2026-03-23 — Milestone v2.0 started*
