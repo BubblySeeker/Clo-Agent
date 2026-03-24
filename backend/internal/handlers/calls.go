@@ -51,26 +51,14 @@ func InitiateCall(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 			return
 		}
 
-		// Fetch Twilio config INCLUDING personal_phone
-		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
-		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
-			return
-		}
-		defer tx.Rollback(r.Context())
-
-		var accountSID, authToken, fromNumber string
-		var personalPhone *string
-		err = tx.QueryRow(r.Context(),
-			`SELECT account_sid, auth_token, phone_number, personal_phone
-			 FROM twilio_config WHERE agent_id = $1`, agentID,
-		).Scan(&accountSID, &authToken, &fromNumber, &personalPhone)
+		// Fetch Twilio config (decrypts auth_token automatically)
+		accountSID, authToken, fromNumber, personalPhoneStr, err := getTwilioConfig(r.Context(), pool, agentID, cfg)
 		if err != nil {
 			respondError(w, http.StatusBadRequest, "Twilio not configured. Please add your Twilio credentials in Settings.")
 			return
 		}
 
-		if personalPhone == nil || *personalPhone == "" {
+		if personalPhoneStr == "" {
 			respondError(w, http.StatusBadRequest, "Personal phone number not configured. Please add it in Settings.")
 			return
 		}
@@ -82,6 +70,13 @@ func InitiateCall(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 		}
 
 		// Insert call_logs FIRST to get call_id
+		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "database error")
+			return
+		}
+		defer tx.Rollback(r.Context())
+
 		now := time.Now()
 		var callID string
 		err = tx.QueryRow(r.Context(),
@@ -101,7 +96,7 @@ func InitiateCall(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 			Password: authToken,
 		})
 		params := &api.CreateCallParams{}
-		params.SetTo(*personalPhone)
+		params.SetTo(personalPhoneStr)
 		params.SetFrom(fromNumber)
 		bridgeURL := cfg.WebhookBaseURL + "/api/calls/twiml/bridge?to=" +
 			url.QueryEscape(body.To) + "&call_id=" + callID
@@ -136,7 +131,7 @@ func InitiateCall(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 // TwiMLBridge returns TwiML to bridge the agent to the client.
 // GET/POST /api/calls/twiml/bridge?to=+15551234567&call_id=uuid
 // PUBLIC — Twilio hits this when agent answers their phone.
-func TwiMLBridge(pool *pgxpool.Pool) http.HandlerFunc {
+func TwiMLBridge(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		clientPhone := r.URL.Query().Get("to")
 		callID := r.URL.Query().Get("call_id")
@@ -147,18 +142,24 @@ func TwiMLBridge(pool *pgxpool.Pool) http.HandlerFunc {
 			return
 		}
 
-		// Look up the Twilio number (callerId for the client leg) via call_id
-		var fromNumber, agentID, authToken string
+		// Look up from_number and agent_id from call_logs
+		var fromNumber, agentID string
 		err := pool.QueryRow(r.Context(),
-			`SELECT cl.from_number, cl.agent_id, tc.auth_token
-			 FROM call_logs cl
-			 JOIN twilio_config tc ON tc.agent_id = cl.agent_id
-			 WHERE cl.id = $1`, callID,
-		).Scan(&fromNumber, &agentID, &authToken)
+			`SELECT from_number, agent_id FROM call_logs WHERE id = $1`, callID,
+		).Scan(&fromNumber, &agentID)
 		if err != nil {
 			slog.Error("twiml bridge: call_id lookup failed", "call_id", callID, "error", err)
 			w.Header().Set("Content-Type", "text/xml")
 			w.Write([]byte(`<Response><Say>Call not found. Goodbye.</Say><Hangup/></Response>`))
+			return
+		}
+
+		// Get decrypted auth_token via helper
+		_, authToken, _, _, err := getTwilioConfig(r.Context(), pool, agentID, cfg)
+		if err != nil {
+			slog.Error("twiml bridge: twilio config lookup failed", "agent_id", agentID, "error", err)
+			w.Header().Set("Content-Type", "text/xml")
+			w.Write([]byte(`<Response><Say>Configuration error. Goodbye.</Say><Hangup/></Response>`))
 			return
 		}
 
@@ -190,7 +191,7 @@ func TwiMLBridge(pool *pgxpool.Pool) http.HandlerFunc {
 // InboundCallWebhook handles incoming calls to the Twilio number.
 // POST /api/calls/inbound-webhook
 // PUBLIC — Twilio hits this when someone calls the Twilio number.
-func InboundCallWebhook(pool *pgxpool.Pool) http.HandlerFunc {
+func InboundCallWebhook(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseForm(); err != nil {
 			w.Header().Set("Content-Type", "text/xml")
@@ -202,17 +203,25 @@ func InboundCallWebhook(pool *pgxpool.Pool) http.HandlerFunc {
 		callerNumber := r.FormValue("From")  // The person calling in
 		callSID := r.FormValue("CallSid")
 
-		// Look up agent by Twilio phone number (same pattern as SMSWebhook)
-		var agentID, authToken string
-		var personalPhone *string
+		// Look up agent by Twilio phone number
+		var agentID string
 		err := pool.QueryRow(r.Context(),
-			`SELECT agent_id, auth_token, personal_phone FROM twilio_config WHERE phone_number = $1`,
+			`SELECT agent_id FROM twilio_config WHERE phone_number = $1`,
 			calledNumber,
-		).Scan(&agentID, &authToken, &personalPhone)
+		).Scan(&agentID)
 		if err != nil {
 			slog.Warn("inbound call: no agent found for number", "to", calledNumber)
 			w.Header().Set("Content-Type", "text/xml")
 			w.Write([]byte(`<Response><Say>This number is not configured. Goodbye.</Say><Hangup/></Response>`))
+			return
+		}
+
+		// Get decrypted auth_token and personal_phone via helper
+		_, authToken, _, personalPhoneStr, err := getTwilioConfig(r.Context(), pool, agentID, cfg)
+		if err != nil {
+			slog.Warn("inbound call: twilio config error", "agent_id", agentID, "error", err)
+			w.Header().Set("Content-Type", "text/xml")
+			w.Write([]byte(`<Response><Say>Configuration error. Goodbye.</Say><Hangup/></Response>`))
 			return
 		}
 
@@ -223,7 +232,7 @@ func InboundCallWebhook(pool *pgxpool.Pool) http.HandlerFunc {
 			return
 		}
 
-		if personalPhone == nil || *personalPhone == "" {
+		if personalPhoneStr == "" {
 			w.Header().Set("Content-Type", "text/xml")
 			w.Write([]byte(`<Response><Say>The agent has not configured call forwarding. Goodbye.</Say><Hangup/></Response>`))
 			return
@@ -248,7 +257,7 @@ func InboundCallWebhook(pool *pgxpool.Pool) http.HandlerFunc {
   <Dial callerId="%s">
     <Number>%s</Number>
   </Dial>
-</Response>`, xmlEscape(callerNumber), xmlEscape(*personalPhone))
+</Response>`, xmlEscape(callerNumber), xmlEscape(personalPhoneStr))
 
 		w.Header().Set("Content-Type", "text/xml")
 		w.Write([]byte(twimlXML))
@@ -435,7 +444,7 @@ func GetCallLog(pool *pgxpool.Pool) http.HandlerFunc {
 
 // SyncCallLogs pulls recent call history from Twilio API.
 // POST /api/calls/sync
-func SyncCallLogs(pool *pgxpool.Pool) http.HandlerFunc {
+func SyncCallLogs(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		agentID := middleware.AgentUUIDFromContext(r.Context())
 		if agentID == "" {
@@ -443,16 +452,13 @@ func SyncCallLogs(pool *pgxpool.Pool) http.HandlerFunc {
 			return
 		}
 
-		// Fetch Twilio config
-		var accountSID, authToken, phoneNumber string
-		err := pool.QueryRow(r.Context(),
-			`SELECT account_sid, auth_token, phone_number FROM twilio_config WHERE agent_id = $1`,
-			agentID,
-		).Scan(&accountSID, &authToken, &phoneNumber)
+		// Fetch Twilio config (decrypts auth_token automatically)
+		accountSID, authToken, phoneNumber, _, err := getTwilioConfig(r.Context(), pool, agentID, cfg)
 		if err != nil {
 			respondError(w, http.StatusBadRequest, "Twilio not configured")
 			return
 		}
+		_ = phoneNumber
 
 		// Fetch calls from Twilio API
 		twilioURL := fmt.Sprintf("https://api.twilio.com/2010-04-01/Accounts/%s/Calls.json?PageSize=50", accountSID)
@@ -546,7 +552,7 @@ func SyncCallLogs(pool *pgxpool.Pool) http.HandlerFunc {
 
 // CallStatusWebhook receives call status updates from Twilio.
 // POST /api/calls/webhook (PUBLIC — no Clerk auth, validates Twilio signature)
-func CallStatusWebhook(pool *pgxpool.Pool) http.HandlerFunc {
+func CallStatusWebhook(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseForm(); err != nil {
 			respondError(w, http.StatusBadRequest, "invalid form data")
@@ -573,11 +579,8 @@ func CallStatusWebhook(pool *pgxpool.Pool) http.HandlerFunc {
 			return
 		}
 
-		// Get auth_token for signature validation
-		var authToken string
-		err = pool.QueryRow(r.Context(),
-			`SELECT auth_token FROM twilio_config WHERE agent_id = $1`, agentID,
-		).Scan(&authToken)
+		// Get auth_token for signature validation via getTwilioConfig
+		_, authToken, _, _, err := getTwilioConfig(r.Context(), pool, agentID, cfg)
 		if err != nil {
 			slog.Warn("call status webhook: no twilio config for agent", "agent_id", agentID)
 			w.WriteHeader(http.StatusNoContent)

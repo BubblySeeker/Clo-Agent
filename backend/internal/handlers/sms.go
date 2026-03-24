@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,13 +15,14 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"crm-api/internal/config"
 	"crm-api/internal/database"
 	"crm-api/internal/middleware"
 )
 
 // SMSConfigure saves Twilio credentials for the agent.
 // POST /api/sms/configure
-func SMSConfigure(pool *pgxpool.Pool) http.HandlerFunc {
+func SMSConfigure(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		agentID := middleware.AgentUUIDFromContext(r.Context())
 		if agentID == "" {
@@ -57,6 +59,20 @@ func SMSConfigure(pool *pgxpool.Pool) http.HandlerFunc {
 			return
 		}
 
+		// Encrypt auth_token if encryption key is configured
+		tokenToStore := body.AuthToken
+		if cfg.TwilioEncryptionKey != "" {
+			keyBytes, kerr := hex.DecodeString(cfg.TwilioEncryptionKey)
+			if kerr == nil && len(keyBytes) == 32 {
+				encrypted, eerr := encryptToken(body.AuthToken, keyBytes)
+				if eerr == nil {
+					tokenToStore = encrypted
+				} else {
+					slog.Warn("SMSConfigure: encrypt failed, storing plaintext", "error", eerr)
+				}
+			}
+		}
+
 		_, err := pool.Exec(r.Context(),
 			`INSERT INTO twilio_config (agent_id, account_sid, auth_token, phone_number, personal_phone)
 			 VALUES ($1, $2, $3, $4, $5)
@@ -66,7 +82,7 @@ func SMSConfigure(pool *pgxpool.Pool) http.HandlerFunc {
 			   phone_number = EXCLUDED.phone_number,
 			   personal_phone = COALESCE(EXCLUDED.personal_phone, twilio_config.personal_phone),
 			   updated_at = now()`,
-			agentID, body.AccountSID, body.AuthToken, body.PhoneNumber, body.PersonalPhone,
+			agentID, body.AccountSID, tokenToStore, body.PhoneNumber, body.PersonalPhone,
 		)
 		if err != nil {
 			slog.Error("sms configure failed", "error", err)
@@ -80,7 +96,7 @@ func SMSConfigure(pool *pgxpool.Pool) http.HandlerFunc {
 
 // SMSStatus returns whether SMS/Twilio is configured for the agent.
 // GET /api/sms/status
-func SMSStatus(pool *pgxpool.Pool) http.HandlerFunc {
+func SMSStatus(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		agentID := middleware.AgentUUIDFromContext(r.Context())
 		if agentID == "" {
@@ -146,7 +162,7 @@ func SMSDisconnect(pool *pgxpool.Pool) http.HandlerFunc {
 
 // SMSSend sends an SMS via Twilio REST API and stores the message.
 // POST /api/sms/send
-func SMSSend(pool *pgxpool.Pool) http.HandlerFunc {
+func SMSSend(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		agentID := middleware.AgentUUIDFromContext(r.Context())
 		if agentID == "" {
@@ -168,12 +184,8 @@ func SMSSend(pool *pgxpool.Pool) http.HandlerFunc {
 			return
 		}
 
-		// Fetch Twilio config
-		var accountSID, authToken, fromNumber string
-		err := pool.QueryRow(r.Context(),
-			`SELECT account_sid, auth_token, phone_number FROM twilio_config WHERE agent_id = $1`,
-			agentID,
-		).Scan(&accountSID, &authToken, &fromNumber)
+		// Fetch Twilio config (decrypts auth_token automatically)
+		accountSID, authToken, fromNumber, _, err := getTwilioConfig(r.Context(), pool, agentID, cfg)
 		if err != nil {
 			respondError(w, http.StatusBadRequest, "SMS not configured. Please add your Twilio credentials in Settings.")
 			return
@@ -491,7 +503,7 @@ func ListSMSConversations(pool *pgxpool.Pool) http.HandlerFunc {
 
 // SMSSync pulls recent messages from Twilio API to backfill history.
 // POST /api/sms/sync
-func SMSSync(pool *pgxpool.Pool) http.HandlerFunc {
+func SMSSync(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		agentID := middleware.AgentUUIDFromContext(r.Context())
 		if agentID == "" {
@@ -513,12 +525,8 @@ func SMSSync(pool *pgxpool.Pool) http.HandlerFunc {
 			return
 		}
 
-		// Fetch Twilio config
-		var accountSID, authToken, phoneNumber string
-		err := pool.QueryRow(r.Context(),
-			`SELECT account_sid, auth_token, phone_number FROM twilio_config WHERE agent_id = $1`,
-			agentID,
-		).Scan(&accountSID, &authToken, &phoneNumber)
+		// Fetch Twilio config (decrypts auth_token automatically)
+		accountSID, authToken, _, _, err := getTwilioConfig(r.Context(), pool, agentID, cfg)
 		if err != nil {
 			respondError(w, http.StatusBadRequest, "SMS not configured")
 			return
@@ -612,7 +620,7 @@ func SMSSync(pool *pgxpool.Pool) http.HandlerFunc {
 
 // SMSWebhook receives inbound SMS from Twilio.
 // POST /api/sms/webhook (PUBLIC — no Clerk auth, validates Twilio signature)
-func SMSWebhook(pool *pgxpool.Pool) http.HandlerFunc {
+func SMSWebhook(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Parse form data
 		if err := r.ParseForm(); err != nil {
@@ -630,15 +638,24 @@ func SMSWebhook(pool *pgxpool.Pool) http.HandlerFunc {
 			return
 		}
 
-		// Look up which agent owns this phone number
-		var agentID, authToken string
+		// Look up agent_id by phone number
+		var agentID string
 		err := pool.QueryRow(r.Context(),
-			`SELECT agent_id, auth_token FROM twilio_config WHERE phone_number = $1`,
+			`SELECT agent_id FROM twilio_config WHERE phone_number = $1`,
 			toNumber,
-		).Scan(&agentID, &authToken)
+		).Scan(&agentID)
 		if err != nil {
 			slog.Warn("sms webhook: no agent found for number", "to", toNumber)
 			// Return 200 so Twilio doesn't retry
+			w.Header().Set("Content-Type", "text/xml")
+			w.Write([]byte("<Response/>"))
+			return
+		}
+
+		// Get decrypted auth_token via helper
+		_, authToken, _, _, err := getTwilioConfig(r.Context(), pool, agentID, cfg)
+		if err != nil {
+			slog.Warn("sms webhook: twilio config error", "agent_id", agentID, "error", err)
 			w.Header().Set("Content-Type", "text/xml")
 			w.Write([]byte("<Response/>"))
 			return

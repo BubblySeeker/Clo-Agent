@@ -83,11 +83,11 @@ func run() error {
 	// Public
 	r.Get("/health", handlers.Health)
 	r.Get("/api/auth/google/callback", handlers.GmailAuthCallback(pool, cfg))
-	r.Post("/api/sms/webhook", handlers.SMSWebhook(pool))
-	r.Post("/api/calls/webhook", handlers.CallStatusWebhook(pool))
-	r.Get("/api/calls/twiml/bridge", handlers.TwiMLBridge(pool))
-	r.Post("/api/calls/twiml/bridge", handlers.TwiMLBridge(pool))
-	r.Post("/api/calls/inbound-webhook", handlers.InboundCallWebhook(pool))
+	r.Post("/api/sms/webhook", handlers.SMSWebhook(pool, cfg))
+	r.Post("/api/calls/webhook", handlers.CallStatusWebhook(pool, cfg))
+	r.Get("/api/calls/twiml/bridge", handlers.TwiMLBridge(pool, cfg))
+	r.Post("/api/calls/twiml/bridge", handlers.TwiMLBridge(pool, cfg))
+	r.Post("/api/calls/inbound-webhook", handlers.InboundCallWebhook(pool, cfg))
 
 	// Protected — Clerk JWT + user sync required
 	r.Group(func(r chi.Router) {
@@ -184,20 +184,20 @@ func run() error {
 		r.Patch("/api/gmail/emails/{id}/read", handlers.MarkEmailRead(pool, cfg))
 
 		// SMS / Twilio
-		r.Post("/api/sms/configure", handlers.SMSConfigure(pool))
-		r.Get("/api/sms/status", handlers.SMSStatus(pool))
+		r.Post("/api/sms/configure", handlers.SMSConfigure(pool, cfg))
+		r.Get("/api/sms/status", handlers.SMSStatus(pool, cfg))
 		r.Delete("/api/sms/disconnect", handlers.SMSDisconnect(pool))
-		r.Post("/api/sms/send", handlers.SMSSend(pool))
+		r.Post("/api/sms/send", handlers.SMSSend(pool, cfg))
 		r.Get("/api/sms/messages", handlers.ListSMSMessages(pool))
 		r.Get("/api/sms/messages/{id}", handlers.GetSMSMessage(pool))
 		r.Get("/api/sms/conversations", handlers.ListSMSConversations(pool))
-		r.Post("/api/sms/sync", handlers.SMSSync(pool))
+		r.Post("/api/sms/sync", handlers.SMSSync(pool, cfg))
 
 		// Calls / Twilio Voice
 		r.Post("/api/calls/initiate", handlers.InitiateCall(pool, cfg))
 		r.Get("/api/calls", handlers.ListCallLogs(pool))
 		r.Get("/api/calls/{id}", handlers.GetCallLog(pool))
-		r.Post("/api/calls/sync", handlers.SyncCallLogs(pool))
+		r.Post("/api/calls/sync", handlers.SyncCallLogs(pool, cfg))
 	})
 
 	// -------------------------------------------------------------------------

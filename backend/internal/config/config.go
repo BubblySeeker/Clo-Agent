@@ -47,9 +47,10 @@ type Config struct {
 	AIServiceSecret    string
 	GoogleClientID     string
 	GoogleClientSecret string
-	GoogleRedirectURI  string
-	FrontendURL        string
-	WebhookBaseURL     string
+	GoogleRedirectURI    string
+	FrontendURL          string
+	WebhookBaseURL       string
+	TwilioEncryptionKey  string
 }
 
 // Load reads configuration from environment variables (and a .env file if present)
@@ -68,8 +69,9 @@ func Load() (*Config, error) {
 		GoogleClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
 		GoogleClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
 		GoogleRedirectURI:  os.Getenv("GOOGLE_REDIRECT_URI"),
-		FrontendURL:        os.Getenv("FRONTEND_URL"),
-		WebhookBaseURL:     os.Getenv("WEBHOOK_BASE_URL"),
+		FrontendURL:         os.Getenv("FRONTEND_URL"),
+		WebhookBaseURL:      os.Getenv("WEBHOOK_BASE_URL"),
+		TwilioEncryptionKey: os.Getenv("TWILIO_ENCRYPTION_KEY"),
 	}
 
 	if cfg.AIServiceURL == "" {
@@ -89,6 +91,10 @@ func Load() (*Config, error) {
 
 	if cfg.WebhookBaseURL == "" {
 		slog.Warn("WEBHOOK_BASE_URL not set — Twilio voice webhooks will not work")
+	}
+
+	if cfg.TwilioEncryptionKey == "" {
+		slog.Warn("TWILIO_ENCRYPTION_KEY not set — Twilio auth tokens will not be encrypted")
 	}
 
 	if cfg.DatabaseURL == "" {

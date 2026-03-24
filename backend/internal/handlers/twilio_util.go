@@ -2,13 +2,22 @@ package handlers
 
 import (
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha1"
 	"encoding/base64"
+	"encoding/hex"
+	"fmt"
+	"io"
+	"log/slog"
 	"net/url"
 	"sort"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"crm-api/internal/config"
 )
 
 // normalizePhone strips formatting, returns last 10 digits for comparison.
@@ -94,4 +103,76 @@ func validateTwilioSignature(authToken, url string, params url.Values, signature
 	expected := base64.StdEncoding.EncodeToString(mac.Sum(nil))
 
 	return hmac.Equal([]byte(expected), []byte(signature))
+}
+
+// encryptToken encrypts plaintext using AES-256-GCM. The nonce is prepended to the
+// ciphertext and the result is hex-encoded.
+func encryptToken(plaintext string, key []byte) (string, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", fmt.Errorf("aes cipher: %w", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", fmt.Errorf("gcm: %w", err)
+	}
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return "", fmt.Errorf("nonce: %w", err)
+	}
+	ciphertext := gcm.Seal(nonce, nonce, []byte(plaintext), nil)
+	return hex.EncodeToString(ciphertext), nil
+}
+
+// decryptToken decrypts a hex-encoded AES-256-GCM ciphertext (nonce prepended).
+func decryptToken(ciphertextHex string, key []byte) (string, error) {
+	data, err := hex.DecodeString(ciphertextHex)
+	if err != nil {
+		return "", fmt.Errorf("hex decode: %w", err)
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", fmt.Errorf("aes cipher: %w", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", fmt.Errorf("gcm: %w", err)
+	}
+	if len(data) < gcm.NonceSize() {
+		return "", fmt.Errorf("ciphertext too short")
+	}
+	nonce, ct := data[:gcm.NonceSize()], data[gcm.NonceSize():]
+	plaintext, err := gcm.Open(nil, nonce, ct, nil)
+	if err != nil {
+		return "", fmt.Errorf("gcm open: %w", err)
+	}
+	return string(plaintext), nil
+}
+
+// getTwilioConfig fetches and decrypts the Twilio configuration for an agent.
+// If TwilioEncryptionKey is set, it attempts to decrypt auth_token. On decrypt
+// failure it falls back to treating auth_token as plaintext (backward compat).
+func getTwilioConfig(ctx context.Context, pool *pgxpool.Pool, agentID string, cfg *config.Config) (accountSID, authToken, phoneNumber, personalPhone string, err error) {
+	err = pool.QueryRow(ctx,
+		`SELECT account_sid, auth_token, phone_number, COALESCE(personal_phone, '')
+		 FROM twilio_config WHERE agent_id = $1`, agentID,
+	).Scan(&accountSID, &authToken, &phoneNumber, &personalPhone)
+	if err != nil {
+		return "", "", "", "", fmt.Errorf("twilio config not found: %w", err)
+	}
+
+	if cfg.TwilioEncryptionKey != "" {
+		keyBytes, kerr := hex.DecodeString(cfg.TwilioEncryptionKey)
+		if kerr == nil && len(keyBytes) == 32 {
+			decrypted, derr := decryptToken(authToken, keyBytes)
+			if derr == nil {
+				authToken = decrypted
+			} else {
+				// Backward compat: treat as plaintext if decrypt fails
+				slog.Warn("getTwilioConfig: decrypt failed, treating as plaintext", "agent_id", agentID, "error", derr)
+			}
+		}
+	}
+
+	return accountSID, authToken, phoneNumber, personalPhone, nil
 }
