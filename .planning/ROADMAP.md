@@ -27,7 +27,7 @@ Build end-to-end voice calling where the agent makes/receives calls through Twil
 ### v2.0 Twilio Voice Calling
 
 - [x] **Phase 4: Core Call Flow** - Fix broken call infrastructure; agent can make and receive real calls
-- [ ] **Phase 5: Recording Infrastructure** - Calls are recorded, stored, and playable; credentials encrypted
+- [x] **Phase 5: Recording Infrastructure** - Calls are recorded, stored, and playable; credentials encrypted (completed 2026-03-24)
 - [ ] **Phase 6: AI Transcription & Intelligence** - Recordings auto-transcribed, AI extracts summaries and CRM actions
 - [ ] **Phase 7: Frontend Call Experience** - Full call lifecycle visible in web UI with AI action cards and inbound intelligence
 - [ ] **Phase 8: React Native Mobile Dialer** - Thin mobile app for calling and viewing call history
@@ -59,7 +59,7 @@ Plans:
   2. Agent can click play on any call in the communication page and hear the recording through an audio player
   3. Recordings are downloaded from Twilio and stored locally (or S3), and the Twilio copy is deleted after confirmed download
   4. Twilio auth tokens are encrypted at rest in the database (not stored as plaintext)
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [ ] 05-01-PLAN.md — Backend: encryption helpers, getTwilioConfig, recording migration, TwiML recording attributes, recording webhook + async download
@@ -121,7 +121,7 @@ Phases execute in numeric order: 4 -> 5 -> 6 -> 7 -> 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 4. Core Call Flow | 2/2 | Complete | 2026-03-24 |
-| 5. Recording Infrastructure | 1/2 | In Progress|  |
+| 5. Recording Infrastructure | 2/2 | Complete   | 2026-03-24 |
 | 6. AI Transcription & Intelligence | 0/? | Not started | - |
 | 7. Frontend Call Experience | 0/? | Not started | - |
 | 8. React Native Mobile Dialer | 0/? | Not started | - |
