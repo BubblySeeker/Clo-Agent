@@ -314,14 +314,14 @@ func PortalAuth(pool *pgxpool.Pool) http.HandlerFunc {
 			return
 		}
 
-		tx, err := pool.Begin(r.Context())
+		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "database error")
 			return
 		}
 		defer tx.Rollback(r.Context())
 
-		// Get contact info
+		// Get contact info (contact_id already validated via portal_tokens)
 		var contact struct {
 			ID        string  `json:"id"`
 			FirstName string  `json:"first_name"`
@@ -329,8 +329,8 @@ func PortalAuth(pool *pgxpool.Pool) http.HandlerFunc {
 			Email     *string `json:"email"`
 		}
 		err = tx.QueryRow(r.Context(),
-			`SELECT id, first_name, last_name, email FROM contacts WHERE id = $1 AND agent_id = $2`,
-			contactID, agentID,
+			`SELECT id, first_name, last_name, email FROM contacts WHERE id = $1`,
+			contactID,
 		).Scan(&contact.ID, &contact.FirstName, &contact.LastName, &contact.Email)
 		if err != nil {
 			respondError(w, http.StatusNotFound, "contact not found")
@@ -385,7 +385,7 @@ func PortalDashboard(pool *pgxpool.Pool) http.HandlerFunc {
 			return
 		}
 
-		tx, err := pool.Begin(r.Context())
+		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "database error")
 			return
@@ -419,8 +419,8 @@ func PortalDashboard(pool *pgxpool.Pool) http.HandlerFunc {
 			`SELECT d.id, d.title, d.value, ds.name, ds.position, ds.color, d.updated_at
 			 FROM deals d
 			 JOIN deal_stages ds ON ds.id = d.stage_id
-			 WHERE d.contact_id = $1 AND d.agent_id = $2
-			 ORDER BY d.updated_at DESC`, contactID, agentID,
+			 WHERE d.contact_id = $1
+			 ORDER BY d.updated_at DESC`, contactID,
 		)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "query error")
@@ -454,8 +454,8 @@ func PortalDashboard(pool *pgxpool.Pool) http.HandlerFunc {
 			actRows, err := tx.Query(r.Context(),
 				`SELECT id, type, body, created_at
 				 FROM activities
-				 WHERE contact_id = $1 AND agent_id = $2
-				 ORDER BY created_at DESC LIMIT 10`, contactID, agentID,
+				 WHERE contact_id = $1
+				 ORDER BY created_at DESC LIMIT 10`, contactID,
 			)
 			if err == nil {
 				defer actRows.Close()
@@ -487,7 +487,7 @@ func PortalDeals(pool *pgxpool.Pool) http.HandlerFunc {
 			return
 		}
 
-		tx, err := pool.Begin(r.Context())
+		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "database error")
 			return
@@ -504,8 +504,8 @@ func PortalDeals(pool *pgxpool.Pool) http.HandlerFunc {
 			        d.property_id
 			 FROM deals d
 			 JOIN deal_stages ds ON ds.id = d.stage_id
-			 WHERE d.contact_id = $1 AND d.agent_id = $2
-			 ORDER BY d.updated_at DESC`, contactID, agentID,
+			 WHERE d.contact_id = $1
+			 ORDER BY d.updated_at DESC`, contactID,
 		)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "query error")
@@ -580,7 +580,7 @@ func PortalProperties(pool *pgxpool.Pool) http.HandlerFunc {
 			return
 		}
 
-		tx, err := pool.Begin(r.Context())
+		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "database error")
 			return
@@ -617,8 +617,8 @@ func PortalProperties(pool *pgxpool.Pool) http.HandlerFunc {
 			`SELECT DISTINCT p.id, p.address, p.city, p.state, p.zip, p.price, p.bedrooms, p.bathrooms, p.sqft, p.property_type, p.status, p.description
 			 FROM properties p
 			 JOIN deals d ON d.property_id = p.id
-			 WHERE d.contact_id = $1 AND d.agent_id = $2`,
-			contactID, agentID,
+			 WHERE d.contact_id = $1`,
+			contactID,
 		)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "query error")
@@ -655,7 +655,7 @@ func PortalTimeline(pool *pgxpool.Pool) http.HandlerFunc {
 			return
 		}
 
-		tx, err := pool.Begin(r.Context())
+		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "database error")
 			return
@@ -685,9 +685,9 @@ func PortalTimeline(pool *pgxpool.Pool) http.HandlerFunc {
 			`SELECT a.id, a.type, a.body, d.title, a.created_at
 			 FROM activities a
 			 LEFT JOIN deals d ON d.id = a.deal_id
-			 WHERE a.contact_id = $1 AND a.agent_id = $2
+			 WHERE a.contact_id = $1
 			 ORDER BY a.created_at DESC
-			 LIMIT 50`, contactID, agentID,
+			 LIMIT 50`, contactID,
 		)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "query error")
