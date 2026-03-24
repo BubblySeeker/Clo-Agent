@@ -108,6 +108,12 @@ func InitiateCall(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 		params.SetStatusCallback(cfg.WebhookBaseURL + "/api/calls/webhook")
 		params.SetStatusCallbackEvent([]string{"initiated", "ringing", "answered", "completed"})
 
+		// Async answering machine detection
+		params.SetMachineDetection("DetectMessageEnd")
+		params.SetAsyncAmd("true")
+		params.SetAsyncAmdStatusCallback(cfg.WebhookBaseURL + "/api/calls/amd-webhook")
+		params.SetAsyncAmdStatusCallbackMethod("POST")
+
 		call, err := client.Api.CreateCall(params)
 		if err != nil {
 			slog.Error("twilio call failed", "error", err)
@@ -245,23 +251,30 @@ func InboundCallWebhook(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc
 		// Match caller to contact
 		contactID := matchContactByPhone(r.Context(), pool, agentID, callerNumber)
 
-		// Insert inbound call_logs row
-		pool.Exec(r.Context(),
+		// Insert inbound call_logs row (RETURNING id for whisper URL)
+		var callID string
+		err = pool.QueryRow(r.Context(),
 			`INSERT INTO call_logs (agent_id, twilio_sid, contact_id, from_number, to_number, direction, status, started_at)
-			 VALUES ($1, $2, $3, $4, $5, 'inbound', 'ringing', NOW())`,
+			 VALUES ($1, $2, $3, $4, $5, 'inbound', 'ringing', NOW()) RETURNING id`,
 			agentID, callSID, contactID, callerNumber, calledNumber,
-		)
+		).Scan(&callID)
+		if err != nil {
+			slog.Error("inbound call: failed to insert call log", "error", err)
+		}
 
 		// Return TwiML: consent announcement then forward to agent's personal phone with dual-channel recording
 		// callerId = callerNumber so agent sees who is calling
+		// answerOnBridge = caller hears ringing while whisper plays to agent
+		// Number url = whisper endpoint plays contact context to agent before connecting
 		twimlXML := fmt.Sprintf(
 			`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say>This call may be recorded for quality purposes.</Say>
-  <Dial callerId="%s" record="record-from-answer-dual" recordingStatusCallback="%s/api/calls/recording-webhook" recordingStatusCallbackEvent="completed">
-    <Number>%s</Number>
+  <Dial callerId="%s" record="record-from-answer-dual" recordingStatusCallback="%s/api/calls/recording-webhook" recordingStatusCallbackEvent="completed" answerOnBridge="true">
+    <Number url="%s/api/calls/whisper?call_id=%s">%s</Number>
   </Dial>
-</Response>`, xmlEscape(callerNumber), xmlEscape(cfg.WebhookBaseURL), xmlEscape(personalPhoneStr))
+</Response>`, xmlEscape(callerNumber), xmlEscape(cfg.WebhookBaseURL),
+			xmlEscape(cfg.WebhookBaseURL), callID, xmlEscape(personalPhoneStr))
 
 		w.Header().Set("Content-Type", "text/xml")
 		w.Write([]byte(twimlXML))
@@ -380,7 +393,8 @@ func ListCallLogs(pool *pgxpool.Pool) http.HandlerFunc {
 			`SELECT cl.id, cl.twilio_sid, cl.contact_id, cl.from_number, cl.to_number,
 			        cl.direction, cl.status, cl.duration, cl.started_at, cl.ended_at, cl.created_at,
 			        COALESCE(c.first_name || ' ' || c.last_name, '') as contact_name,
-			        cl.recording_sid, cl.recording_duration, cl.local_recording_path
+			        cl.recording_sid, cl.recording_duration, cl.local_recording_path,
+			        cl.outcome, cl.answered_by
 			 FROM call_logs cl
 			 LEFT JOIN contacts c ON c.id = cl.contact_id
 			 WHERE %s
@@ -412,6 +426,8 @@ func ListCallLogs(pool *pgxpool.Pool) http.HandlerFunc {
 			RecordingSID      *string    `json:"recording_sid"`
 			RecordingDuration int        `json:"recording_duration"`
 			HasRecording      bool       `json:"has_recording"`
+			Outcome           *string    `json:"outcome"`
+			AnsweredBy        *string    `json:"answered_by"`
 		}
 
 		var calls []CallLog
@@ -422,6 +438,7 @@ func ListCallLogs(pool *pgxpool.Pool) http.HandlerFunc {
 				&cl.ID, &cl.TwilioSID, &cl.ContactID, &cl.FromNumber, &cl.ToNumber,
 				&cl.Direction, &cl.Status, &cl.Duration, &cl.StartedAt, &cl.EndedAt, &cl.CreatedAt,
 				&cl.ContactName, &cl.RecordingSID, &cl.RecordingDuration, &localPath,
+				&cl.Outcome, &cl.AnsweredBy,
 			)
 			if err != nil {
 				continue
@@ -478,6 +495,8 @@ func GetCallLog(pool *pgxpool.Pool) http.HandlerFunc {
 			RecordingSID      *string    `json:"recording_sid"`
 			RecordingDuration int        `json:"recording_duration"`
 			HasRecording      bool       `json:"has_recording"`
+			Outcome           *string    `json:"outcome"`
+			AnsweredBy        *string    `json:"answered_by"`
 		}
 
 		var cl CallLog
@@ -486,7 +505,8 @@ func GetCallLog(pool *pgxpool.Pool) http.HandlerFunc {
 			`SELECT cl.id, cl.twilio_sid, cl.contact_id, cl.from_number, cl.to_number,
 			        cl.direction, cl.status, cl.duration, cl.started_at, cl.ended_at, cl.created_at,
 			        COALESCE(c.first_name || ' ' || c.last_name, '') as contact_name,
-			        cl.recording_sid, cl.recording_duration, cl.local_recording_path
+			        cl.recording_sid, cl.recording_duration, cl.local_recording_path,
+			        cl.outcome, cl.answered_by
 			 FROM call_logs cl
 			 LEFT JOIN contacts c ON c.id = cl.contact_id
 			 WHERE cl.id = $1`,
@@ -495,6 +515,7 @@ func GetCallLog(pool *pgxpool.Pool) http.HandlerFunc {
 			&cl.ID, &cl.TwilioSID, &cl.ContactID, &cl.FromNumber, &cl.ToNumber,
 			&cl.Direction, &cl.Status, &cl.Duration, &cl.StartedAt, &cl.EndedAt, &cl.CreatedAt,
 			&cl.ContactName, &cl.RecordingSID, &cl.RecordingDuration, &localPath,
+			&cl.Outcome, &cl.AnsweredBy,
 		)
 		if err != nil {
 			respondError(w, http.StatusNotFound, "call not found")
@@ -504,6 +525,195 @@ func GetCallLog(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx.Commit(r.Context())
 		respondJSON(w, http.StatusOK, cl)
+	}
+}
+
+// UpdateCallLog partially updates a call log (currently: outcome field only).
+// PATCH /api/calls/{id}
+func UpdateCallLog(pool *pgxpool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		agentID := middleware.AgentUUIDFromContext(r.Context())
+		if agentID == "" {
+			respondError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		callID := chi.URLParam(r, "id")
+
+		var body struct {
+			Outcome *string `json:"outcome"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			respondError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+
+		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "database error")
+			return
+		}
+		defer tx.Rollback(r.Context())
+
+		tag, err := tx.Exec(r.Context(),
+			`UPDATE call_logs SET outcome = $1 WHERE id = $2`, body.Outcome, callID)
+		if err != nil || tag.RowsAffected() == 0 {
+			respondError(w, http.StatusNotFound, "call not found")
+			return
+		}
+
+		tx.Commit(r.Context())
+		respondJSON(w, http.StatusOK, map[string]string{"message": "updated"})
+	}
+}
+
+// WhisperEndpoint returns TwiML that whispers contact context to the agent before connecting an inbound call.
+// POST /api/calls/whisper?call_id={id}
+// PUBLIC -- Twilio hits this as the url attribute on <Number> in InboundCallWebhook.
+func WhisperEndpoint(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			w.Header().Set("Content-Type", "text/xml")
+			w.Write([]byte(`<Response><Say voice="alice">Incoming call.</Say></Response>`))
+			return
+		}
+
+		callID := r.URL.Query().Get("call_id")
+		if callID == "" {
+			w.Header().Set("Content-Type", "text/xml")
+			w.Write([]byte(`<Response><Say voice="alice">Incoming call.</Say></Response>`))
+			return
+		}
+
+		// Look up call to get agent_id and contact_id
+		var agentID string
+		var contactID *string
+		err := pool.QueryRow(r.Context(),
+			`SELECT agent_id, contact_id FROM call_logs WHERE id = $1`, callID,
+		).Scan(&agentID, &contactID)
+		if err != nil {
+			w.Header().Set("Content-Type", "text/xml")
+			w.Write([]byte(`<Response><Say voice="alice">Incoming call from unknown number.</Say></Response>`))
+			return
+		}
+
+		// Validate Twilio signature
+		_, authToken, _, _, err := getTwilioConfig(r.Context(), pool, agentID, cfg)
+		if err == nil && r.Method == "POST" {
+			requestURL := "https://" + r.Host + r.URL.String()
+			if !validateTwilioSignature(authToken, requestURL, r.PostForm, r.Header.Get("X-Twilio-Signature")) {
+				respondError(w, http.StatusForbidden, "invalid Twilio signature")
+				return
+			}
+		}
+
+		// If no contact matched, say unknown
+		if contactID == nil {
+			w.Header().Set("Content-Type", "text/xml")
+			w.Write([]byte(`<Response><Say voice="alice">Incoming call from unknown number.</Say></Response>`))
+			return
+		}
+
+		// Load contact context: name, deal stage, buyer profile summary
+		var firstName, lastName string
+		var dealStage *string
+		var budgetMin, budgetMax *float64
+		var propertyType *string
+
+		// Contact name
+		pool.QueryRow(r.Context(),
+			`SELECT first_name, last_name FROM contacts WHERE id = $1`, *contactID,
+		).Scan(&firstName, &lastName)
+
+		// Active deal stage (most recent deal)
+		pool.QueryRow(r.Context(),
+			`SELECT ds.name FROM deals d
+			 JOIN deal_stages ds ON ds.id = d.stage_id
+			 WHERE d.contact_id = $1
+			 ORDER BY d.created_at DESC LIMIT 1`, *contactID,
+		).Scan(&dealStage)
+
+		// Buyer profile summary
+		pool.QueryRow(r.Context(),
+			`SELECT budget_min, budget_max, property_type FROM buyer_profiles
+			 WHERE contact_id = $1`, *contactID,
+		).Scan(&budgetMin, &budgetMax, &propertyType)
+
+		// Build whisper text
+		whisper := fmt.Sprintf("Incoming call from %s %s.", firstName, lastName)
+		if dealStage != nil {
+			whisper += fmt.Sprintf(" Deal at %s stage.", *dealStage)
+		}
+		if budgetMin != nil && budgetMax != nil {
+			whisper += fmt.Sprintf(" Budget %g to %g thousand.", *budgetMin/1000, *budgetMax/1000)
+		}
+		if propertyType != nil && *propertyType != "" {
+			whisper += fmt.Sprintf(" Looking for %s.", *propertyType)
+		}
+
+		twimlXML := fmt.Sprintf(
+			`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="alice">%s</Say>
+</Response>`, xmlEscape(whisper))
+
+		w.Header().Set("Content-Type", "text/xml")
+		w.Write([]byte(twimlXML))
+	}
+}
+
+// AMDWebhook receives Twilio's async answering machine detection result.
+// POST /api/calls/amd-webhook
+// PUBLIC -- Twilio hits this after analyzing the answered audio.
+func AMDWebhook(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		callSID := r.FormValue("CallSid")
+		answeredBy := r.FormValue("AnsweredBy")
+
+		if callSID == "" || answeredBy == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		// Look up call by twilio_sid to get agent_id for signature validation
+		var agentID string
+		err := pool.QueryRow(r.Context(),
+			`SELECT agent_id FROM call_logs WHERE twilio_sid = $1`, callSID,
+		).Scan(&agentID)
+		if err != nil {
+			slog.Warn("amd webhook: unknown CallSid", "sid", callSID)
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		// Validate Twilio signature
+		_, authToken, _, _, err := getTwilioConfig(r.Context(), pool, agentID, cfg)
+		if err == nil {
+			requestURL := "https://" + r.Host + r.URL.String()
+			if !validateTwilioSignature(authToken, requestURL, r.PostForm, r.Header.Get("X-Twilio-Signature")) {
+				respondError(w, http.StatusForbidden, "invalid Twilio signature")
+				return
+			}
+		}
+
+		// Update call_logs with answered_by
+		// If machine detected, auto-set outcome to "voicemail" (agent can override later)
+		if strings.HasPrefix(answeredBy, "machine") {
+			pool.Exec(r.Context(),
+				`UPDATE call_logs SET answered_by = $1, outcome = COALESCE(outcome, 'voicemail') WHERE twilio_sid = $2`,
+				answeredBy, callSID)
+		} else {
+			pool.Exec(r.Context(),
+				`UPDATE call_logs SET answered_by = $1 WHERE twilio_sid = $2`,
+				answeredBy, callSID)
+		}
+
+		slog.Info("amd webhook: detection result", "sid", callSID, "answered_by", answeredBy)
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
 

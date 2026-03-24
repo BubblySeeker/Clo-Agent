@@ -89,6 +89,8 @@ func run() error {
 	r.Post("/api/calls/twiml/bridge", handlers.TwiMLBridge(pool, cfg))
 	r.Post("/api/calls/inbound-webhook", handlers.InboundCallWebhook(pool, cfg))
 	r.Post("/api/calls/recording-webhook", handlers.RecordingWebhook(pool, cfg))
+	r.Post("/api/calls/whisper", handlers.WhisperEndpoint(pool, cfg))
+	r.Post("/api/calls/amd-webhook", handlers.AMDWebhook(pool, cfg))
 
 	// Protected — Clerk JWT + user sync required
 	r.Group(func(r chi.Router) {
@@ -198,6 +200,7 @@ func run() error {
 		r.Post("/api/calls/initiate", handlers.InitiateCall(pool, cfg))
 		r.Get("/api/calls", handlers.ListCallLogs(pool))
 		r.Get("/api/calls/{id}", handlers.GetCallLog(pool))
+		r.Patch("/api/calls/{id}", handlers.UpdateCallLog(pool))
 		r.Get("/api/calls/{id}/recording", handlers.ProxyRecording(pool))
 		r.Get("/api/calls/{id}/transcript", handlers.GetCallTranscript(pool))
 		r.Post("/api/calls/{id}/transcript/actions/{index}/confirm", handlers.ConfirmTranscriptAction(pool))
