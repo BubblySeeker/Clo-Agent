@@ -30,13 +30,15 @@ Claude Code should always use the most appropriate specialized tool for each tas
 - Notifications (real recent activities from API) — existing
 - Settings Page (partial — pipeline stages, commission localStorage) — existing
 
+- Tool routing rules for frontend-design skill — v1.0
+- Tool routing rules for ui-ux-pro-max skill (landing/marketing) — v1.0
+- Tool routing rules for Stitch (component design + styling) — v1.0
+- Tool routing rules for Gemini (nano banana 2) image generation — v1.0
+- Tool routing rules for 21st.dev 3D components (landing page only) — v1.0
+
 ### Active
 
-- [ ] Add tool-routing rules to CLAUDE.md for frontend skill
-- [ ] Add tool-routing rules to CLAUDE.md for UI/UX Pro Max skill (landing/marketing pages)
-- [ ] Add tool-routing rules to CLAUDE.md for Stitch (component design + styling)
-- [ ] Add tool-routing rules to CLAUDE.md for Gemini (nano banana 2) image generation
-- [ ] Add tool-routing rules to CLAUDE.md for 21st.dev 3D components (landing page only)
+(None — next milestone TBD)
 
 ### Out of Scope
 
@@ -55,7 +57,7 @@ CloAgent is a brownfield project with a mature three-tier architecture (Next.js 
 - **Gemini (nano banana 2)** — AI image generation for any image assets needed (marketing, app placeholders, icons)
 - **21st.dev** — pre-built 3D component library, used exclusively on landing/marketing pages
 
-The goal is a section in CLAUDE.md that acts as a routing table so Claude Code automatically invokes the correct tool based on the task context.
+Shipped v1.0: CLAUDE.md now contains a "Design & Build Tool Routing" section (50 lines) with tool inventory, routing rules, multi-tool composition, hard constraints, and excluded paths.
 
 ## Constraints
 
@@ -69,10 +71,28 @@ The goal is a section in CLAUDE.md that acts as a routing table so Claude Code a
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| CLAUDE.md additions (not separate file) | Keep all instructions in one place, simpler to maintain | -- Pending |
-| 21st.dev landing-only restriction | 3D elements would be distracting in a CRM dashboard | -- Pending |
-| Gemini for all image needs | Single tool for consistency across marketing and app assets | -- Pending |
-| Stitch for all styling + components | Ensures consistent design language across the project | -- Pending |
+| CLAUDE.md additions (not separate file) | Keep all instructions in one place, simpler to maintain | ✓ Good |
+| 21st.dev landing-only restriction | 3D elements would be distracting in a CRM dashboard | ✓ Good |
+| Gemini for all image needs | Single tool for consistency across marketing and app assets | ✓ Good |
+| Stitch for all styling + components | Ensures consistent design language across the project | ✓ Good |
+| Path-based first-match-wins routing | Simple precedence, directory patterns over file-level rules | ✓ Good |
+
+## Evolution
+
+This document evolves at phase transitions and milestone boundaries.
+
+**After each phase transition** (via `/gsd:transition`):
+1. Requirements invalidated? → Move to Out of Scope with reason
+2. Requirements validated? → Move to Validated with phase reference
+3. New requirements emerged? → Add to Active
+4. Decisions to log? → Add to Key Decisions
+5. "What This Is" still accurate? → Update if drifted
+
+**After each milestone** (via `/gsd:complete-milestone`):
+1. Full review of all sections
+2. Core Value check — still the right priority?
+3. Audit Out of Scope — reasons still valid?
+4. Update Context with current state
 
 ---
-*Last updated: 2026-03-17 after initialization*
+*Last updated: 2026-03-24 after v1.0 milestone*
