@@ -1,71 +1,50 @@
-# Roadmap: CloAgent Tool Routing
+# Roadmap: AI Contact Intelligence
 
-**Created:** 2026-03-17
-**Granularity:** Standard
-**Total Phases:** 3
-**Total Requirements:** 10
+## Overview
 
----
+This milestone fixes CloAgent's AI assistant contact resolution. The AI currently skips the search step and fabricates contact UUIDs, causing silent failures. The fix is entirely in the prompt and tool description layer — two files, no new backend code, no migrations, no frontend changes. Phase 1 ships the complete core fix; Phase 2 validates behavior under real use and adds the one capability (pronoun resolution) that requires empirical evidence from Phase 1 to design safely.
 
-## Phase 1: Integration & Structure
+## Phases
 
-**Goal:** Create the new "Design & Build Tool Routing" section in CLAUDE.md with the correct placement and formatting scaffolding.
+**Phase Numbering:**
+- Integer phases (1, 2, 3): Planned milestone work
+- Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
-**Requirements:**
-- **INTG-01** — Rules added to CLAUDE.md as a new section
-- **INTG-02** — Rules are concise with broad defaults and few exceptions
+Decimal phases appear between their surrounding integers in numeric order.
 
-**Success Criteria:**
-1. A new `## Design & Build Tool Routing` section exists in CLAUDE.md between `## gstack Skills` and `## Backend Patterns`
-2. Section contains subsections: Tool Inventory, Routing Rules, Multi-Tool Tasks, Hard Constraints, Excluded Paths
-3. Section is under 80 lines total (conciseness check)
+- [ ] **Phase 1: Core Resolution Protocol** - Rewrite system prompt and tool descriptions so the AI reliably searches for contacts before acting on them
+- [ ] **Phase 2: Context Awareness and Hardening** - Add pronoun resolution and validate edge cases observed after Phase 1 ships
 
----
+## Phase Details
 
-## Phase 2: Tool Defaults & Routing Rules
+### Phase 1: Core Resolution Protocol
+**Goal**: The AI reliably finds the right contact before acting — for any name format, partial name, or recency reference — and never guesses a UUID
+**Depends on**: Nothing (first phase)
+**Requirements**: RES-01, RES-02, RES-03, RES-04, RES-05, RES-06, CTX-02, CTX-03, SAFE-01, SAFE-02, SAFE-03
+**Success Criteria** (what must be TRUE):
+  1. Saying "email Rohan Batre" causes the AI to call search_contacts before attempting any email operation — never fabricating a UUID
+  2. Saying "my last contact" resolves to the most recently created contact, not a hallucinated name
+  3. Saying "email Rohan" when two Rohans exist causes the AI to list both and ask the user to pick one
+  4. Saying "email Rohan" when no Rohan exists causes the AI to report no match found and suggest checking the spelling
+  5. All existing AI operations (deals, tasks, activities, morning briefing) continue working without any regression
+**Plans**: TBD
 
-**Goal:** Define the five tool-routing defaults that map task types to the correct tool, using path-based routing as the primary signal.
+### Phase 2: Context Awareness and Hardening
+**Goal**: The AI resolves pronoun references ("follow up with him") using conversation context, and any edge cases exposed by Phase 1 real-world use are addressed
+**Depends on**: Phase 1
+**Requirements**: CTX-01
+**Success Criteria** (what must be TRUE):
+  1. Saying "create a task for him" after discussing a specific contact resolves to that contact without a new search
+  2. Saying "call her" in a contact-scoped conversation resolves to the scoped contact without asking for clarification
+  3. Phase 1 behavior remains stable under the additional prompt additions
+**Plans**: TBD
 
-**Requirements:**
-- **TOOL-01** — `frontend-design` for dashboard/app pages
-- **TOOL-02** — `ui-ux-pro-max` for landing/marketing pages
-- **TOOL-03** — Stitch for new reusable components and styling work
-- **TOOL-04** — Gemini for all image asset needs
-- **TOOL-05** — 21st.dev for 3D components on marketing pages
+## Progress
 
-**Success Criteria:**
-1. Each of the 5 tools appears in the Tool Inventory table with role, domain, and invocation context
-2. Routing rules use directory-level patterns (e.g., `dashboard/**`) not file-level paths
-3. A precedence order is defined (Gemini > 21st.dev > Stitch > ui-ux-pro-max > frontend-design)
-4. Multi-tool composition sequence is documented (assets first -> 3D -> components -> page assembly)
+**Execution Order:**
+Phases execute in numeric order: 1 → 2
 
----
-
-## Phase 3: Hard Constraints & Exclusions
-
-**Goal:** Add the guard rails that prevent misrouting — scope restrictions, backend exclusions, and output format requirements.
-
-**Requirements:**
-- **CNST-01** — 21st.dev NEVER used in dashboard pages
-- **CNST-02** — Design tools not invoked for backend, AI service, or pure logic changes
-- **CNST-03** — All tool output must use Tailwind CSS consistent with existing patterns
-
-**Success Criteria:**
-1. An explicit "Hard Constraints" subsection contains NEVER/ALWAYS rules for each constraint
-2. An "Excluded Paths" subsection lists `backend/`, `ai-service/`, `src/lib/api/`, `src/store/`, `src/middleware.ts` as no-design-tool zones
-3. Tailwind CSS conformance requirement references the existing Frontend Patterns section
-4. A default fallback rule exists for ambiguous cases (ask the user)
-
----
-
-## Phase Summary
-
-| Phase | Name | Requirements | Count |
-|-------|------|-------------|-------|
-| 1 | 1/1 | Complete    | 2026-03-17 |
-| 2 | 1/1 | Complete    | 2026-03-17 |
-| 3 | 1/1 | Complete    | 2026-03-17 |
-| **Total** | | | **10** |
-
----
-*Roadmap created: 2026-03-17*
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 1. Core Resolution Protocol | 0/? | Not started | - |
+| 2. Context Awareness and Hardening | 0/? | Not started | - |

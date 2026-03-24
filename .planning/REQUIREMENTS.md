@@ -49,24 +49,24 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| RES-01 | Pending | Pending |
-| RES-02 | Pending | Pending |
-| RES-03 | Pending | Pending |
-| RES-04 | Pending | Pending |
-| RES-05 | Pending | Pending |
-| RES-06 | Pending | Pending |
-| CTX-01 | Pending | Pending |
-| CTX-02 | Pending | Pending |
-| CTX-03 | Pending | Pending |
-| SAFE-01 | Pending | Pending |
-| SAFE-02 | Pending | Pending |
-| SAFE-03 | Pending | Pending |
+| RES-01 | Phase 1 | Pending |
+| RES-02 | Phase 1 | Pending |
+| RES-03 | Phase 1 | Pending |
+| RES-04 | Phase 1 | Pending |
+| RES-05 | Phase 1 | Pending |
+| RES-06 | Phase 1 | Pending |
+| CTX-01 | Phase 2 | Pending |
+| CTX-02 | Phase 1 | Pending |
+| CTX-03 | Phase 1 | Pending |
+| SAFE-01 | Phase 1 | Pending |
+| SAFE-02 | Phase 1 | Pending |
+| SAFE-03 | Phase 1 | Pending |
 
 **Coverage:**
 - v1 requirements: 12 total
-- Mapped to phases: 0
-- Unmapped: 12 ⚠️
+- Mapped to phases: 12
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-24*
-*Last updated: 2026-03-24 after initial definition*
+*Last updated: 2026-03-24 after roadmap creation*
