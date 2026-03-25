@@ -50,6 +50,7 @@ const navItems = [
   { icon: CheckSquare,     label: "Tasks",     href: "/dashboard/tasks" },
   { icon: BarChart2,       label: "Reports",   href: "/dashboard/analytics" },
   { icon: Workflow,        label: "Workflows", href: "/dashboard/workflows" },
+  { icon: Share2,           label: "Referrals", href: "/dashboard/referrals" },
   { icon: FileText,        label: "Documents", href: "/dashboard/documents" },
   { icon: Share2,           label: "Referrals", href: "/dashboard/referrals" },
 ];
