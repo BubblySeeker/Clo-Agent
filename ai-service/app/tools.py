@@ -520,6 +520,17 @@ TOOL_DEFINITIONS = [
             "required": ["to", "subject", "body"],
         },
     },
+    {
+        "name": "get_lead_score",
+        "description": "Get a contact's lead score with tier classification, dimension breakdown, top signals, and suggested next action. Use this when the user asks about a contact's score, priority, or engagement level.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "contact_id": {"type": "string", "description": "UUID of the contact to get lead score for"},
+            },
+            "required": ["contact_id"],
+        },
+    },
 ]
 
 READ_TOOLS = {
@@ -543,6 +554,7 @@ READ_TOOLS = {
     "search_emails",
     "get_email_thread",
     "draft_email",
+    "get_lead_score",
 }
 
 WRITE_TOOLS = {
@@ -616,6 +628,8 @@ async def execute_read_tool(tool_name: str, tool_input: dict, agent_id: str) -> 
         return await run_query(lambda: _get_email_thread(agent_id, tool_input["thread_id"], tool_input.get("limit", 20)))
     elif tool_name == "draft_email":
         return await _draft_email(agent_id, tool_input)
+    elif tool_name == "get_lead_score":
+        return await run_query(lambda: _get_lead_score(agent_id, tool_input["contact_id"]))
     else:
         return {"error": f"Unknown tool: {tool_name}"}
 
@@ -715,6 +729,77 @@ def _get_contact_details(agent_id: str, contact_id: str) -> dict:
         result = dict(contact)
         result["buyer_profile"] = dict(bp) if bp else None
         return result
+
+
+def _get_lead_score(agent_id: str, contact_id: str) -> dict:
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            "SELECT first_name, last_name, lead_score, lead_score_signals, previous_lead_score "
+            "FROM contacts WHERE id = %s AND agent_id = %s",
+            (contact_id, agent_id),
+        )
+        row = cur.fetchone()
+        if not row:
+            return {"error": "Contact not found"}
+
+        score = row["lead_score"]
+        if score is None:
+            return {"error": "No lead score calculated yet for this contact"}
+
+        signals = row["lead_score_signals"] or {}
+        previous = row["previous_lead_score"]
+
+        # Determine tier
+        if score >= 80:
+            tier = "Hot"
+        elif score >= 50:
+            tier = "Warm"
+        elif score >= 25:
+            tier = "Cool"
+        else:
+            tier = "Cold"
+
+        # Dimension breakdown — signals JSONB has a `dimensions` key with sub-objects each having a `score` field
+        dims_raw = signals.get("dimensions", {})
+        dimensions = {
+            "engagement": dims_raw.get("engagement", {}).get("score", 0) if isinstance(dims_raw.get("engagement"), dict) else dims_raw.get("engagement", 0),
+            "readiness": dims_raw.get("readiness", {}).get("score", 0) if isinstance(dims_raw.get("readiness"), dict) else dims_raw.get("readiness", 0),
+            "velocity": dims_raw.get("velocity", {}).get("score", 0) if isinstance(dims_raw.get("velocity"), dict) else dims_raw.get("velocity", 0),
+            "profile_completeness": dims_raw.get("profile", {}).get("score", 0) if isinstance(dims_raw.get("profile"), dict) else dims_raw.get("profile_completeness", 0),
+        }
+
+        # Top 3 signals from the `signals` list in the JSONB
+        top_signals = signals.get("signals", [])[:3]
+
+        # Trend
+        if previous is None:
+            trend = "new"
+        elif score > previous:
+            trend = "rising"
+        elif score < previous:
+            trend = "falling"
+        else:
+            trend = "stable"
+
+        # Suggested action based on tier
+        actions = {
+            "Hot": "High priority — reach out today, this lead is actively engaged",
+            "Warm": "Good momentum — schedule a follow-up within 2-3 days",
+            "Cool": "Needs nurturing — send relevant listings or market updates",
+            "Cold": "Re-engage — consider a check-in call or remove from active pipeline",
+        }
+
+        return {
+            "contact": f"{row['first_name']} {row['last_name']}",
+            "score": score,
+            "tier": tier,
+            "trend": trend,
+            "previous_score": previous,
+            "dimensions": dimensions,
+            "top_signals": top_signals,
+            "suggested_action": actions[tier],
+        }
 
 
 def _get_contact_activities(agent_id: str, contact_id: str, limit: int) -> list:
