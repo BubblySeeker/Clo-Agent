@@ -191,6 +191,7 @@ func run() error {
 			r.Get("/api/ai/conversations/{id}/messages", handlers.GetMessages(pool))
 			r.Post("/api/ai/conversations/{id}/messages", handlers.SendMessage(pool, cfg))
 			r.Post("/api/ai/conversations/{id}/confirm", handlers.ConfirmToolAction(cfg))
+			r.Post("/api/ai/conversations/{id}/undo", handlers.UndoToolAction(cfg))
 		})
 
 		// Settings
