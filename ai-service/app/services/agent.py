@@ -10,6 +10,7 @@ Flow:
 """
 import asyncio
 import json
+import logging
 import re
 from datetime import date, timedelta
 from typing import AsyncGenerator
@@ -21,9 +22,12 @@ from app.config import ANTHROPIC_API_KEY, ANTHROPIC_MODEL
 from app.database import get_conn, run_query
 from app.tools import (
     TOOL_DEFINITIONS, READ_TOOLS, WRITE_TOOLS,
+    AUTO_EXECUTE_TOOLS, _dispatch_write_tool,
     execute_read_tool, queue_write_tool,
     check_gmail_status, get_recent_emails_for_contact,
 )
+
+logger = logging.getLogger(__name__)
 
 MODEL = ANTHROPIC_MODEL
 MAX_TOOL_ROUNDS = 5  # safety limit
@@ -71,7 +75,7 @@ def _load_contact_context(contact_id: str, agent_id: str) -> str:
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute(
-            "SELECT first_name, last_name, email, phone, source FROM contacts WHERE id = %s AND agent_id = %s",
+            "SELECT first_name, last_name, email, phone, source, lead_score, lead_score_signals, previous_lead_score FROM contacts WHERE id = %s AND agent_id = %s",
             (contact_id, agent_id),
         )
         c = cur.fetchone()
@@ -99,6 +103,29 @@ def _load_contact_context(contact_id: str, agent_id: str) -> str:
                 f"Areas: {', '.join(bp['locations'] or [])}, "
                 f"Pre-approved: {bp['pre_approved']}, Timeline: {bp['timeline']}"
             )
+        # Lead score
+        lead_score = c.get('lead_score')
+        if lead_score is not None and lead_score > 0:
+            if lead_score >= 80:
+                tier = "Hot"
+            elif lead_score >= 50:
+                tier = "Warm"
+            elif lead_score >= 20:
+                tier = "Cool"
+            else:
+                tier = "Cold"
+            score_line = f"Lead Score: {lead_score}/100 ({tier})"
+            prev = c.get('previous_lead_score')
+            if prev is not None:
+                diff = lead_score - prev
+                if abs(diff) >= 5:
+                    score_line += f" — {'↑' if diff > 0 else '↓'}{abs(diff)} from last"
+            signals = c.get('lead_score_signals') or {}
+            top = signals.get('top_signals', [])[:3]
+            if top:
+                score_line += f" | Signals: {', '.join(s if isinstance(s, str) else s.get('description', str(s)) for s in top)}"
+            lines.append(score_line)
+
         if activities:
             lines.append("Recent Activities:")
             for a in activities:
@@ -184,6 +211,24 @@ def _build_system_prompt(agent_name: str, contact_context: str = "", gmail_statu
         "   Pronoun resolution happens in your reasoning — never call a tool solely to "
         "resolve a pronoun that is already answered by the conversation above.\n"
         "</contact_resolution>\n\n"
+        "<operation_routing>\n"
+        "OPERATION ROUTING — follow this before every write operation:\n\n"
+        "STEP 1: Did the user explicitly say \"create a new contact\" or \"add a new person\"?\n"
+        "  → YES → use create_contact\n"
+        "  → NO → go to STEP 2\n\n"
+        "STEP 2: Does a contact already exist? (Check search results or contact context above)\n"
+        "  → YES → use update_contact to modify their fields\n"
+        "  → NO → go to STEP 3\n\n"
+        "STEP 3: Did search_contacts return 0 results for this person?\n"
+        "  → YES → Tell the user no contact was found. Ask if they want to create a new one.\n"
+        "  → NO (haven't searched yet) → call search_contacts FIRST, then return to STEP 2\n\n"
+        "NEVER create a duplicate. \"Add email to Rohan\" = update_contact, not create_contact.\n"
+        "</operation_routing>\n\n"
+        "PROACTIVE SUGGESTIONS:\n"
+        "After auto-executing an update on a contact, check if the contact is missing critical "
+        "fields (email, phone, source). If so, briefly mention it: 'I notice [name] doesn't "
+        "have a [field] yet — want me to add one?' Do not repeat suggestions for the same "
+        "contact in the same conversation.\n\n"
         "IMPORTANT GUIDELINES:\n"
         "- Be action-oriented. When the user's intent is clear, use your tools immediately — "
         "do NOT ask clarifying questions you can answer yourself.\n"
@@ -254,6 +299,9 @@ def _build_system_prompt(agent_name: str, contact_context: str = "", gmail_statu
         "  2. get_overdue_tasks — tasks that are past due and not completed\n"
         "  3. get_all_activities with limit=10 — what happened recently\n"
         "  4. list_deals — scan for stale deals (same stage 14+ days) and deals at risk\n"
+        "  5. For each contact with a deal, call get_lead_score to get their lead score. "
+        "Include lead scores in the briefing — flag Hot leads for immediate action and "
+        "Cold leads that may need re-engagement or pipeline cleanup.\n"
         "Format the briefing with these sections:\n"
         "  ## Good morning! Here's your briefing for {today}\n"
         "  ### Overview — key metrics from get_dashboard_summary (active deals, pipeline value, "
@@ -263,6 +311,9 @@ def _build_system_prompt(agent_name: str, contact_context: str = "", gmail_statu
         "flagged with the contact name and current stage\n"
         "  ### Recent Activity — summary of the last 10 activities (calls, emails, notes, showings) "
         "from get_all_activities, grouped or highlighted by significance\n"
+        "  ### Lead Score Alerts — contacts with Hot scores (80+) that need immediate action, "
+        "and contacts whose scores are falling (trending down from previous). Skip this section "
+        "if no contacts have lead scores yet.\n"
         "  ### Today's Focus — 2-3 specific, actionable recommendations based on what you found "
         "(e.g. 'Follow up with Jane Smith — no contact in 9 days', 'Move the Doe deal out of "
         "Offer stage — it has been 18 days')\n"
@@ -368,7 +419,36 @@ async def run_agent(
 
             yield sse({"type": "tool_call", "name": tool_name, "status": "running"})
 
-            if tool_name in WRITE_TOOLS:
+            if tool_name in WRITE_TOOLS and tool_name in AUTO_EXECUTE_TOOLS:
+                # Auto-execute safe write tools without confirmation
+                logger.info("Auto-executing %s for agent %s", tool_name, agent_id)
+                result = await _dispatch_write_tool(tool_name, tool_input, agent_id)
+                status = "error" if "error" in result else "success"
+                yield sse({"type": "auto_executed", "name": tool_name, "result": result, "status": status})
+                # Push undo entry when the action succeeded and previous values are available
+                if status == "success" and "previous" in result:
+                    from app.undo import push_undo
+                    _entity_map = {
+                        "update_contact":       ("contact",       result.get("contact_id")),
+                        "update_deal":           ("deal",          result.get("deal_id")),
+                        "update_buyer_profile":  ("buyer_profile", result.get("contact_id")),
+                        "update_property":       ("property",      result.get("property_id")),
+                    }
+                    if tool_name in _entity_map:
+                        etype, eid = _entity_map[tool_name]
+                        push_undo(conversation_id, {
+                            "tool_name": tool_name,
+                            "previous_values": result["previous"],
+                            "entity_id": str(eid),
+                            "entity_type": etype,
+                        })
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": tb.id,
+                    "content": json.dumps(result, default=str),
+                })
+            elif tool_name in WRITE_TOOLS:
+                # Dangerous write tools — queue for user confirmation
                 confirmation = queue_write_tool(tool_name, tool_input, agent_id)
                 yield sse({"type": "confirmation", **confirmation})
                 tool_results.append({

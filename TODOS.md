@@ -2,6 +2,22 @@
 
 ## Infrastructure
 
+### Batch score recompute for bulk operations
+
+**What:** Add an async/batch path for recomputing lead scores when many contacts are modified at once (e.g., CSV import, bulk tag assignment).
+
+**Why:** The current `computeLeadScore` runs inline within each handler's RLS transaction — 3 queries + 1 update per contact. This is fine for single-contact mutations but would fire N sequential recalculations during a bulk import of 500 contacts, blocking the request.
+
+**Pros:** Prevents request timeouts during bulk operations. Enables future features like scheduled overnight score refresh.
+
+**Cons:** Requires either a background worker or a "dirty flag + compute on read" pattern, both adding complexity.
+
+**Context:** Lead scoring uses inline computation (decided in v1 for simplicity at pre-product scale). When bulk contact operations are built, add either: (a) a `score_stale BOOLEAN` flag on contacts, computed on next read, or (b) a background worker that processes a queue of contact IDs needing recompute. The `computeLeadScore` function is already isolated — the change is in how/when it's called, not in the scoring logic itself.
+
+**Effort:** S (human team) → S (with CC+gstack)
+**Priority:** P3
+**Depends on:** Lead scoring system, bulk contact operations (neither exists yet)
+
 ### Structured error codes in Go backend
 
 **What:** Replace generic "query error" / "database error" messages in all Go handlers with structured error codes (e.g., `ERR_NOT_FOUND`, `ERR_DB_TIMEOUT`, `ERR_VALIDATION`).
@@ -11,18 +27,6 @@
 **Context:** Every handler in `backend/internal/handlers/` uses `respondError(w, status, "generic message")`. The `respondError` helper already exists — it just needs a consistent error code field added to the JSON response alongside the message. ~12 handler files to update. Pattern: `{"error": "message", "code": "ERR_NOT_FOUND"}`.
 
 **Effort:** M
-**Priority:** P2
-**Depends on:** None
-
-### React error boundaries for dashboard
-
-**What:** Add an ErrorBoundary component that wraps dashboard pages and shows a fallback UI ("Something went wrong. Reload?") instead of a white screen when a component throws.
-
-**Why:** If any dashboard component throws a JavaScript error (bad API data, undefined property access), the entire page goes blank with no recovery. User must manually refresh.
-
-**Context:** No error boundary exists anywhere in `frontend/src/app/dashboard/`. Create a single `ErrorBoundary` class component in `components/shared/`, wrap it around the dashboard layout in `layout.tsx`. TanStack Query error states are also unchecked in most pages — the `error` return from `useQuery` is ignored.
-
-**Effort:** S
 **Priority:** P2
 **Depends on:** None
 
@@ -76,17 +80,29 @@
 **Priority:** P3
 **Depends on:** None (reuses existing AI profile pattern)
 
-### Smart follow-up suggestions on contacts
+### Smart follow-up suggestions on contacts (Basic version done)
 
 **What:** Show an AI-generated suggestion at the top of each contact's activity timeline: "It's been 12 days since your last interaction. Suggested action: Follow-up call about the condo tour."
 
-**Why:** Agents shouldn't have to calculate when they last talked to someone. The system should proactively surface the next best action.
+**Done:** Basic version implemented — frontend-computed follow-up banner with priority chain: no activities → stale (>7 days) → last was showing. Dismissible with 24h localStorage TTL.
 
-**Context:** Frontend-only computation from existing data: compare `last_activity_at` to now, read buyer profile for context, generate a suggestion string. No new backend needed for the basic version. For the AI-powered version, could use the existing chat tool `get_contact_activities` to inform a Claude call. Start with the simple computed version.
+**Future:** AI-powered version using Claude to analyze full contact context and generate personalized coaching suggestions.
 
-**Effort:** S
+**Effort:** S (basic done), M (AI version)
 **Priority:** P3
-**Depends on:** None
+**Depends on:** None (AI version depends on Claude integration)
+
+### Confidence-based quick confirm (third confirmation tier)
+
+**What:** Add a third confirmation tier between auto-execute and full confirmation — a streamlined one-tap inline confirm for medium-risk actions (e.g., `create_deal` for a contact the AI just found).
+
+**Why:** The two-tier system (auto-execute vs full confirm) is a big improvement but leaves a UX gap: actions that are probably right but not safe enough to auto-execute still get the full confirmation card with preview + two buttons. A quick confirm ("Create deal for Rohan? [Yes]") reduces friction for these medium-risk actions.
+
+**Context:** Requires a `QUICK_CONFIRM_TOOLS` set, a new SSE event type (`quick_confirm`), and a new compact UI component. The `useAIStream` hook extraction (shipping in the AI Intelligence Upgrade) makes adding a third event type straightforward. Defer until the two-tier system proves itself in production.
+
+**Effort:** M (human) → S with CC+gstack
+**Priority:** P2
+**Depends on:** AI Intelligence Upgrade (tiered confirmation + useAIStream hook)
 
 ### Keyboard shortcuts across dashboard
 
@@ -100,18 +116,29 @@
 **Priority:** P3
 **Depends on:** None
 
-### Deal health scores / close probability
 
-**What:** Show an AI-estimated close probability on each deal card in the pipeline — a "health score" based on buyer profile completeness, activity frequency, and time in current stage.
+### Bulk action from lead score view
 
-**Why:** Agents can visually prioritize which deals need attention. A deal that's been in "Touring" for 30 days with no recent activity is at risk.
+**What:** Add a "Select all Hot leads" / "Select all Cold leads" bulk action on the contacts page when sorted by score, enabling batch operations like "Send follow-up email to all warm leads" or "Archive all cold leads."
 
-**Context:** Could be a simple heuristic (no AI needed): score = f(days_in_stage, days_since_activity, buyer_profile_completeness). Display as a colored badge (green/yellow/red) on pipeline deal cards. For the AI version, use Claude to analyze the full context and estimate probability. Start with the heuristic version — it's faster, cheaper, and more predictable.
+**Why:** Agents with 100+ contacts need to act on score tiers in bulk. Individually clicking through 15 warm leads to send follow-ups defeats the purpose of scoring them in the first place.
 
-**Effort:** M
-**Priority:** P3
-**Depends on:** None
+**Pros:** Transforms lead scoring from passive information into an active workflow tool. High leverage for agents with large contact books.
+
+**Cons:** Requires backend batch endpoints (bulk update, bulk email) that don't exist yet. UI complexity for multi-select state management.
+
+**Context:** The lead scoring system adds score tiers (Hot/Warm/Cool/Cold) to contacts. This TODO adds tier-based bulk selection on the contacts list page. Implementation: checkbox column + "Select all in tier" dropdown + bulk action bar (email, archive, assign tag). Needs new `POST /api/contacts/bulk-action` endpoint. Reference: Gmail's "Select all conversations that match this search" pattern.
+
+**Effort:** M (human team) → S (with CC+gstack)
+**Priority:** P2
+**Depends on:** Lead scoring system (in progress)
 
 ## Completed
 
-(none yet)
+### React error boundaries for dashboard
+
+ErrorBoundary component in `components/shared/ErrorBoundary.tsx` wraps dashboard layout. TanStack Query `isError` states handled across 8+ dashboard pages with user-facing error UI.
+
+### Deal health scores (heuristic version)
+
+Green/yellow/red health dots on pipeline Kanban deal cards. Heuristic based on days-in-stage (`stage_entered_at` column) and days-since-last-activity. Accurate stage tracking via `stage_entered_at` that only resets on actual stage changes.

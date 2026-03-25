@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 
 	"crm-api/internal/database"
 	"crm-api/internal/middleware"
+	"crm-api/internal/scoring"
 )
 
 type Deal struct {
@@ -23,6 +25,7 @@ type Deal struct {
 	Notes           *string    `json:"notes"`
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`
+	StageEnteredAt  *time.Time `json:"stage_entered_at"`
 	ContactName     string     `json:"contact_name"`
 	StageName       string     `json:"stage_name"`
 	StageColor      string     `json:"stage_color"`
@@ -32,7 +35,7 @@ type Deal struct {
 }
 
 const dealSelectSQL = `
-SELECT d.id, d.contact_id, d.agent_id, d.stage_id, d.title, d.value, d.notes, d.created_at, d.updated_at,
+SELECT d.id, d.contact_id, d.agent_id, d.stage_id, d.title, d.value, d.notes, d.created_at, d.updated_at, d.stage_entered_at,
        c.first_name || ' ' || c.last_name AS contact_name,
        COALESCE(ds.name, '')              AS stage_name,
        COALESCE(ds.color, '')             AS stage_color,
@@ -46,7 +49,7 @@ LEFT JOIN properties p ON p.id = d.property_id`
 
 func scanDeal(row interface{ Scan(...any) error }) (Deal, error) {
 	var d Deal
-	err := row.Scan(&d.ID, &d.ContactID, &d.AgentID, &d.StageID, &d.Title, &d.Value, &d.Notes, &d.CreatedAt, &d.UpdatedAt, &d.ContactName, &d.StageName, &d.StageColor, &d.PropertyID, &d.PropertyAddress, &d.LastActivityAt)
+	err := row.Scan(&d.ID, &d.ContactID, &d.AgentID, &d.StageID, &d.Title, &d.Value, &d.Notes, &d.CreatedAt, &d.UpdatedAt, &d.StageEnteredAt, &d.ContactName, &d.StageName, &d.StageColor, &d.PropertyID, &d.PropertyAddress, &d.LastActivityAt)
 	return d, err
 }
 
@@ -163,8 +166,8 @@ func CreateDeal(pool *pgxpool.Pool) http.HandlerFunc {
 
 		var newID string
 		err = tx.QueryRow(r.Context(),
-			`INSERT INTO deals (contact_id, agent_id, stage_id, title, value, notes)
-			 VALUES ($1, $2, $3, $4, $5, $6)
+			`INSERT INTO deals (contact_id, agent_id, stage_id, title, value, notes, stage_entered_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, NOW())
 			 RETURNING id`,
 			body.ContactID, agentID, body.StageID, body.Title, body.Value, body.Notes,
 		).Scan(&newID)
@@ -217,6 +220,25 @@ func UpdateDeal(pool *pgxpool.Pool) http.HandlerFunc {
 
 		setClauses := "updated_at = NOW()"
 		args := []interface{}{}
+
+		// Check if stage is changing — only update stage_entered_at on actual stage change
+		if newStageID, ok := body["stage_id"]; ok {
+			var currentStageID *string
+			err := tx.QueryRow(r.Context(), "SELECT stage_id FROM deals WHERE id = $1", id).Scan(&currentStageID)
+			if err != nil {
+				respondErrorWithCode(w, http.StatusNotFound, "deal not found", ErrCodeNotFound)
+				return
+			}
+			currentStr := ""
+			if currentStageID != nil {
+				currentStr = *currentStageID
+			}
+			newStr, _ := newStageID.(string)
+			if newStr != currentStr {
+				setClauses += ", stage_entered_at = NOW()"
+			}
+		}
+
 		allowed := []string{"stage_id", "title", "value", "notes", "contact_id", "property_id"}
 		for _, field := range allowed {
 			if val, ok := body[field]; ok {
@@ -243,6 +265,11 @@ func UpdateDeal(pool *pgxpool.Pool) http.HandlerFunc {
 			return
 		}
 
+		// Recompute lead score for the deal's contact after stage change
+		if err := scoring.ComputeLeadScore(r.Context(), tx, d.ContactID); err != nil {
+			log.Printf("scoring: ComputeLeadScore failed for contact %s: %v", d.ContactID, err)
+		}
+
 		tx.Commit(r.Context())
 		respondJSON(w, http.StatusOK, d)
 	}
@@ -260,10 +287,23 @@ func DeleteDeal(pool *pgxpool.Pool) http.HandlerFunc {
 		}
 		defer tx.Rollback(r.Context())
 
+		// Fetch contact_id before deleting so we can recompute score after
+		var contactID string
+		err = tx.QueryRow(r.Context(), `SELECT contact_id FROM deals WHERE id = $1`, id).Scan(&contactID)
+		if err != nil {
+			respondErrorWithCode(w, http.StatusNotFound, "deal not found", ErrCodeNotFound)
+			return
+		}
+
 		result, err := tx.Exec(r.Context(), `DELETE FROM deals WHERE id = $1`, id)
 		if err != nil || result.RowsAffected() == 0 {
 			respondErrorWithCode(w, http.StatusNotFound, "deal not found", ErrCodeNotFound)
 			return
+		}
+
+		// Recompute lead score after deal deletion
+		if err := scoring.ComputeLeadScore(r.Context(), tx, contactID); err != nil {
+			log.Printf("scoring: ComputeLeadScore failed for contact %s: %v", contactID, err)
 		}
 
 		tx.Commit(r.Context())

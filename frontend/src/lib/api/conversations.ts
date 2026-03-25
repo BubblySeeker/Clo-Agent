@@ -23,7 +23,8 @@ export type SSEEvent =
   | { type: "text"; content: string }
   | { type: "tool_call"; name: string; status: "running" }
   | { type: "tool_result"; name: string; result: unknown }
-  | { type: "confirmation"; tool: string; preview: Record<string, unknown>; pending_id: string };
+  | { type: "confirmation"; tool: string; preview: Record<string, unknown>; pending_id: string }
+  | { type: "auto_executed"; name: string; result: Record<string, unknown>; status: "success" | "error" };
 
 export function listConversations(token: string): Promise<Conversation[]> {
   return apiRequest("/ai/conversations", token);
@@ -52,6 +53,15 @@ export function confirmToolAction(
   return apiRequest(`/ai/conversations/${conversationId}/confirm`, token, {
     method: "POST",
     body: JSON.stringify({ pending_id: pendingId }),
+  });
+}
+
+export function undoAutoAction(
+  token: string,
+  conversationId: string
+): Promise<{ status: string; tool_name: string; entity_type: string; result: unknown }> {
+  return apiRequest(`/ai/conversations/${conversationId}/undo`, token, {
+    method: "POST",
   });
 }
 

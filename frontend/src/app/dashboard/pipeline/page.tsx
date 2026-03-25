@@ -6,6 +6,8 @@ import { useAuth } from "@clerk/nextjs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { listDeals, listDealStages, updateDeal, createDeal, type Deal } from "@/lib/api/deals";
 import { listContacts } from "@/lib/api/contacts";
+import { getSettings } from "@/lib/api/settings";
+import { ScoreBadge } from "@/app/dashboard/components/score-badge";
 import { Plus, Search, AlertTriangle, GripVertical, X, DollarSign, FileText, User, Building } from "lucide-react";
 
 function getAvatarColor(id: string) {
@@ -28,8 +30,9 @@ function daysSince(dateStr: string) {
 
 type HealthStatus = "green" | "yellow" | "red";
 
-function getDealHealth(deal: { updated_at: string; last_activity_at: string | null }): HealthStatus {
-  const daysInStage = daysSince(deal.updated_at);
+function getDealHealth(deal: { stage_entered_at: string | null; created_at: string; last_activity_at: string | null }): HealthStatus {
+  const stageDate = deal.stage_entered_at ?? deal.created_at;
+  const daysInStage = daysSince(stageDate);
   const daysNoActivity = deal.last_activity_at ? daysSince(deal.last_activity_at) : Infinity;
   if (daysInStage > 14 || daysNoActivity >= 14) return "red";
   if (daysInStage >= 7 || daysNoActivity >= 7) return "yellow";
@@ -88,6 +91,15 @@ export default function PipelinePage() {
     },
   });
 
+  const { data: settingsData } = useQuery({
+    queryKey: ["settings"],
+    queryFn: async () => {
+      const token = await getToken();
+      return getSettings(token!);
+    },
+  });
+  const showScores = settingsData?.show_lead_scores !== false;
+
   const updateMutation = useMutation({
     mutationFn: async ({ dealId, stageId }: { dealId: string; stageId: string }) => {
       const token = await getToken();
@@ -120,6 +132,9 @@ export default function PipelinePage() {
   const stages = stagesData ?? [];
   const deals = dealsData?.deals ?? [];
   const contacts = contactsData?.contacts ?? [];
+  const contactScoreMap = new Map(
+    contacts.filter((c) => c.lead_score > 0).map((c) => [c.id, c])
+  );
 
   if (dealsError) {
     return (
@@ -404,6 +419,12 @@ export default function PipelinePage() {
                             {formatValue(deal.value)}
                           </span>
                           <div className="flex items-center gap-1.5">
+                            {showScores && (() => {
+                              const sc = contactScoreMap.get(deal.contact_id);
+                              return sc ? (
+                                <ScoreBadge score={sc.lead_score} previousScore={sc.previous_lead_score} size="compact" />
+                              ) : null;
+                            })()}
                             <span
                               title={healthLabel}
                               className="w-2 h-2 rounded-full shrink-0"

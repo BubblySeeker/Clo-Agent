@@ -84,3 +84,17 @@ export function sendEmail(token: string, body: SendEmailBody): Promise<{ id: str
     body: JSON.stringify(body),
   });
 }
+
+export interface ForwardEmailBody {
+  email_id: string;
+  to: string;
+  cc?: string;
+  body?: string;
+}
+
+export function forwardEmail(token: string, body: ForwardEmailBody): Promise<{ id: string; thread_id: string; message: string }> {
+  return apiRequest("/gmail/forward", token, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}

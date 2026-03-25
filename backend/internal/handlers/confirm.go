@@ -14,6 +14,40 @@ import (
 	"crm-api/internal/middleware"
 )
 
+// UndoToolAction proxies an undo request to the AI service, reverting the last auto-executed action.
+func UndoToolAction(cfg *config.Config) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		agentID := middleware.AgentUUIDFromContext(r.Context())
+		id := chi.URLParam(r, "id") // conversation ID
+
+		payload, _ := json.Marshal(map[string]string{
+			"agent_id": agentID,
+		})
+
+		req, err := http.NewRequestWithContext(r.Context(), http.MethodPost,
+			cfg.AIServiceURL+"/ai/undo/"+id, bytes.NewBuffer(payload))
+		if err != nil {
+			respondErrorWithCode(w, http.StatusInternalServerError, "proxy request build failed", ErrCodeInternal)
+			return
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-AI-Service-Secret", cfg.AIServiceSecret)
+		req.Header.Set("X-Request-ID", chimiddleware.GetReqID(r.Context()))
+
+		client := &http.Client{Timeout: 30 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			respondErrorWithCode(w, http.StatusBadGateway, "AI service unavailable", ErrCodeInternal)
+			return
+		}
+		defer resp.Body.Close()
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(resp.StatusCode)
+		io.Copy(w, resp.Body) //nolint:errcheck
+	}
+}
+
 // ConfirmToolAction proxies a tool confirmation to the AI service.
 func ConfirmToolAction(cfg *config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

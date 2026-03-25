@@ -139,9 +139,11 @@ func run() error {
 		// Contacts
 		r.Get("/api/contacts", handlers.ListContacts(pool))
 		r.Post("/api/contacts", handlers.CreateContact(pool))
+		r.Get("/api/contacts/going-cold-count", handlers.GoingColdCount(pool))
 		r.Get("/api/contacts/{id}", handlers.GetContact(pool))
 		r.Patch("/api/contacts/{id}", handlers.UpdateContact(pool))
 		r.Delete("/api/contacts/{id}", handlers.DeleteContact(pool))
+		r.Get("/api/contacts/{id}/lead-score-explanation", handlers.GetLeadScoreExplanation(pool))
 
 		// Buyer Profiles
 		r.Get("/api/contacts/{id}/buyer-profile", handlers.GetBuyerProfile(pool))
@@ -190,6 +192,7 @@ func run() error {
 			r.Get("/api/ai/conversations/{id}/messages", handlers.GetMessages(pool))
 			r.Post("/api/ai/conversations/{id}/messages", handlers.SendMessage(pool, cfg))
 			r.Post("/api/ai/conversations/{id}/confirm", handlers.ConfirmToolAction(cfg))
+			r.Post("/api/ai/conversations/{id}/undo", handlers.UndoToolAction(cfg))
 		})
 
 		// Settings
@@ -262,6 +265,7 @@ func run() error {
 		r.Get("/api/gmail/emails", handlers.ListEmails(pool))
 		r.Get("/api/gmail/emails/{id}", handlers.GetEmail(pool))
 		r.Post("/api/gmail/send", handlers.SendEmail(pool, cfg))
+		r.Post("/api/gmail/forward", handlers.ForwardEmail(pool, cfg))
 		r.Patch("/api/gmail/emails/{id}/read", handlers.MarkEmailRead(pool, cfg))
 
 		// Lead suggestions

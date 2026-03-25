@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getContact, updateContact, deleteContact } from "@/lib/api/contacts";
+import { getContact, updateContact, deleteContact, getLeadScoreExplanation } from "@/lib/api/contacts";
 import type { UpdateContactBody } from "@/lib/api/contacts";
+import { getSettings } from "@/lib/api/settings";
+import { ScoreBadge } from "@/app/dashboard/components/score-badge";
 import { listActivities, createActivity } from "@/lib/api/activities";
 import { listDeals } from "@/lib/api/deals";
 import { getBuyerProfile, createBuyerProfile, updateBuyerProfile } from "@/lib/api/buyer-profiles";
@@ -24,6 +26,7 @@ import {
   ChevronLeft,
   Home,
   ChevronDown,
+  ChevronUp,
   ChevronRight,
   Send,
   Edit2,
@@ -50,8 +53,24 @@ import {
   Download,
   Loader2,
   AlertCircle,
+  AlertTriangle,
   FolderOpen,
 } from "lucide-react";
+
+function getFollowUpSuggestion(activities: any[]): string | null {
+  if (!activities || activities.length === 0) {
+    return "No activities recorded yet. Consider reaching out to make a first impression.";
+  }
+  const lastActivity = activities[0]; // sorted DESC by API
+  const daysSinceLast = Math.floor((Date.now() - new Date(lastActivity.created_at).getTime()) / 86400000);
+  if (daysSinceLast > 7) {
+    return `It\u2019s been ${daysSinceLast} days since your last interaction. Time for a follow-up.`;
+  }
+  if (lastActivity.type === "showing") {
+    return "Last activity was a showing. Follow up to get their thoughts on the property.";
+  }
+  return null;
+}
 
 const typeIconColors: Record<string, { bg: string; color: string }> = {
   call: { bg: "#EFF6FF", color: "#0EA5E9" },
@@ -167,6 +186,36 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
   const [docFile, setDocFile] = useState<File | null>(null);
   const [isDraggingDoc, setIsDraggingDoc] = useState(false);
 
+  // Follow-up suggestion banner
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  // Score breakdown expansion
+  const [scoreExpanded, setScoreExpanded] = useState(false);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(`followup-dismiss-${id}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed.dismissed && parsed.expiresAt > Date.now()) {
+          setBannerDismissed(true);
+        } else {
+          localStorage.removeItem(`followup-dismiss-${id}`);
+        }
+      }
+    } catch {}
+  }, [id]);
+
+  const dismissBanner = () => {
+    setBannerDismissed(true);
+    try {
+      localStorage.setItem(`followup-dismiss-${id}`, JSON.stringify({
+        dismissed: true,
+        expiresAt: Date.now() + 86400000,
+      }));
+    } catch {}
+  };
+
   // --- Queries ---
   const { data: contact, isLoading: contactLoading, isError: contactError, refetch: refetchContact } = useQuery({
     queryKey: ["contact", id],
@@ -175,6 +224,15 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
       return getContact(token!, id);
     },
   });
+
+  const { data: settingsData } = useQuery({
+    queryKey: ["settings"],
+    queryFn: async () => {
+      const token = await getToken();
+      return getSettings(token!);
+    },
+  });
+  const showScores = settingsData?.show_lead_scores !== false;
 
   const typeFilter = tabTypeMap[activeTab];
   const { data: activitiesData } = useQuery({
@@ -244,6 +302,15 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
       const token = await getToken();
       return listContactFolders(token!);
     },
+  });
+
+  const { data: scoreExplanation, isLoading: explanationLoading } = useQuery({
+    queryKey: ["lead-score-explanation", id],
+    queryFn: async () => {
+      const token = await getToken();
+      return getLeadScoreExplanation(token!, id);
+    },
+    enabled: scoreExpanded && showScores && (contact?.lead_score ?? 0) > 0,
   });
 
   // --- Mutations ---
@@ -836,6 +903,54 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
                     {contact.source}
                   </span>
                 )}
+                {showScores && contact.lead_score > 0 && (
+                  <div className="flex flex-col items-center mt-1">
+                    <ScoreBadge
+                      score={contact.lead_score}
+                      previousScore={contact.previous_lead_score}
+                      onClick={(e) => { e.stopPropagation(); setScoreExpanded((prev) => !prev); }}
+                    />
+                    {scoreExpanded && (
+                      <div className="mt-2 w-full max-w-[260px] bg-gray-50 rounded-xl p-3 border border-gray-100 text-left">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-semibold text-gray-700">Score Breakdown</span>
+                          <button onClick={() => setScoreExpanded(false)} className="text-gray-400 hover:text-gray-600">
+                            <ChevronUp size={14} />
+                          </button>
+                        </div>
+                        {[
+                          { key: "engagement", label: "Engagement", max: 30, color: "#22C55E" },
+                          { key: "readiness", label: "Readiness", max: 30, color: "#0EA5E9" },
+                          { key: "velocity", label: "Velocity", max: 20, color: "#8B5CF6" },
+                          { key: "profile", label: "Profile", max: 20, color: "#F59E0B" },
+                        ].map((dim) => {
+                          const value = contact.lead_score_signals?.[dim.key] ?? 0;
+                          const pct = Math.round((value / dim.max) * 100);
+                          return (
+                            <div key={dim.key} className="mb-1.5 last:mb-0">
+                              <div className="flex justify-between text-xs mb-0.5">
+                                <span className="text-gray-600">{dim.label}</span>
+                                <span className="text-gray-400">{value}/{dim.max}</span>
+                              </div>
+                              <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: dim.color }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {explanationLoading && (
+                          <div className="mt-2 space-y-1">
+                            <div className="h-2.5 bg-gray-200 rounded animate-pulse w-full" />
+                            <div className="h-2.5 bg-gray-200 rounded animate-pulse w-4/5" />
+                          </div>
+                        )}
+                        {scoreExplanation && (
+                          <p className="mt-2 text-xs text-gray-500 italic leading-relaxed">{scoreExplanation}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
             <div className="grid grid-cols-4 gap-2 pt-4">
@@ -1212,6 +1327,22 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
               </button>
             ))}
           </div>
+
+          {/* Follow-up Suggestion Banner */}
+          {(() => {
+            const suggestion = getFollowUpSuggestion(activities);
+            const isActivityTab = !["Buyer Profile", "AI Profile", "Documents"].includes(activeTab);
+            if (!suggestion || bannerDismissed || !isActivityTab) return null;
+            return (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3">
+                <AlertTriangle size={16} className="text-amber-500 mt-0.5 shrink-0" />
+                <p className="text-sm text-amber-800 flex-1">{suggestion}</p>
+                <button onClick={dismissBanner} className="text-amber-400 hover:text-amber-600 shrink-0">
+                  <X size={14} />
+                </button>
+              </div>
+            );
+          })()}
 
           {/* Tab Content */}
           {activeTab === "Buyer Profile" ? (
