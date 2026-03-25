@@ -30,7 +30,7 @@ Build end-to-end voice calling where the agent makes/receives calls through Twil
 - [x] **Phase 5: Recording Infrastructure** - Calls are recorded, stored, and playable; credentials encrypted (completed 2026-03-24)
 - [x] **Phase 6: AI Transcription & Intelligence** - Recordings auto-transcribed, AI extracts summaries and CRM actions (completed 2026-03-24)
 - [x] **Phase 7: Frontend Call Experience** - Full call lifecycle visible in web UI with AI action cards and inbound intelligence (completed 2026-03-24)
-- [ ] **Phase 8: React Native Mobile Dialer** - Thin mobile app for calling and viewing call history
+- [x] **Phase 8: React Native Mobile Dialer** - Thin mobile app for calling and viewing call history (completed 2026-03-25)
 
 ## Phase Details
 
@@ -107,7 +107,7 @@ Plans:
   3. Agent taps a contact to call, their phone rings within 3 seconds, and the call bridges to the client
   4. Agent can view call history showing status, duration, and AI transcript summaries for each call
   5. Agent can configure their personal phone number in mobile app settings
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [ ] 08-01-PLAN.md — Expo scaffold with Clerk auth, API client layer, shared types
@@ -124,7 +124,7 @@ Phases execute in numeric order: 4 -> 5 -> 6 -> 7 -> 8
 | 5. Recording Infrastructure | 2/2 | Complete   | 2026-03-24 |
 | 6. AI Transcription & Intelligence | 2/2 | Complete   | 2026-03-24 |
 | 7. Frontend Call Experience | 2/2 | Complete   | 2026-03-24 |
-| 8. React Native Mobile Dialer | 1/2 | In Progress|  |
+| 8. React Native Mobile Dialer | 2/2 | Complete   | 2026-03-25 |
 
 ---
 *Roadmap created: 2026-03-23*

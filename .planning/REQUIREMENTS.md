@@ -44,10 +44,10 @@
 ### Mobile App
 
 - [x] **MOB-01**: React Native (Expo) app scaffold with Clerk authentication
-- [ ] **MOB-02**: Agent can view and search their contact list from the mobile app
-- [ ] **MOB-03**: Agent can tap a contact to initiate a call (API-triggered, their phone rings)
-- [ ] **MOB-04**: Agent can view call history with status, duration, and transcript summaries
-- [ ] **MOB-05**: Agent can configure their personal phone number in mobile settings
+- [x] **MOB-02**: Agent can view and search their contact list from the mobile app
+- [x] **MOB-03**: Agent can tap a contact to initiate a call (API-triggered, their phone rings)
+- [x] **MOB-04**: Agent can view call history with status, duration, and transcript summaries
+- [x] **MOB-05**: Agent can configure their personal phone number in mobile settings
 
 ## Future Requirements
 
@@ -101,10 +101,10 @@
 | FE-05 | Phase 7 | Complete |
 | FE-06 | Phase 7 | Complete |
 | MOB-01 | Phase 8 | Complete |
-| MOB-02 | Phase 8 | Pending |
-| MOB-03 | Phase 8 | Pending |
-| MOB-04 | Phase 8 | Pending |
-| MOB-05 | Phase 8 | Pending |
+| MOB-02 | Phase 8 | Complete |
+| MOB-03 | Phase 8 | Complete |
+| MOB-04 | Phase 8 | Complete |
+| MOB-05 | Phase 8 | Complete |
 
 **Coverage:**
 - v2.0 requirements: 29 total
