@@ -84,10 +84,11 @@ None yet.
 | 260325-dg5 | Add get_lead_score AI tool, tests, and Brief Me prompt update | 2026-03-25 | d5d752a | [260325-dg5-step-5-of-lead-scoring-add-get-lead-scor](./quick/260325-dg5-step-5-of-lead-scoring-add-get-lead-scor/) |
 | 260325-dfy | Server-side undo stack for auto-executed AI actions with Go proxy and frontend UI cards | 2026-03-25 | 34f6f42 | [260325-dfy-server-side-undo-stack-for-auto-executed](./quick/260325-dfy-server-side-undo-stack-for-auto-executed/) |
 | 260325-dqz | Create ScoreBadge component with tier colors, size variants, and change arrows (lead scoring Step 7) | 2026-03-25 | 6c97ffd | [260325-dqz-create-scorebadge-component-with-tier-co](./quick/260325-dqz-create-scorebadge-component-with-tier-co/) |
+| 260325-e4t | Add ScoreBadge to contact detail page header (expandable breakdown) and pipeline deal cards (compact, gated) | 2026-03-25 | ebc7606 | [260325-e4t-step-10-add-scorebadge-to-contact-detail](./quick/260325-e4t-step-10-add-scorebadge-to-contact-detail/) |
 
 ## Session Continuity
 
-Last activity: 2026-03-25 - Completed quick task 260325-dqz: Create ScoreBadge component with tier colors and change arrows
-Last session: 2026-03-25T14:00:00.000Z
-Stopped at: Completed quick/260325-dqz-PLAN.md
+Last activity: 2026-03-25 - Completed quick task 260325-e4t: Add ScoreBadge to contact detail page and pipeline deal cards
+Last session: 2026-03-25T14:15:00.000Z
+Stopped at: Completed quick/260325-e4t-PLAN.md
 Resume file: None
