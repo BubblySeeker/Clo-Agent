@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -12,12 +13,14 @@ import (
 
 	"crm-api/internal/database"
 	"crm-api/internal/middleware"
+	"crm-api/internal/scoring"
 )
 
 type Activity struct {
 	ID          string     `json:"id"`
 	ContactID   *string    `json:"contact_id"`
 	DealID      *string    `json:"deal_id"`
+	PropertyID  *string    `json:"property_id"`
 	AgentID     string     `json:"agent_id"`
 	Type        string     `json:"type"`
 	Body        *string    `json:"body"`
@@ -26,6 +29,7 @@ type Activity struct {
 	Priority    *string    `json:"priority"`
 	CompletedAt *time.Time `json:"completed_at"`
 	ContactName *string    `json:"contact_name,omitempty"`
+	PropertyAddress *string `json:"property_address,omitempty"`
 }
 
 // ListActivities returns activities for a specific contact.
@@ -37,7 +41,7 @@ func ListActivities(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -50,13 +54,14 @@ func ListActivities(pool *pgxpool.Pool) http.HandlerFunc {
 		}
 
 		rows, err := tx.Query(r.Context(),
-			fmt.Sprintf(`SELECT a.id, a.contact_id, a.deal_id, a.agent_id, a.type, a.body, a.created_at,
-			       a.due_date::text, a.priority, a.completed_at
-			 FROM activities a WHERE %s ORDER BY a.created_at DESC`, whereExpr),
+			fmt.Sprintf(`SELECT a.id, a.contact_id, a.deal_id, a.property_id, a.agent_id, a.type, a.body, a.created_at,
+			       a.due_date::text, a.priority, a.completed_at,
+			       COALESCE(p.address, '') as property_address
+			 FROM activities a LEFT JOIN properties p ON p.id = a.property_id WHERE %s ORDER BY a.created_at DESC`, whereExpr),
 			args...,
 		)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "query error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "query error", ErrCodeDatabase)
 			return
 		}
 		defer rows.Close()
@@ -64,9 +69,9 @@ func ListActivities(pool *pgxpool.Pool) http.HandlerFunc {
 		activities := make([]Activity, 0)
 		for rows.Next() {
 			var a Activity
-			if err := rows.Scan(&a.ID, &a.ContactID, &a.DealID, &a.AgentID, &a.Type, &a.Body, &a.CreatedAt,
-				&a.DueDate, &a.Priority, &a.CompletedAt); err != nil {
-				respondError(w, http.StatusInternalServerError, "scan error")
+			if err := rows.Scan(&a.ID, &a.ContactID, &a.DealID, &a.PropertyID, &a.AgentID, &a.Type, &a.Body, &a.CreatedAt,
+				&a.DueDate, &a.Priority, &a.CompletedAt, &a.PropertyAddress); err != nil {
+				respondErrorWithCode(w, http.StatusInternalServerError, "scan error", ErrCodeDatabase)
 				return
 			}
 			activities = append(activities, a)
@@ -88,7 +93,7 @@ func ListAllActivities(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -101,16 +106,18 @@ func ListAllActivities(pool *pgxpool.Pool) http.HandlerFunc {
 		}
 
 		rows, err := tx.Query(r.Context(),
-			fmt.Sprintf(`SELECT a.id, a.contact_id, a.deal_id, a.agent_id, a.type, a.body, a.created_at,
+			fmt.Sprintf(`SELECT a.id, a.contact_id, a.deal_id, a.property_id, a.agent_id, a.type, a.body, a.created_at,
 			       a.due_date::text, a.priority, a.completed_at,
-			       c.first_name || ' ' || c.last_name AS contact_name
+			       c.first_name || ' ' || c.last_name AS contact_name,
+			       COALESCE(p.address, '') as property_address
 			 FROM activities a
 			 LEFT JOIN contacts c ON c.id = a.contact_id
+			 LEFT JOIN properties p ON p.id = a.property_id
 			 WHERE %s ORDER BY a.created_at DESC LIMIT 100`, whereExpr),
 			args...,
 		)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "query error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "query error", ErrCodeDatabase)
 			return
 		}
 		defer rows.Close()
@@ -118,9 +125,9 @@ func ListAllActivities(pool *pgxpool.Pool) http.HandlerFunc {
 		activities := make([]Activity, 0)
 		for rows.Next() {
 			var a Activity
-			if err := rows.Scan(&a.ID, &a.ContactID, &a.DealID, &a.AgentID, &a.Type, &a.Body, &a.CreatedAt,
-				&a.DueDate, &a.Priority, &a.CompletedAt, &a.ContactName); err != nil {
-				respondError(w, http.StatusInternalServerError, "scan error")
+			if err := rows.Scan(&a.ID, &a.ContactID, &a.DealID, &a.PropertyID, &a.AgentID, &a.Type, &a.Body, &a.CreatedAt,
+				&a.DueDate, &a.Priority, &a.CompletedAt, &a.ContactName, &a.PropertyAddress); err != nil {
+				respondErrorWithCode(w, http.StatusInternalServerError, "scan error", ErrCodeDatabase)
 				return
 			}
 			activities = append(activities, a)
@@ -140,41 +147,55 @@ func CreateGeneralActivity(pool *pgxpool.Pool) http.HandlerFunc {
 		agentID := middleware.AgentUUIDFromContext(r.Context())
 
 		var body struct {
-			Type      string  `json:"type"`
-			Body      *string `json:"body"`
-			DealID    *string `json:"deal_id"`
-			ContactID *string `json:"contact_id"`
-			DueDate   *string `json:"due_date"`
-			Priority  *string `json:"priority"`
+			Type       string  `json:"type"`
+			Body       *string `json:"body"`
+			DealID     *string `json:"deal_id"`
+			PropertyID *string `json:"property_id"`
+			ContactID  *string `json:"contact_id"`
+			DueDate    *string `json:"due_date"`
+			Priority   *string `json:"priority"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respondError(w, http.StatusBadRequest, "invalid JSON")
+			respondErrorWithCode(w, http.StatusBadRequest, "invalid JSON", ErrCodeBadRequest)
 			return
 		}
 		validTypes := map[string]bool{"call": true, "email": true, "note": true, "showing": true, "task": true}
 		if !validTypes[body.Type] {
-			respondError(w, http.StatusBadRequest, "type must be one of: call, email, note, showing, task")
+			respondErrorWithCode(w, http.StatusBadRequest, "type must be one of: call, email, note, showing, task", ErrCodeBadRequest)
 			return
+		}
+		if body.Body != nil {
+			if err := validateMaxLen("body", *body.Body, 10000); err != nil {
+				respondErrorWithCode(w, http.StatusBadRequest, err.Error(), ErrCodeBadRequest)
+				return
+			}
 		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
 
 		var a Activity
 		err = tx.QueryRow(r.Context(),
-			`INSERT INTO activities (contact_id, deal_id, agent_id, type, body, due_date, priority)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7)
-			 RETURNING id, contact_id, deal_id, agent_id, type, body, created_at, due_date::text, priority, completed_at`,
-			body.ContactID, body.DealID, agentID, body.Type, body.Body, body.DueDate, body.Priority,
-		).Scan(&a.ID, &a.ContactID, &a.DealID, &a.AgentID, &a.Type, &a.Body, &a.CreatedAt,
+			`INSERT INTO activities (contact_id, deal_id, property_id, agent_id, type, body, due_date, priority)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			 RETURNING id, contact_id, deal_id, property_id, agent_id, type, body, created_at, due_date::text, priority, completed_at`,
+			body.ContactID, body.DealID, body.PropertyID, agentID, body.Type, body.Body, body.DueDate, body.Priority,
+		).Scan(&a.ID, &a.ContactID, &a.DealID, &a.PropertyID, &a.AgentID, &a.Type, &a.Body, &a.CreatedAt,
 			&a.DueDate, &a.Priority, &a.CompletedAt)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "create failed")
+			respondErrorWithCode(w, http.StatusInternalServerError, "create failed", ErrCodeDatabase)
 			return
+		}
+
+		// Recompute lead score only when activity is linked to a contact
+		if body.ContactID != nil {
+			if err := scoring.ComputeLeadScore(r.Context(), tx, *body.ContactID); err != nil {
+				log.Printf("scoring: ComputeLeadScore failed for contact %s: %v", *body.ContactID, err)
+			}
 		}
 
 		tx.Commit(r.Context())
@@ -189,40 +210,52 @@ func CreateActivity(pool *pgxpool.Pool) http.HandlerFunc {
 		contactID := chi.URLParam(r, "id")
 
 		var body struct {
-			Type     string  `json:"type"`
-			Body     *string `json:"body"`
-			DealID   *string `json:"deal_id"`
-			DueDate  *string `json:"due_date"`
-			Priority *string `json:"priority"`
+			Type       string  `json:"type"`
+			Body       *string `json:"body"`
+			DealID     *string `json:"deal_id"`
+			PropertyID *string `json:"property_id"`
+			DueDate    *string `json:"due_date"`
+			Priority   *string `json:"priority"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respondError(w, http.StatusBadRequest, "invalid JSON")
+			respondErrorWithCode(w, http.StatusBadRequest, "invalid JSON", ErrCodeBadRequest)
 			return
 		}
 		validTypes := map[string]bool{"call": true, "email": true, "note": true, "showing": true, "task": true}
 		if !validTypes[body.Type] {
-			respondError(w, http.StatusBadRequest, "type must be one of: call, email, note, showing, task")
+			respondErrorWithCode(w, http.StatusBadRequest, "type must be one of: call, email, note, showing, task", ErrCodeBadRequest)
 			return
+		}
+		if body.Body != nil {
+			if err := validateMaxLen("body", *body.Body, 10000); err != nil {
+				respondErrorWithCode(w, http.StatusBadRequest, err.Error(), ErrCodeBadRequest)
+				return
+			}
 		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
 
 		var a Activity
 		err = tx.QueryRow(r.Context(),
-			`INSERT INTO activities (contact_id, deal_id, agent_id, type, body, due_date, priority)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7)
-			 RETURNING id, contact_id, deal_id, agent_id, type, body, created_at, due_date::text, priority, completed_at`,
-			contactID, body.DealID, agentID, body.Type, body.Body, body.DueDate, body.Priority,
-		).Scan(&a.ID, &a.ContactID, &a.DealID, &a.AgentID, &a.Type, &a.Body, &a.CreatedAt,
+			`INSERT INTO activities (contact_id, deal_id, property_id, agent_id, type, body, due_date, priority)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			 RETURNING id, contact_id, deal_id, property_id, agent_id, type, body, created_at, due_date::text, priority, completed_at`,
+			contactID, body.DealID, body.PropertyID, agentID, body.Type, body.Body, body.DueDate, body.Priority,
+		).Scan(&a.ID, &a.ContactID, &a.DealID, &a.PropertyID, &a.AgentID, &a.Type, &a.Body, &a.CreatedAt,
 			&a.DueDate, &a.Priority, &a.CompletedAt)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "create failed")
+			respondErrorWithCode(w, http.StatusInternalServerError, "create failed", ErrCodeDatabase)
 			return
+		}
+
+		// Recompute lead score for the contact
+		if err := scoring.ComputeLeadScore(r.Context(), tx, contactID); err != nil {
+			log.Printf("scoring: ComputeLeadScore failed for contact %s: %v", contactID, err)
 		}
 
 		tx.Commit(r.Context())
@@ -243,13 +276,13 @@ func UpdateActivity(pool *pgxpool.Pool) http.HandlerFunc {
 			CompletedAt *string `json:"completed_at"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respondError(w, http.StatusBadRequest, "invalid JSON")
+			respondErrorWithCode(w, http.StatusBadRequest, "invalid JSON", ErrCodeBadRequest)
 			return
 		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -293,7 +326,7 @@ func UpdateActivity(pool *pgxpool.Pool) http.HandlerFunc {
 		}
 
 		if len(setClauses) == 0 {
-			respondError(w, http.StatusBadRequest, "no fields to update")
+			respondErrorWithCode(w, http.StatusBadRequest, "no fields to update", ErrCodeBadRequest)
 			return
 		}
 
@@ -301,17 +334,17 @@ func UpdateActivity(pool *pgxpool.Pool) http.HandlerFunc {
 
 		query := fmt.Sprintf(
 			`UPDATE activities SET %s WHERE id = $%d AND agent_id = $%d
-			 RETURNING id, contact_id, deal_id, agent_id, type, body, created_at, due_date::text, priority, completed_at`,
+			 RETURNING id, contact_id, deal_id, property_id, agent_id, type, body, created_at, due_date::text, priority, completed_at`,
 			joinStrings(setClauses, ", "), argIdx, argIdx+1,
 		)
 
 		var a Activity
 		err = tx.QueryRow(r.Context(), query, args...).Scan(
-			&a.ID, &a.ContactID, &a.DealID, &a.AgentID, &a.Type, &a.Body, &a.CreatedAt,
+			&a.ID, &a.ContactID, &a.DealID, &a.PropertyID, &a.AgentID, &a.Type, &a.Body, &a.CreatedAt,
 			&a.DueDate, &a.Priority, &a.CompletedAt,
 		)
 		if err != nil {
-			respondError(w, http.StatusNotFound, "activity not found")
+			respondErrorWithCode(w, http.StatusNotFound, "activity not found", ErrCodeNotFound)
 			return
 		}
 
@@ -338,7 +371,7 @@ func ListTasks(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -365,7 +398,7 @@ func ListTasks(pool *pgxpool.Pool) http.HandlerFunc {
 			args...,
 		).Scan(&total)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "count error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "count error", ErrCodeDatabase)
 			return
 		}
 
@@ -374,18 +407,20 @@ func ListTasks(pool *pgxpool.Pool) http.HandlerFunc {
 		offsetIdx := argIdx + 1
 		args = append(args, limit, offset)
 		rows, err := tx.Query(r.Context(),
-			fmt.Sprintf(`SELECT a.id, a.contact_id, a.deal_id, a.agent_id, a.type, a.body, a.created_at,
+			fmt.Sprintf(`SELECT a.id, a.contact_id, a.deal_id, a.property_id, a.agent_id, a.type, a.body, a.created_at,
 			       a.due_date::text, a.priority, a.completed_at,
-			       c.first_name || ' ' || c.last_name AS contact_name
+			       c.first_name || ' ' || c.last_name AS contact_name,
+			       COALESCE(p.address, '') as property_address
 			 FROM activities a
 			 LEFT JOIN contacts c ON c.id = a.contact_id
+			 LEFT JOIN properties p ON p.id = a.property_id
 			 WHERE %s
 			 ORDER BY a.due_date ASC NULLS LAST, a.created_at DESC
 			 LIMIT $%d OFFSET $%d`, whereExpr, limitIdx, offsetIdx),
 			args...,
 		)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "query error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "query error", ErrCodeDatabase)
 			return
 		}
 		defer rows.Close()
@@ -393,9 +428,9 @@ func ListTasks(pool *pgxpool.Pool) http.HandlerFunc {
 		tasks := make([]Activity, 0)
 		for rows.Next() {
 			var a Activity
-			if err := rows.Scan(&a.ID, &a.ContactID, &a.DealID, &a.AgentID, &a.Type, &a.Body, &a.CreatedAt,
-				&a.DueDate, &a.Priority, &a.CompletedAt, &a.ContactName); err != nil {
-				respondError(w, http.StatusInternalServerError, "scan error")
+			if err := rows.Scan(&a.ID, &a.ContactID, &a.DealID, &a.PropertyID, &a.AgentID, &a.Type, &a.Body, &a.CreatedAt,
+				&a.DueDate, &a.Priority, &a.CompletedAt, &a.ContactName, &a.PropertyAddress); err != nil {
+				respondErrorWithCode(w, http.StatusInternalServerError, "scan error", ErrCodeDatabase)
 				return
 			}
 			tasks = append(tasks, a)

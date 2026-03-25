@@ -1,0 +1,26 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "frontend",
+      "runtimeExecutable": "/opt/homebrew/bin/npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "frontend",
+      "port": 3000
+    },
+    {
+      "name": "backend",
+      "runtimeExecutable": "/opt/homebrew/bin/go",
+      "runtimeArgs": ["run", "./cmd/api"],
+      "cwd": "backend",
+      "port": 8080
+    },
+    {
+      "name": "ai-service",
+      "runtimeExecutable": "/Library/Frameworks/Python.framework/Versions/3.13/bin/uvicorn",
+      "runtimeArgs": ["app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"],
+      "cwd": "ai-service",
+      "port": 8000
+    }
+  ]
+}

@@ -6,13 +6,11 @@ import (
 	"github.com/rs/cors"
 )
 
-// CORSHandler returns an HTTP middleware that applies permissive-but-secure CORS
-// headers suitable for a production API. Adjust AllowedOrigins before deploying.
-func CORSHandler() func(http.Handler) http.Handler {
+// CORSHandler returns an HTTP middleware that restricts cross-origin requests
+// to the specified allowed origins. Pass your frontend URL(s) here.
+func CORSHandler(allowedOrigins []string) func(http.Handler) http.Handler {
 	c := cors.New(cors.Options{
-		// In production replace the wildcard with your actual frontend origin(s),
-		// e.g. []string{"https://app.example.com"}.
-		AllowedOrigins: []string{"*"},
+		AllowedOrigins: allowedOrigins,
 		AllowedMethods: []string{
 			http.MethodGet,
 			http.MethodPost,

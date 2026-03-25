@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -11,32 +12,36 @@ import (
 
 	"crm-api/internal/database"
 	"crm-api/internal/middleware"
+	"crm-api/internal/scoring"
 )
 
 type Deal struct {
-	ID              string    `json:"id"`
-	ContactID       string    `json:"contact_id"`
-	AgentID         string    `json:"agent_id"`
-	StageID         *string   `json:"stage_id"`
-	Title           string    `json:"title"`
-	Value           *float64  `json:"value"`
-	Notes           *string   `json:"notes"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
-	ContactName     string    `json:"contact_name"`
-	StageName       string    `json:"stage_name"`
-	StageColor      string    `json:"stage_color"`
-	PropertyID      *string   `json:"property_id"`
-	PropertyAddress string    `json:"property_address"`
+	ID              string     `json:"id"`
+	ContactID       string     `json:"contact_id"`
+	AgentID         string     `json:"agent_id"`
+	StageID         *string    `json:"stage_id"`
+	Title           string     `json:"title"`
+	Value           *float64   `json:"value"`
+	Notes           *string    `json:"notes"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+	StageEnteredAt  *time.Time `json:"stage_entered_at"`
+	ContactName     string     `json:"contact_name"`
+	StageName       string     `json:"stage_name"`
+	StageColor      string     `json:"stage_color"`
+	PropertyID      *string    `json:"property_id"`
+	PropertyAddress string     `json:"property_address"`
+	LastActivityAt  *time.Time `json:"last_activity_at"`
 }
 
 const dealSelectSQL = `
-SELECT d.id, d.contact_id, d.agent_id, d.stage_id, d.title, d.value, d.notes, d.created_at, d.updated_at,
+SELECT d.id, d.contact_id, d.agent_id, d.stage_id, d.title, d.value, d.notes, d.created_at, d.updated_at, d.stage_entered_at,
        c.first_name || ' ' || c.last_name AS contact_name,
        COALESCE(ds.name, '')              AS stage_name,
        COALESCE(ds.color, '')             AS stage_color,
        d.property_id,
-       COALESCE(p.address, '')            AS property_address
+       COALESCE(p.address, '')            AS property_address,
+       (SELECT MAX(a.created_at) FROM activities a WHERE a.contact_id = d.contact_id) AS last_activity_at
 FROM deals d
 JOIN contacts c ON c.id = d.contact_id
 LEFT JOIN deal_stages ds ON ds.id = d.stage_id
@@ -44,7 +49,7 @@ LEFT JOIN properties p ON p.id = d.property_id`
 
 func scanDeal(row interface{ Scan(...any) error }) (Deal, error) {
 	var d Deal
-	err := row.Scan(&d.ID, &d.ContactID, &d.AgentID, &d.StageID, &d.Title, &d.Value, &d.Notes, &d.CreatedAt, &d.UpdatedAt, &d.ContactName, &d.StageName, &d.StageColor, &d.PropertyID, &d.PropertyAddress)
+	err := row.Scan(&d.ID, &d.ContactID, &d.AgentID, &d.StageID, &d.Title, &d.Value, &d.Notes, &d.CreatedAt, &d.UpdatedAt, &d.StageEnteredAt, &d.ContactName, &d.StageName, &d.StageColor, &d.PropertyID, &d.PropertyAddress, &d.LastActivityAt)
 	return d, err
 }
 
@@ -56,7 +61,7 @@ func ListDeals(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -75,7 +80,7 @@ func ListDeals(pool *pgxpool.Pool) http.HandlerFunc {
 		sql := dealSelectSQL + " WHERE " + whereExpr + " ORDER BY d.created_at DESC"
 		rows, err := tx.Query(r.Context(), sql, args...)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "query error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "query error", ErrCodeDatabase)
 			return
 		}
 		defer rows.Close()
@@ -84,7 +89,7 @@ func ListDeals(pool *pgxpool.Pool) http.HandlerFunc {
 		for rows.Next() {
 			d, err := scanDeal(rows)
 			if err != nil {
-				respondError(w, http.StatusInternalServerError, "scan error")
+				respondErrorWithCode(w, http.StatusInternalServerError, "scan error", ErrCodeDatabase)
 				return
 			}
 			deals = append(deals, d)
@@ -105,7 +110,7 @@ func GetDeal(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -113,7 +118,7 @@ func GetDeal(pool *pgxpool.Pool) http.HandlerFunc {
 		row := tx.QueryRow(r.Context(), dealSelectSQL+" WHERE d.id = $1", id)
 		d, err := scanDeal(row)
 		if err != nil {
-			respondError(w, http.StatusNotFound, "deal not found")
+			respondErrorWithCode(w, http.StatusNotFound, "deal not found", ErrCodeNotFound)
 			return
 		}
 
@@ -134,37 +139,47 @@ func CreateDeal(pool *pgxpool.Pool) http.HandlerFunc {
 			Notes     *string  `json:"notes"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respondError(w, http.StatusBadRequest, "invalid JSON")
+			respondErrorWithCode(w, http.StatusBadRequest, "invalid JSON", ErrCodeBadRequest)
 			return
 		}
 		if body.ContactID == "" || body.StageID == "" || body.Title == "" {
-			respondError(w, http.StatusBadRequest, "contact_id, stage_id, and title are required")
+			respondErrorWithCode(w, http.StatusBadRequest, "contact_id, stage_id, and title are required", ErrCodeBadRequest)
 			return
+		}
+		if err := validateMaxLen("title", body.Title, 200); err != nil {
+			respondErrorWithCode(w, http.StatusBadRequest, err.Error(), ErrCodeBadRequest)
+			return
+		}
+		if body.Notes != nil {
+			if err := validateMaxLen("notes", *body.Notes, 5000); err != nil {
+				respondErrorWithCode(w, http.StatusBadRequest, err.Error(), ErrCodeBadRequest)
+				return
+			}
 		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
 
 		var newID string
 		err = tx.QueryRow(r.Context(),
-			`INSERT INTO deals (contact_id, agent_id, stage_id, title, value, notes)
-			 VALUES ($1, $2, $3, $4, $5, $6)
+			`INSERT INTO deals (contact_id, agent_id, stage_id, title, value, notes, stage_entered_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, NOW())
 			 RETURNING id`,
 			body.ContactID, agentID, body.StageID, body.Title, body.Value, body.Notes,
 		).Scan(&newID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "create failed")
+			respondErrorWithCode(w, http.StatusInternalServerError, "create failed", ErrCodeDatabase)
 			return
 		}
 
 		row := tx.QueryRow(r.Context(), dealSelectSQL+" WHERE d.id = $1", newID)
 		d, err := scanDeal(row)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "fetch after create failed")
+			respondErrorWithCode(w, http.StatusInternalServerError, "fetch after create failed", ErrCodeDatabase)
 			return
 		}
 
@@ -180,19 +195,50 @@ func UpdateDeal(pool *pgxpool.Pool) http.HandlerFunc {
 
 		var body map[string]interface{}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respondError(w, http.StatusBadRequest, "invalid JSON")
+			respondErrorWithCode(w, http.StatusBadRequest, "invalid JSON", ErrCodeBadRequest)
 			return
+		}
+		if title, ok := body["title"].(string); ok {
+			if err := validateMaxLen("title", title, 200); err != nil {
+				respondErrorWithCode(w, http.StatusBadRequest, err.Error(), ErrCodeBadRequest)
+				return
+			}
+		}
+		if notes, ok := body["notes"].(string); ok {
+			if err := validateMaxLen("notes", notes, 5000); err != nil {
+				respondErrorWithCode(w, http.StatusBadRequest, err.Error(), ErrCodeBadRequest)
+				return
+			}
 		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
 
 		setClauses := "updated_at = NOW()"
 		args := []interface{}{}
+
+		// Check if stage is changing — only update stage_entered_at on actual stage change
+		if newStageID, ok := body["stage_id"]; ok {
+			var currentStageID *string
+			err := tx.QueryRow(r.Context(), "SELECT stage_id FROM deals WHERE id = $1", id).Scan(&currentStageID)
+			if err != nil {
+				respondErrorWithCode(w, http.StatusNotFound, "deal not found", ErrCodeNotFound)
+				return
+			}
+			currentStr := ""
+			if currentStageID != nil {
+				currentStr = *currentStageID
+			}
+			newStr, _ := newStageID.(string)
+			if newStr != currentStr {
+				setClauses += ", stage_entered_at = NOW()"
+			}
+		}
+
 		allowed := []string{"stage_id", "title", "value", "notes", "contact_id", "property_id"}
 		for _, field := range allowed {
 			if val, ok := body[field]; ok {
@@ -208,15 +254,20 @@ func UpdateDeal(pool *pgxpool.Pool) http.HandlerFunc {
 			args...,
 		).Scan(&newID)
 		if err != nil {
-			respondError(w, http.StatusNotFound, "deal not found")
+			respondErrorWithCode(w, http.StatusNotFound, "deal not found", ErrCodeNotFound)
 			return
 		}
 
 		row := tx.QueryRow(r.Context(), dealSelectSQL+" WHERE d.id = $1", newID)
 		d, err := scanDeal(row)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "fetch after update failed")
+			respondErrorWithCode(w, http.StatusInternalServerError, "fetch after update failed", ErrCodeDatabase)
 			return
+		}
+
+		// Recompute lead score for the deal's contact after stage change
+		if err := scoring.ComputeLeadScore(r.Context(), tx, d.ContactID); err != nil {
+			log.Printf("scoring: ComputeLeadScore failed for contact %s: %v", d.ContactID, err)
 		}
 
 		tx.Commit(r.Context())
@@ -231,15 +282,28 @@ func DeleteDeal(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
 
+		// Fetch contact_id before deleting so we can recompute score after
+		var contactID string
+		err = tx.QueryRow(r.Context(), `SELECT contact_id FROM deals WHERE id = $1`, id).Scan(&contactID)
+		if err != nil {
+			respondErrorWithCode(w, http.StatusNotFound, "deal not found", ErrCodeNotFound)
+			return
+		}
+
 		result, err := tx.Exec(r.Context(), `DELETE FROM deals WHERE id = $1`, id)
 		if err != nil || result.RowsAffected() == 0 {
-			respondError(w, http.StatusNotFound, "deal not found")
+			respondErrorWithCode(w, http.StatusNotFound, "deal not found", ErrCodeNotFound)
 			return
+		}
+
+		// Recompute lead score after deal deletion
+		if err := scoring.ComputeLeadScore(r.Context(), tx, contactID); err != nil {
+			log.Printf("scoring: ComputeLeadScore failed for contact %s: %v", contactID, err)
 		}
 
 		tx.Commit(r.Context())

@@ -101,6 +101,10 @@ const config: Config = {
           "0%, 100%": { transform: "scale(1)", opacity: "0.12" },
           "50%": { transform: "scale(1.15)", opacity: "0.18" },
         },
+        "comm-fade-in": {
+          "0%": { opacity: "0", transform: "translateY(4px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
       },
       animation: {
         wiggle: "wiggle 0.35s ease-in-out infinite",
@@ -115,6 +119,7 @@ const config: Config = {
         "spotlight-pulse": "spotlight-pulse 4s ease-in-out infinite",
         "card-drift": "card-drift 12s ease-in-out infinite",
         "orb-breathe": "orb-breathe 4s ease-in-out infinite",
+        "comm-fade-in": "comm-fade-in 0.2s ease-out",
       },
     },
   },

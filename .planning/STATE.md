@@ -2,60 +2,93 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 3
-status: completed
-last_updated: "2026-03-17T14:48:36.562Z"
+status: v1.0 milestone complete
+stopped_at: Completed quick/260325-dfy-PLAN.md
+last_updated: "2026-03-25T13:49:08.973Z"
+last_activity: "2026-03-25 - Completed quick task 260325-dg5: Add get_lead_score AI tool, tests, and Brief Me prompt update"
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 3
-  completed_plans: 3
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
-# Project State: CloAgent Tool Routing
+# Project State
 
-**Current Phase:** 3
-**Status:** Milestone complete
-**Last Updated:** 2026-03-17
+## Project Reference
 
----
+See: .planning/PROJECT.md (updated 2026-03-24)
 
-## Phase Progress
+**Core value:** When a user references a contact by any natural description, the AI finds the right contact and acts on it — every time.
+**Current focus:** v1.0 milestone complete — planning next milestone
 
-| Phase | Name | Status | Started | Completed |
-|-------|------|--------|---------|-----------|
-| 1 | Integration & Structure | NOT STARTED | — | — |
-| 2 | Tool Defaults & Routing Rules | BLOCKED (depends on Phase 1) | — | — |
-| 3 | Hard Constraints & Exclusions | BLOCKED (depends on Phase 1) | — | — |
+## Current Position
 
-## Requirement Status
+Phase: 02
+Plan: Not started
 
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| INTG-01 | 1 | Pending |
-| INTG-02 | 1 | Pending |
-| TOOL-01 | 2 | Pending |
-| TOOL-02 | 2 | Pending |
-| TOOL-03 | 2 | Pending |
-| TOOL-04 | 2 | Pending |
-| TOOL-05 | 2 | Pending |
-| CNST-01 | 3 | Pending |
-| CNST-02 | 3 | Pending |
-| CNST-03 | 3 | Pending |
+## Performance Metrics
 
-## Completed Phases
+**Velocity:**
 
-(none yet)
+- Total plans completed: 0
+- Average duration: -
+- Total execution time: 0 hours
 
-## Blockers
+**By Phase:**
 
-(none)
+| Phase | Plans | Total | Avg/Plan |
+|-------|-------|-------|----------|
+| - | - | - | - |
 
-## Notes
+**Recent Trend:**
 
-- All work targets a single file: CLAUDE.md
-- No application code changes required
-- Research phase identified path-based routing as the primary signal
+- Last 5 plans: -
+- Trend: -
 
----
-*Initialized: 2026-03-17*
+*Updated after each plan completion*
+| Phase 01-core-resolution-protocol P01 | 1 | 2 tasks | 2 files |
+| Phase 02-context-awareness-and-hardening P01 | 8 | 2 tasks | 1 files |
+
+## Accumulated Context
+
+### Decisions
+
+Decisions are logged in PROJECT.md Key Decisions table.
+Recent decisions affecting current work:
+
+- Fix via system prompt + tool descriptions first (cheapest, fastest; search SQL already works)
+- Keep Haiku 4.5 model (cost/speed constraints for real-time chat)
+- [Phase 01-core-resolution-protocol]: Used XML tags (<contact_resolution>) for behavioral contract in system prompt — XML triggers native pattern recognition in Claude Haiku 4.5
+- [Phase 01-core-resolution-protocol]: Contact resolution protocol placed before IMPORTANT GUIDELINES for maximum Haiku attention (early placement is critical for instruction following)
+- [Phase 02-context-awareness-and-hardening]: Rule 8 added as standalone (not merged into Rule 6) — keeps pronoun resolution atomic and separately testable
+- [Phase 02-context-awareness-and-hardening]: Full 20-message window used for pronoun lookback — no arbitrary limit, 'earlier in this conversation' instructs Haiku naturally
+- [Phase quick-260325-dad]: SELECT-before-UPDATE pattern for previous-value capture; column list built from inp.keys() to only fetch fields being updated
+
+### Pending Todos
+
+None yet.
+
+### Blockers/Concerns
+
+- Token budget risk: adding ~610 tokens to a 200+ line system prompt may degrade Haiku instruction-following for rules mid-document. Mitigated by XML tags and top-of-prompt placement — validate during Phase 1 testing.
+- Parallel tool call behavior: confirm no parallel search+write calls occur after prompt changes ship.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260325-d4c | Add AUTO_EXECUTE_TOOLS set and agent loop third branch for auto-executing safe write tools | 2026-03-25 | 23a8ee0 | [260325-d4c-add-auto-execute-tools-set-and-agent-loo](./quick/260325-d4c-add-auto-execute-tools-set-and-agent-loo/) |
+| 260325-dat | Add sort=score to ListContacts and GoingColdCount endpoint (lead scoring Step 4) | 2026-03-25 | 8516489 | [260325-dat-add-sort-score-to-listcontacts-and-going](./quick/260325-dat-add-sort-score-to-listcontacts-and-going/) |
+| 260325-dad | Add previous values to update functions for undo support | 2026-03-25 | e5e1fe9 | [260325-dad-add-previous-values-to-update-functions-](./quick/260325-dad-add-previous-values-to-update-functions-/) |
+| 260325-dg5 | Add get_lead_score AI tool, tests, and Brief Me prompt update | 2026-03-25 | d5d752a | [260325-dg5-step-5-of-lead-scoring-add-get-lead-scor](./quick/260325-dg5-step-5-of-lead-scoring-add-get-lead-scor/) |
+| 260325-dfy | Server-side undo stack for auto-executed AI actions with Go proxy and frontend UI cards | 2026-03-25 | 34f6f42 | [260325-dfy-server-side-undo-stack-for-auto-executed](./quick/260325-dfy-server-side-undo-stack-for-auto-executed/) |
+| 260325-dqz | Create ScoreBadge component with tier colors, size variants, and change arrows (lead scoring Step 7) | 2026-03-25 | 6c97ffd | [260325-dqz-create-scorebadge-component-with-tier-co](./quick/260325-dqz-create-scorebadge-component-with-tier-co/) |
+| 260325-e4t | Add ScoreBadge to contact detail page header (expandable breakdown) and pipeline deal cards (compact, gated) | 2026-03-25 | ebc7606 | [260325-e4t-step-10-add-scorebadge-to-contact-detail](./quick/260325-e4t-step-10-add-scorebadge-to-contact-detail/) |
+
+## Session Continuity
+
+Last activity: 2026-03-25 - Completed quick task 260325-e4t: Add ScoreBadge to contact detail page and pipeline deal cards
+Last session: 2026-03-25T14:15:00.000Z
+Stopped at: Completed quick/260325-e4t-PLAN.md
+Resume file: None

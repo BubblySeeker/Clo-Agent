@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"crypto/subtle"
 	"net/http"
 	"strings"
 
@@ -27,9 +28,27 @@ func UserIDFromContext(ctx context.Context) string {
 // ClerkAuth returns an HTTP middleware that validates Clerk session tokens supplied
 // as Bearer tokens in the Authorization header. On success the verified user ID is
 // injected into the request context. On failure a 401 is returned immediately.
-func ClerkAuth(client clerk.Client) func(http.Handler) http.Handler {
+//
+// Service-to-service bypass: if the request carries an X-AI-Service-Secret header
+// matching serviceSecret, Clerk JWT validation is skipped and the X-Agent-ID header
+// is used as the authenticated identity instead. This supports AI service → Go
+// backend proxy calls (e.g., send_email tool).
+func ClerkAuth(client clerk.Client, serviceSecret string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Internal service-to-service authentication bypass.
+			if svcSecret := r.Header.Get("X-AI-Service-Secret"); svcSecret != "" && serviceSecret != "" && subtle.ConstantTimeCompare([]byte(svcSecret), []byte(serviceSecret)) == 1 {
+				agentID := r.Header.Get("X-Agent-ID")
+				if agentID == "" {
+					http.Error(w, "X-Agent-ID header is required for service auth", http.StatusBadRequest)
+					return
+				}
+				ctx := context.WithValue(r.Context(), UserIDKey, agentID)
+				ctx = context.WithValue(ctx, AgentUUIDKey, agentID)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
 				http.Error(w, "Authorization header is required", http.StatusUnauthorized)

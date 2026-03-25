@@ -1,16 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getContact, updateContact, deleteContact } from "@/lib/api/contacts";
+import { getContact, updateContact, deleteContact, getLeadScoreExplanation } from "@/lib/api/contacts";
 import type { UpdateContactBody } from "@/lib/api/contacts";
+import { getSettings } from "@/lib/api/settings";
+import { ScoreBadge } from "@/app/dashboard/components/score-badge";
 import { listActivities, createActivity } from "@/lib/api/activities";
 import { listDeals } from "@/lib/api/deals";
 import { getBuyerProfile, createBuyerProfile, updateBuyerProfile } from "@/lib/api/buyer-profiles";
 import type { CreateBuyerProfileBody } from "@/lib/api/buyer-profiles";
 import { getAIProfile, regenerateAIProfile } from "@/lib/api/ai-profiles";
+import { createPortalInvite, listPortalInvites, revokePortalInvite, type PortalToken } from "@/lib/api/portal";
+import { listDocuments, uploadDocument, deleteDocument, type Document as DocType } from "@/lib/api/documents";
+import { listEmails, type Email } from "@/lib/api/gmail";
+import { listContactFolders } from "@/lib/api/contact-folders";
 import { useUIStore } from "@/store/ui-store";
 import {
   Phone,
@@ -20,6 +26,7 @@ import {
   ChevronLeft,
   Home,
   ChevronDown,
+  ChevronUp,
   ChevronRight,
   Send,
   Edit2,
@@ -36,7 +43,34 @@ import {
   Plus,
   User,
   BedDouble,
+  Link2,
+  Copy,
+  Check,
+  ExternalLink,
+  Upload,
+  FileSpreadsheet,
+  File,
+  Download,
+  Loader2,
+  AlertCircle,
+  AlertTriangle,
+  FolderOpen,
 } from "lucide-react";
+
+function getFollowUpSuggestion(activities: any[]): string | null {
+  if (!activities || activities.length === 0) {
+    return "No activities recorded yet. Consider reaching out to make a first impression.";
+  }
+  const lastActivity = activities[0]; // sorted DESC by API
+  const daysSinceLast = Math.floor((Date.now() - new Date(lastActivity.created_at).getTime()) / 86400000);
+  if (daysSinceLast > 7) {
+    return `It\u2019s been ${daysSinceLast} days since your last interaction. Time for a follow-up.`;
+  }
+  if (lastActivity.type === "showing") {
+    return "Last activity was a showing. Follow up to get their thoughts on the property.";
+  }
+  return null;
+}
 
 const typeIconColors: Record<string, { bg: string; color: string }> = {
   call: { bg: "#EFF6FF", color: "#0EA5E9" },
@@ -80,7 +114,7 @@ function timeStr(dateStr: string) {
   });
 }
 
-const tabOptions = ["All Activity", "Calls", "Emails", "Notes", "Showings", "Buyer Profile", "AI Profile"];
+const tabOptions = ["All Activity", "Calls", "Emails", "Notes", "Showings", "Buyer Profile", "AI Profile", "Documents"];
 const tabTypeMap: Record<string, string> = {
   Calls: "call",
   Emails: "email",
@@ -108,10 +142,16 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
 
   // Edit contact modal
   const [showEdit, setShowEdit] = useState(false);
-  const [editForm, setEditForm] = useState({ first_name: "", last_name: "", email: "", phone: "", source: "" });
+  const [editForm, setEditForm] = useState({ first_name: "", last_name: "", email: "", phone: "", source: "", folder_id: "" });
 
   // Delete confirmation modal
   const [showDelete, setShowDelete] = useState(false);
+
+  // Portal sharing
+  const [showPortal, setShowPortal] = useState(false);
+  const [portalLoading, setPortalLoading] = useState(false);
+  const [portalInvites, setPortalInvites] = useState<PortalToken[]>([]);
+  const [copiedToken, setCopiedToken] = useState<string | null>(null);
 
   // Buyer profile editing
   const [editingBuyer, setEditingBuyer] = useState(false);
@@ -141,14 +181,58 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
     notes: "",
   });
 
+  // Document upload state
+  const [showDocUpload, setShowDocUpload] = useState(false);
+  const [docFile, setDocFile] = useState<File | null>(null);
+  const [isDraggingDoc, setIsDraggingDoc] = useState(false);
+
+  // Follow-up suggestion banner
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  // Score breakdown expansion
+  const [scoreExpanded, setScoreExpanded] = useState(false);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(`followup-dismiss-${id}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed.dismissed && parsed.expiresAt > Date.now()) {
+          setBannerDismissed(true);
+        } else {
+          localStorage.removeItem(`followup-dismiss-${id}`);
+        }
+      }
+    } catch {}
+  }, [id]);
+
+  const dismissBanner = () => {
+    setBannerDismissed(true);
+    try {
+      localStorage.setItem(`followup-dismiss-${id}`, JSON.stringify({
+        dismissed: true,
+        expiresAt: Date.now() + 86400000,
+      }));
+    } catch {}
+  };
+
   // --- Queries ---
-  const { data: contact, isLoading: contactLoading } = useQuery({
+  const { data: contact, isLoading: contactLoading, isError: contactError, refetch: refetchContact } = useQuery({
     queryKey: ["contact", id],
     queryFn: async () => {
       const token = await getToken();
       return getContact(token!, id);
     },
   });
+
+  const { data: settingsData } = useQuery({
+    queryKey: ["settings"],
+    queryFn: async () => {
+      const token = await getToken();
+      return getSettings(token!);
+    },
+  });
+  const showScores = settingsData?.show_lead_scores !== false;
 
   const typeFilter = tabTypeMap[activeTab];
   const { data: activitiesData } = useQuery({
@@ -158,6 +242,17 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
       return listActivities(token!, id, typeFilter);
     },
   });
+
+  // Fetch Gmail emails for this contact
+  const { data: contactEmailsData } = useQuery({
+    queryKey: ["contact-gmail-emails", id],
+    queryFn: async () => {
+      const token = await getToken();
+      if (!token) return { emails: [], total: 0 };
+      return listEmails(token, { contact_id: id, limit: 50 });
+    },
+  });
+  const contactEmails = contactEmailsData?.emails ?? [];
 
   const { data: dealsData } = useQuery({
     queryKey: ["deals", { contact_id: id }],
@@ -189,6 +284,35 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
 
   const aiProfileNotFound = aiProfileError && (aiProfileError as Error).message?.includes("404");
 
+  const { data: documentsData, isLoading: docsLoading } = useQuery({
+    queryKey: ["contact-documents", id],
+    queryFn: async () => {
+      const token = await getToken();
+      return listDocuments(token!, 1, 100, undefined, id);
+    },
+    refetchInterval: (query) => {
+      const docs = query.state.data?.documents;
+      return docs?.some((d: DocType) => d.status === "processing") ? 5000 : false;
+    },
+  });
+
+  const { data: foldersData } = useQuery({
+    queryKey: ["contact-folders"],
+    queryFn: async () => {
+      const token = await getToken();
+      return listContactFolders(token!);
+    },
+  });
+
+  const { data: scoreExplanation, isLoading: explanationLoading } = useQuery({
+    queryKey: ["lead-score-explanation", id],
+    queryFn: async () => {
+      const token = await getToken();
+      return getLeadScoreExplanation(token!, id);
+    },
+    enabled: scoreExpanded && showScores && (contact?.lead_score ?? 0) > 0,
+  });
+
   // --- Mutations ---
   const logMutation = useMutation({
     mutationFn: async () => {
@@ -218,7 +342,21 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["contact", id] });
+      queryClient.invalidateQueries({ queryKey: ["contacts"] });
+      queryClient.invalidateQueries({ queryKey: ["contact-folders"] });
       setShowEdit(false);
+    },
+  });
+
+  const folderChangeMutation = useMutation({
+    mutationFn: async (folderId: string | null) => {
+      const token = await getToken();
+      return updateContact(token!, id, { folder_id: folderId } as UpdateContactBody);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["contact", id] });
+      queryClient.invalidateQueries({ queryKey: ["contacts"] });
+      queryClient.invalidateQueries({ queryKey: ["contact-folders"] });
     },
   });
 
@@ -264,6 +402,28 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
     },
   });
 
+  const uploadDocMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const token = await getToken();
+      return uploadDocument(token!, file, { contactId: id });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["contact-documents", id] });
+      setShowDocUpload(false);
+      setDocFile(null);
+    },
+  });
+
+  const deleteDocMutation = useMutation({
+    mutationFn: async (docId: string) => {
+      const token = await getToken();
+      return deleteDocument(token!, docId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["contact-documents", id] });
+    },
+  });
+
   // --- Helpers ---
   const toggleExpand = (itemId: string) => {
     setExpandedItems((prev) => {
@@ -282,6 +442,7 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
       email: contact.email ?? "",
       phone: contact.phone ?? "",
       source: contact.source ?? "",
+      folder_id: contact.folder_id ?? "",
     });
     setShowEdit(true);
   };
@@ -293,6 +454,7 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
     body.email = editForm.email || undefined;
     body.phone = editForm.phone || undefined;
     body.source = editForm.source || undefined;
+    body.folder_id = editForm.folder_id || null;
     updateContactMutation.mutate(body);
   };
 
@@ -346,6 +508,51 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
   const deals = dealsData?.deals ?? [];
 
   // --- Action button handlers ---
+  // --- Portal helpers ---
+  const openPortalModal = async () => {
+    setShowPortal(true);
+    setPortalLoading(true);
+    try {
+      const token = await getToken();
+      const data = await listPortalInvites(token!);
+      setPortalInvites(data.invites.filter((inv) => inv.contact_id === id));
+    } catch {
+      setPortalInvites([]);
+    } finally {
+      setPortalLoading(false);
+    }
+  };
+
+  const generatePortalLink = async () => {
+    setPortalLoading(true);
+    try {
+      const token = await getToken();
+      const inv = await createPortalInvite(token!, id);
+      setPortalInvites((prev) => [inv, ...prev]);
+    } catch {
+      // silent
+    } finally {
+      setPortalLoading(false);
+    }
+  };
+
+  const revokeLink = async (tokenId: string) => {
+    try {
+      const token = await getToken();
+      await revokePortalInvite(token!, tokenId);
+      setPortalInvites((prev) => prev.filter((inv) => inv.id !== tokenId));
+    } catch {
+      // silent
+    }
+  };
+
+  const copyPortalUrl = (portalToken: string) => {
+    const url = `${window.location.origin}/portal/${portalToken}`;
+    navigator.clipboard.writeText(url);
+    setCopiedToken(portalToken);
+    setTimeout(() => setCopiedToken(null), 2000);
+  };
+
   const actionButtons = [
     {
       icon: Phone,
@@ -376,6 +583,17 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
       },
     },
   ];
+
+  if (contactError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full min-h-[400px] gap-4 p-6 text-center">
+        <p className="text-gray-600 font-medium">Failed to load contact</p>
+        <button onClick={() => refetchContact()} className="px-4 py-2 rounded-xl text-white text-sm font-semibold" style={{ backgroundColor: "#0EA5E9" }}>
+          Try again
+        </button>
+      </div>
+    );
+  }
 
   if (contactLoading) {
     return (
@@ -463,6 +681,19 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
                   ))}
                 </select>
               </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-500 mb-1 block">Folder</label>
+                <select
+                  value={editForm.folder_id}
+                  onChange={(e) => setEditForm({ ...editForm, folder_id: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200 bg-white"
+                >
+                  <option value="">Unfiled</option>
+                  {(foldersData?.folders ?? []).map((f) => (
+                    <option key={f.id} value={f.id}>{f.name}</option>
+                  ))}
+                </select>
+              </div>
             </div>
             <div className="flex justify-end gap-2 mt-5">
               <button
@@ -512,6 +743,112 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
         </div>
       )}
 
+      {/* Portal Share Modal */}
+      {showPortal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold" style={{ color: "#1E3A5F" }}>
+                Share Client Portal
+              </h3>
+              <button
+                onClick={() => setShowPortal(false)}
+                className="w-7 h-7 rounded-lg hover:bg-gray-100 flex items-center justify-center"
+              >
+                <X size={16} className="text-gray-400" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">
+              Generate a portal link so your client can view their deal progress,
+              properties, and activity timeline.
+            </p>
+
+            {portalLoading && portalInvites.length === 0 ? (
+              <div className="flex justify-center py-6">
+                <div className="animate-spin w-6 h-6 border-2 border-cyan-500 border-t-transparent rounded-full" />
+              </div>
+            ) : (
+              <>
+                {portalInvites.length > 0 ? (
+                  <div className="space-y-3 mb-4">
+                    {portalInvites.map((inv) => {
+                      const url = `${typeof window !== "undefined" ? window.location.origin : ""}/portal/${inv.token}`;
+                      const expiryDate = new Date(inv.expires_at).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      });
+                      return (
+                        <div
+                          key={inv.id}
+                          className="border border-gray-200 rounded-xl p-3"
+                        >
+                          <div className="flex items-center gap-2 mb-2">
+                            <input
+                              readOnly
+                              value={url}
+                              className="flex-1 text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-600 truncate"
+                            />
+                            <button
+                              onClick={() => copyPortalUrl(inv.token)}
+                              className="flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-medium bg-cyan-50 text-cyan-700 hover:bg-cyan-100 transition-colors"
+                            >
+                              {copiedToken === inv.token ? (
+                                <>
+                                  <Check size={12} /> Copied
+                                </>
+                              ) : (
+                                <>
+                                  <Copy size={12} /> Copy
+                                </>
+                              )}
+                            </button>
+                          </div>
+                          <div className="flex items-center justify-between text-xs text-gray-400">
+                            <span>Expires {expiryDate}</span>
+                            <div className="flex items-center gap-2">
+                              <a
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-cyan-600 hover:text-cyan-700 flex items-center gap-0.5"
+                              >
+                                <ExternalLink size={11} /> Preview
+                              </a>
+                              <button
+                                onClick={() => revokeLink(inv.id)}
+                                className="text-red-400 hover:text-red-600"
+                              >
+                                Revoke
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="bg-gray-50 rounded-xl p-6 text-center mb-4">
+                    <Link2 className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                    <p className="text-sm text-gray-500">
+                      No active portal links for this contact
+                    </p>
+                  </div>
+                )}
+                <button
+                  onClick={generatePortalLink}
+                  disabled={portalLoading}
+                  className="w-full py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 transition-colors"
+                  style={{ backgroundColor: "#0EA5E9" }}
+                >
+                  {portalLoading ? "Generating..." : "Generate New Link"}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       <button
         onClick={() => router.push("/dashboard/contacts")}
         className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-4 transition-colors"
@@ -544,6 +881,13 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
                     <Edit2 size={14} className="text-gray-400" />
                   </button>
                   <button
+                    onClick={openPortalModal}
+                    className="w-7 h-7 rounded-lg hover:bg-cyan-50 flex items-center justify-center transition-colors"
+                    title="Share portal link"
+                  >
+                    <Link2 size={14} className="text-cyan-500" />
+                  </button>
+                  <button
                     onClick={() => setShowDelete(true)}
                     className="w-7 h-7 rounded-lg hover:bg-red-50 flex items-center justify-center transition-colors"
                     title="Delete contact"
@@ -558,6 +902,54 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
                   >
                     {contact.source}
                   </span>
+                )}
+                {showScores && contact.lead_score > 0 && (
+                  <div className="flex flex-col items-center mt-1">
+                    <ScoreBadge
+                      score={contact.lead_score}
+                      previousScore={contact.previous_lead_score}
+                      onClick={(e) => { e.stopPropagation(); setScoreExpanded((prev) => !prev); }}
+                    />
+                    {scoreExpanded && (
+                      <div className="mt-2 w-full max-w-[260px] bg-gray-50 rounded-xl p-3 border border-gray-100 text-left">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-semibold text-gray-700">Score Breakdown</span>
+                          <button onClick={() => setScoreExpanded(false)} className="text-gray-400 hover:text-gray-600">
+                            <ChevronUp size={14} />
+                          </button>
+                        </div>
+                        {[
+                          { key: "engagement", label: "Engagement", max: 30, color: "#22C55E" },
+                          { key: "readiness", label: "Readiness", max: 30, color: "#0EA5E9" },
+                          { key: "velocity", label: "Velocity", max: 20, color: "#8B5CF6" },
+                          { key: "profile", label: "Profile", max: 20, color: "#F59E0B" },
+                        ].map((dim) => {
+                          const value = contact.lead_score_signals?.[dim.key] ?? 0;
+                          const pct = Math.round((value / dim.max) * 100);
+                          return (
+                            <div key={dim.key} className="mb-1.5 last:mb-0">
+                              <div className="flex justify-between text-xs mb-0.5">
+                                <span className="text-gray-600">{dim.label}</span>
+                                <span className="text-gray-400">{value}/{dim.max}</span>
+                              </div>
+                              <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: dim.color }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {explanationLoading && (
+                          <div className="mt-2 space-y-1">
+                            <div className="h-2.5 bg-gray-200 rounded animate-pulse w-full" />
+                            <div className="h-2.5 bg-gray-200 rounded animate-pulse w-4/5" />
+                          </div>
+                        )}
+                        {scoreExplanation && (
+                          <p className="mt-2 text-xs text-gray-500 italic leading-relaxed">{scoreExplanation}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
@@ -595,6 +987,20 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
               <div className="flex items-center gap-2 text-gray-600">
                 <span className="text-gray-400 text-xs">Source:</span>
                 {contact.source ?? "Unknown"}
+              </div>
+              <div className="flex items-center gap-2 text-gray-600">
+                <FolderOpen size={13} className="text-gray-400" />
+                <select
+                  value={contact.folder_id ?? ""}
+                  onChange={(e) => folderChangeMutation.mutate(e.target.value || null)}
+                  className="text-sm bg-transparent border-none outline-none cursor-pointer hover:text-sky-600 -ml-0.5 py-0"
+                  style={{ appearance: "auto" }}
+                >
+                  <option value="">Unfiled</option>
+                  {(foldersData?.folders ?? []).map((f) => (
+                    <option key={f.id} value={f.id}>{f.name}</option>
+                  ))}
+                </select>
               </div>
               <div className="flex items-center gap-2 text-gray-600">
                 <span className="text-gray-400 text-xs">Added:</span>
@@ -922,6 +1328,22 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
             ))}
           </div>
 
+          {/* Follow-up Suggestion Banner */}
+          {(() => {
+            const suggestion = getFollowUpSuggestion(activities);
+            const isActivityTab = !["Buyer Profile", "AI Profile", "Documents"].includes(activeTab);
+            if (!suggestion || bannerDismissed || !isActivityTab) return null;
+            return (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3">
+                <AlertTriangle size={16} className="text-amber-500 mt-0.5 shrink-0" />
+                <p className="text-sm text-amber-800 flex-1">{suggestion}</p>
+                <button onClick={dismissBanner} className="text-amber-400 hover:text-amber-600 shrink-0">
+                  <X size={14} />
+                </button>
+              </div>
+            );
+          })()}
+
           {/* Tab Content */}
           {activeTab === "Buyer Profile" ? (
             /* ── BUYER PROFILE TAB ── */
@@ -1228,6 +1650,221 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
                 </div>
               )}
             </div>
+          ) : activeTab === "Documents" ? (
+            /* ── DOCUMENTS TAB ── */
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
+              <div className="flex items-center justify-between p-6 pb-4">
+                <h4 className="text-lg font-bold flex items-center gap-2" style={{ color: "#1E3A5F" }}>
+                  <FileText size={18} className="text-sky-500" />
+                  Documents
+                </h4>
+                <button
+                  onClick={() => setShowDocUpload(true)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-semibold"
+                  style={{ backgroundColor: "#0EA5E9" }}
+                >
+                  <Upload size={14} />
+                  Upload Document
+                </button>
+              </div>
+
+              {/* Upload Modal */}
+              {showDocUpload && (
+                <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
+                  <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl">
+                    <div className="flex items-center justify-between mb-5">
+                      <h3 className="text-lg font-bold" style={{ color: "#1E3A5F" }}>Upload Document</h3>
+                      <button
+                        onClick={() => { setShowDocUpload(false); setDocFile(null); }}
+                        className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center"
+                      >
+                        <X size={16} className="text-gray-400" />
+                      </button>
+                    </div>
+                    <div
+                      className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
+                        isDraggingDoc ? "border-sky-400 bg-sky-50" : "border-gray-200 hover:border-gray-300"
+                      }`}
+                      onDragOver={(e) => { e.preventDefault(); setIsDraggingDoc(true); }}
+                      onDragLeave={() => setIsDraggingDoc(false)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setIsDraggingDoc(false);
+                        const file = e.dataTransfer.files[0];
+                        if (file) setDocFile(file);
+                      }}
+                    >
+                      {docFile ? (
+                        <div className="flex flex-col items-center gap-2">
+                          <FileText size={32} className="text-sky-500" />
+                          <p className="text-sm font-semibold text-gray-800">{docFile.name}</p>
+                          <p className="text-xs text-gray-400">{(docFile.size / 1024).toFixed(1)} KB</p>
+                          <button
+                            onClick={() => setDocFile(null)}
+                            className="text-xs text-red-500 hover:text-red-600 font-semibold mt-1"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center gap-2">
+                          <Upload size={32} className="text-gray-300" />
+                          <p className="text-sm text-gray-500">Drag and drop a file here, or</p>
+                          <label className="cursor-pointer px-4 py-2 rounded-xl text-sm font-semibold text-white" style={{ backgroundColor: "#0EA5E9" }}>
+                            Browse Files
+                            <input
+                              type="file"
+                              className="hidden"
+                              accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.png,.jpg,.jpeg"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) setDocFile(file);
+                              }}
+                            />
+                          </label>
+                          <p className="text-xs text-gray-400 mt-1">PDF, DOC, XLS, CSV, TXT, images</p>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex justify-end gap-2 mt-5">
+                      <button
+                        onClick={() => { setShowDocUpload(false); setDocFile(null); }}
+                        className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-500 hover:bg-gray-100 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => docFile && uploadDocMutation.mutate(docFile)}
+                        disabled={!docFile || uploadDocMutation.isPending}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-50"
+                        style={{ backgroundColor: "#0EA5E9" }}
+                      >
+                        {uploadDocMutation.isPending ? (
+                          <><Loader2 size={14} className="animate-spin" /> Uploading...</>
+                        ) : (
+                          <><Upload size={14} /> Upload</>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Document List */}
+              <div className="px-6 pb-6">
+                {docsLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 size={24} className="animate-spin text-gray-300" />
+                  </div>
+                ) : !documentsData?.documents?.length ? (
+                  <div className="flex flex-col items-center justify-center py-16 px-6">
+                    <div
+                      className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
+                      style={{ backgroundColor: "#EFF6FF" }}
+                    >
+                      <FileText size={28} className="text-sky-500" />
+                    </div>
+                    <h4 className="text-base font-bold mb-1" style={{ color: "#1E3A5F" }}>No Documents</h4>
+                    <p className="text-sm text-gray-400 mb-5 text-center max-w-xs">
+                      Upload documents related to this contact such as contracts, disclosures, or inspection reports.
+                    </p>
+                    <button
+                      onClick={() => setShowDocUpload(true)}
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-semibold"
+                      style={{ backgroundColor: "#0EA5E9" }}
+                    >
+                      <Upload size={14} />
+                      Upload Document
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {documentsData.documents.map((doc: DocType) => {
+                      const ext = doc.filename.split(".").pop()?.toLowerCase() ?? "";
+                      const isSpreadsheet = ["xls", "xlsx", "csv"].includes(ext);
+                      const isPdf = ext === "pdf";
+                      const DocIcon = isSpreadsheet ? FileSpreadsheet : isPdf ? FileText : File;
+                      const iconColor = isSpreadsheet ? "#22C55E" : isPdf ? "#EF4444" : "#6B7280";
+                      const iconBg = isSpreadsheet ? "#F0FDF4" : isPdf ? "#FEF2F2" : "#F3F4F6";
+
+                      const sizeStr = doc.file_size < 1024
+                        ? `${doc.file_size} B`
+                        : doc.file_size < 1024 * 1024
+                        ? `${(doc.file_size / 1024).toFixed(1)} KB`
+                        : `${(doc.file_size / (1024 * 1024)).toFixed(1)} MB`;
+
+                      return (
+                        <div
+                          key={doc.id}
+                          className="flex items-center gap-4 p-4 rounded-xl bg-gray-50 hover:bg-blue-50/50 transition-colors"
+                        >
+                          <div
+                            className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                            style={{ backgroundColor: iconBg }}
+                          >
+                            <DocIcon size={18} style={{ color: iconColor }} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-gray-800 truncate">{doc.filename}</p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-xs text-gray-400">{sizeStr}</span>
+                              <span className="text-xs text-gray-300">|</span>
+                              <span className="text-xs text-gray-400">
+                                {new Date(doc.created_at).toLocaleDateString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                })}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {doc.status === "processing" && (
+                              <span className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-50 text-amber-600">
+                                <Loader2 size={10} className="animate-spin" />
+                                Processing
+                              </span>
+                            )}
+                            {doc.status === "ready" && (
+                              <span className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-green-50 text-green-600">
+                                <CheckCircle2 size={10} />
+                                Ready
+                              </span>
+                            )}
+                            {doc.status === "failed" && (
+                              <span className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-red-50 text-red-600" title={doc.error_message ?? "Processing failed"}>
+                                <AlertCircle size={10} />
+                                Failed
+                              </span>
+                            )}
+                            <a
+                              href={`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080"}/api/documents/${doc.id}/download`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="w-8 h-8 rounded-lg hover:bg-gray-200 flex items-center justify-center transition-colors"
+                              title="Download"
+                            >
+                              <Download size={14} className="text-gray-400" />
+                            </a>
+                            <button
+                              onClick={() => {
+                                if (confirm("Delete this document?")) {
+                                  deleteDocMutation.mutate(doc.id);
+                                }
+                              }}
+                              className="w-8 h-8 rounded-lg hover:bg-red-50 flex items-center justify-center transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 size={14} className="text-red-400" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
           ) : activeTab === "AI Profile" ? (
             /* ── AI PROFILE TAB ── */
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
@@ -1363,11 +2000,48 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
                 </div>
               </div>
 
+              {/* Gmail Emails (shown on Emails tab) */}
+              {activeTab === "Emails" && contactEmails.length > 0 && (
+                <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-4">
+                  <h4 className="font-bold mb-5" style={{ color: "#1E3A5F" }}>Gmail Emails</h4>
+                  <div className="flex flex-col gap-3">
+                    {contactEmails.map((email: Email) => (
+                      <div key={email.id} className="border border-gray-100 rounded-xl p-4 hover:bg-gray-50 transition-colors">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            email.is_outbound
+                              ? "bg-blue-50 text-blue-600"
+                              : "bg-green-50 text-green-600"
+                          }`}>
+                            {email.is_outbound ? "Sent" : "Received"}
+                          </span>
+                          <span className="text-xs text-gray-400">
+                            {email.gmail_date ? new Date(email.gmail_date).toLocaleDateString("en-US", {
+                              month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+                            }) : ""}
+                          </span>
+                          {!email.is_read && (
+                            <span className="w-2 h-2 rounded-full bg-blue-500" />
+                          )}
+                        </div>
+                        <p className="text-sm font-semibold text-gray-900">{email.subject || "(no subject)"}</p>
+                        <p className="text-xs text-gray-500 mt-1 line-clamp-2">{email.snippet || ""}</p>
+                        <p className="text-[10px] text-gray-400 mt-1">
+                          {email.is_outbound ? `To: ${email.to_addresses?.[0] || ""}` : `From: ${email.from_name || email.from_address || ""}`}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Timeline */}
               <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
                 <h4 className="font-bold mb-5" style={{ color: "#1E3A5F" }}>Activity Timeline</h4>
-                {activities.length === 0 ? (
+                {activities.length === 0 && !(activeTab === "Emails" && contactEmails.length > 0) ? (
                   <p className="text-sm text-gray-400 text-center py-8">No activities yet -- log one above!</p>
+                ) : activities.length === 0 ? (
+                  null
                 ) : (
                   <div className="flex flex-col gap-4">
                     {activities.map((item, i) => {

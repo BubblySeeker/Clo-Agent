@@ -20,6 +20,23 @@ def generate_embedding(text: str) -> list[float]:
     return resp.data[0].embedding
 
 
+def generate_embeddings_batch(texts: list[str]) -> list[list[float]]:
+    """Generate embeddings for a batch of texts in a single API call.
+
+    OpenAI supports up to 2048 inputs per call. We batch by 100 to stay safe.
+    """
+    if not _client:
+        raise RuntimeError("OPENAI_API_KEY not set — cannot generate embeddings")
+    all_embeddings: list[list[float]] = []
+    batch_size = 100
+    for i in range(0, len(texts), batch_size):
+        batch = texts[i : i + batch_size]
+        resp = _client.embeddings.create(input=batch, model=MODEL)
+        # Results are in same order as input
+        all_embeddings.extend([d.embedding for d in resp.data])
+    return all_embeddings
+
+
 def upsert_embedding(source_type: str, source_id: str, agent_id: str, content: str, embedding: list[float]) -> None:
     """Insert or update an embedding row."""
     with get_conn() as conn:

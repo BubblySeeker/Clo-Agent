@@ -4,6 +4,8 @@ from app.routes.chat import router as chat_router
 from app.routes.profiles import router as profiles_router
 from app.routes.search import router as search_router
 from app.routes.workflows import router as workflows_router
+from app.routes.documents import router as documents_router
+from app.routes.emails import router as emails_router
 from app.tools import cleanup_expired_actions
 
 app = FastAPI(title="CloAgent AI Service")
@@ -13,6 +15,8 @@ app.include_router(chat_router)
 app.include_router(profiles_router)
 app.include_router(search_router)
 app.include_router(workflows_router)
+app.include_router(documents_router)
+app.include_router(emails_router)
 
 
 @app.on_event("startup")
