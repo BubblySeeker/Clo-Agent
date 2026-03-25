@@ -75,7 +75,7 @@ def _load_contact_context(contact_id: str, agent_id: str) -> str:
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute(
-            "SELECT first_name, last_name, email, phone, source FROM contacts WHERE id = %s AND agent_id = %s",
+            "SELECT first_name, last_name, email, phone, source, lead_score, lead_score_signals, previous_lead_score FROM contacts WHERE id = %s AND agent_id = %s",
             (contact_id, agent_id),
         )
         c = cur.fetchone()
@@ -103,6 +103,29 @@ def _load_contact_context(contact_id: str, agent_id: str) -> str:
                 f"Areas: {', '.join(bp['locations'] or [])}, "
                 f"Pre-approved: {bp['pre_approved']}, Timeline: {bp['timeline']}"
             )
+        # Lead score
+        lead_score = c.get('lead_score')
+        if lead_score is not None and lead_score > 0:
+            if lead_score >= 80:
+                tier = "Hot"
+            elif lead_score >= 50:
+                tier = "Warm"
+            elif lead_score >= 20:
+                tier = "Cool"
+            else:
+                tier = "Cold"
+            score_line = f"Lead Score: {lead_score}/100 ({tier})"
+            prev = c.get('previous_lead_score')
+            if prev is not None:
+                diff = lead_score - prev
+                if abs(diff) >= 5:
+                    score_line += f" — {'↑' if diff > 0 else '↓'}{abs(diff)} from last"
+            signals = c.get('lead_score_signals') or {}
+            top = signals.get('top_signals', [])[:3]
+            if top:
+                score_line += f" | Signals: {', '.join(s if isinstance(s, str) else s.get('description', str(s)) for s in top)}"
+            lines.append(score_line)
+
         if activities:
             lines.append("Recent Activities:")
             for a in activities:
