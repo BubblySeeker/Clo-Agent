@@ -6,6 +6,8 @@ import { useAuth } from "@clerk/nextjs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getContact, updateContact, deleteContact } from "@/lib/api/contacts";
 import type { UpdateContactBody } from "@/lib/api/contacts";
+import { getSettings } from "@/lib/api/settings";
+import { ScoreBadge } from "@/app/dashboard/components/score-badge";
 import { listActivities, createActivity } from "@/lib/api/activities";
 import { listDeals } from "@/lib/api/deals";
 import { getBuyerProfile, createBuyerProfile, updateBuyerProfile } from "@/lib/api/buyer-profiles";
@@ -24,6 +26,7 @@ import {
   ChevronLeft,
   Home,
   ChevronDown,
+  ChevronUp,
   ChevronRight,
   Send,
   Edit2,
@@ -186,6 +189,9 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
   // Follow-up suggestion banner
   const [bannerDismissed, setBannerDismissed] = useState(false);
 
+  // Score breakdown expansion
+  const [scoreExpanded, setScoreExpanded] = useState(false);
+
   useEffect(() => {
     try {
       const stored = localStorage.getItem(`followup-dismiss-${id}`);
@@ -218,6 +224,15 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
       return getContact(token!, id);
     },
   });
+
+  const { data: settingsData } = useQuery({
+    queryKey: ["settings"],
+    queryFn: async () => {
+      const token = await getToken();
+      return getSettings(token!);
+    },
+  });
+  const showScores = settingsData?.show_lead_scores !== false;
 
   const typeFilter = tabTypeMap[activeTab];
   const { data: activitiesData } = useQuery({
@@ -878,6 +893,45 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
                   >
                     {contact.source}
                   </span>
+                )}
+                {showScores && contact.lead_score > 0 && (
+                  <div className="flex flex-col items-center mt-1">
+                    <ScoreBadge
+                      score={contact.lead_score}
+                      previousScore={contact.previous_lead_score}
+                      onClick={(e) => { e.stopPropagation(); setScoreExpanded((prev) => !prev); }}
+                    />
+                    {scoreExpanded && (
+                      <div className="mt-2 w-full max-w-[260px] bg-gray-50 rounded-xl p-3 border border-gray-100 text-left">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-semibold text-gray-700">Score Breakdown</span>
+                          <button onClick={() => setScoreExpanded(false)} className="text-gray-400 hover:text-gray-600">
+                            <ChevronUp size={14} />
+                          </button>
+                        </div>
+                        {[
+                          { key: "engagement", label: "Engagement", max: 30, color: "#22C55E" },
+                          { key: "readiness", label: "Readiness", max: 30, color: "#0EA5E9" },
+                          { key: "velocity", label: "Velocity", max: 20, color: "#8B5CF6" },
+                          { key: "profile", label: "Profile", max: 20, color: "#F59E0B" },
+                        ].map((dim) => {
+                          const value = contact.lead_score_signals?.[dim.key] ?? 0;
+                          const pct = Math.round((value / dim.max) * 100);
+                          return (
+                            <div key={dim.key} className="mb-1.5 last:mb-0">
+                              <div className="flex justify-between text-xs mb-0.5">
+                                <span className="text-gray-600">{dim.label}</span>
+                                <span className="text-gray-400">{value}/{dim.max}</span>
+                              </div>
+                              <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: dim.color }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
