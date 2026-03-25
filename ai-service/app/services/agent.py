@@ -10,6 +10,7 @@ Flow:
 """
 import asyncio
 import json
+import logging
 import re
 from datetime import date, timedelta
 from typing import AsyncGenerator
@@ -21,9 +22,12 @@ from app.config import ANTHROPIC_API_KEY, ANTHROPIC_MODEL
 from app.database import get_conn, run_query
 from app.tools import (
     TOOL_DEFINITIONS, READ_TOOLS, WRITE_TOOLS,
+    AUTO_EXECUTE_TOOLS, _dispatch_write_tool,
     execute_read_tool, queue_write_tool,
     check_gmail_status, get_recent_emails_for_contact,
 )
+
+logger = logging.getLogger(__name__)
 
 MODEL = ANTHROPIC_MODEL
 MAX_TOOL_ROUNDS = 5  # safety limit
@@ -368,7 +372,19 @@ async def run_agent(
 
             yield sse({"type": "tool_call", "name": tool_name, "status": "running"})
 
-            if tool_name in WRITE_TOOLS:
+            if tool_name in WRITE_TOOLS and tool_name in AUTO_EXECUTE_TOOLS:
+                # Auto-execute safe write tools without confirmation
+                logger.info("Auto-executing %s for agent %s", tool_name, agent_id)
+                result = await _dispatch_write_tool(tool_name, tool_input, agent_id)
+                status = "error" if "error" in result else "success"
+                yield sse({"type": "auto_executed", "name": tool_name, "result": result, "status": status})
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": tb.id,
+                    "content": json.dumps(result, default=str),
+                })
+            elif tool_name in WRITE_TOOLS:
+                # Dangerous write tools — queue for user confirmation
                 confirmation = queue_write_tool(tool_name, tool_input, agent_id)
                 yield sse({"type": "confirmation", **confirmation})
                 tool_results.append({
