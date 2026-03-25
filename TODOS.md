@@ -76,6 +76,18 @@
 **Priority:** P3
 **Depends on:** None (AI version depends on Claude integration)
 
+### Confidence-based quick confirm (third confirmation tier)
+
+**What:** Add a third confirmation tier between auto-execute and full confirmation — a streamlined one-tap inline confirm for medium-risk actions (e.g., `create_deal` for a contact the AI just found).
+
+**Why:** The two-tier system (auto-execute vs full confirm) is a big improvement but leaves a UX gap: actions that are probably right but not safe enough to auto-execute still get the full confirmation card with preview + two buttons. A quick confirm ("Create deal for Rohan? [Yes]") reduces friction for these medium-risk actions.
+
+**Context:** Requires a `QUICK_CONFIRM_TOOLS` set, a new SSE event type (`quick_confirm`), and a new compact UI component. The `useAIStream` hook extraction (shipping in the AI Intelligence Upgrade) makes adding a third event type straightforward. Defer until the two-tier system proves itself in production.
+
+**Effort:** M (human) → S with CC+gstack
+**Priority:** P2
+**Depends on:** AI Intelligence Upgrade (tiered confirmation + useAIStream hook)
+
 ### Keyboard shortcuts across dashboard
 
 **What:** Global keyboard shortcuts: N = new contact, P = pipeline, / = focus search, Esc = close modal, G+D = go to dashboard.
