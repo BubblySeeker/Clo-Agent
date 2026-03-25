@@ -1078,10 +1078,19 @@ def _update_contact(agent_id: str, inp: dict) -> dict:
     inp = {k: v for k, v in inp.items() if k in _CONTACT_FIELDS}
     if not inp:
         return {"error": "No fields to update"}
+    select_cols = ", ".join(inp.keys())
     fields = ", ".join(f"{k} = %s" for k in inp)
     vals = list(inp.values()) + [contact_id, agent_id]
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            f"SELECT {select_cols} FROM contacts WHERE id = %s AND agent_id = %s",
+            (contact_id, agent_id),
+        )
+        prev_row = cur.fetchone()
+        if not prev_row:
+            return {"error": "Contact not found"}
+        previous = dict(prev_row)
         cur.execute(
             f"UPDATE contacts SET {fields} WHERE id = %s AND agent_id = %s RETURNING id",
             vals,
@@ -1089,7 +1098,7 @@ def _update_contact(agent_id: str, inp: dict) -> dict:
         row = cur.fetchone()
         if row:
             _schedule_embed("contact", contact_id, agent_id)
-        return {"updated": bool(row), "contact_id": contact_id}
+        return {"updated": True, "contact_id": contact_id, "previous": previous, "new": {k: inp[k] for k in inp}}
 
 
 def _log_activity(agent_id: str, inp: dict) -> dict:
@@ -1141,6 +1150,15 @@ def _update_deal(agent_id: str, inp: dict) -> dict:
         inp = {k: v for k, v in inp.items() if k in _DEAL_FIELDS}
         if not inp:
             return {"error": "No fields to update"}
+        select_cols = ", ".join(inp.keys())
+        cur.execute(
+            f"SELECT {select_cols} FROM deals WHERE id = %s AND agent_id = %s",
+            (deal_id, agent_id),
+        )
+        prev_row = cur.fetchone()
+        if not prev_row:
+            return {"error": "Deal not found"}
+        previous = dict(prev_row)
         fields = ", ".join(f"{k} = %s" for k in inp)
         vals = list(inp.values()) + [deal_id, agent_id]
         cur.execute(
@@ -1148,7 +1166,7 @@ def _update_deal(agent_id: str, inp: dict) -> dict:
             vals,
         )
         row = cur.fetchone()
-        return {"updated": bool(row), "deal_id": deal_id}
+        return {"updated": True, "deal_id": deal_id, "previous": previous, "new": {k: inp[k] for k in inp}}
 
 
 def _delete_contact(agent_id: str, inp: dict) -> dict:
@@ -1241,16 +1259,22 @@ def _update_buyer_profile(agent_id: str, inp: dict) -> dict:
         cur.execute("SELECT id FROM contacts WHERE id = %s AND agent_id = %s", (contact_id, agent_id))
         if not cur.fetchone():
             return {"error": "Contact not found"}
+        select_cols = ", ".join(inp.keys())
+        cur.execute(
+            f"SELECT {select_cols} FROM buyer_profiles WHERE contact_id = %s",
+            (contact_id,),
+        )
+        prev_row = cur.fetchone()
+        if not prev_row:
+            return {"error": "No buyer profile exists for this contact. Use create_buyer_profile first."}
+        previous = dict(prev_row)
         fields = ", ".join(f"{k} = %s" for k in inp)
         vals = list(inp.values()) + [contact_id]
         cur.execute(
             f"UPDATE buyer_profiles SET {fields} WHERE contact_id = %s RETURNING id",
             vals,
         )
-        row = cur.fetchone()
-        if not row:
-            return {"error": "No buyer profile exists for this contact. Use create_buyer_profile first."}
-        return {"updated": True, "contact_id": contact_id}
+        return {"updated": True, "contact_id": contact_id, "previous": previous, "new": {k: inp[k] for k in inp}}
 
 
 def _semantic_search(agent_id: str, inp: dict) -> list:
@@ -1537,18 +1561,26 @@ def _update_property(agent_id: str, inp: dict) -> dict:
     inp = {k: v for k, v in inp.items() if k in _PROPERTY_FIELDS}
     if not inp:
         return {"error": "No fields to update"}
-    fields = ", ".join(f"{k} = %s" for k in inp)
-    vals = list(inp.values()) + [property_id, agent_id]
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        select_cols = ", ".join(inp.keys())
+        cur.execute(
+            f"SELECT {select_cols}, address FROM properties WHERE id = %s AND agent_id = %s",
+            (property_id, agent_id),
+        )
+        prev_row = cur.fetchone()
+        if not prev_row:
+            return {"error": "Property not found"}
+        address = prev_row["address"]
+        previous = {k: prev_row[k] for k in inp.keys()}
+        fields = ", ".join(f"{k} = %s" for k in inp)
+        vals = list(inp.values()) + [property_id, agent_id]
         cur.execute(
             f"UPDATE properties SET {fields} WHERE id = %s AND agent_id = %s RETURNING id, address",
             vals,
         )
         row = cur.fetchone()
-        if not row:
-            return {"error": "Property not found"}
-        return {"updated": True, "property_id": property_id, "address": row["address"]}
+        return {"updated": True, "property_id": property_id, "address": row["address"], "previous": previous, "new": {k: inp[k] for k in inp}}
 
 
 def _delete_property(agent_id: str, inp: dict) -> dict:
