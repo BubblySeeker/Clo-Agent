@@ -146,21 +146,25 @@ async def run_transcription_pipeline(call_id: str, agent_id: str, local_path: st
 
             contact_context = await run_query(_get_contact_context)
 
-        # Step 4: Analyze with Claude
+        # Step 4: Analyze with Claude (graceful — save transcript even if analysis fails)
         call_metadata = {
             "direction": direction,
             "duration": duration,
             "date": str(started_at) if started_at else "unknown",
         }
-        logger.info("Analyzing transcript for call %s", call_id)
-        analysis = await asyncio.to_thread(
-            analyze_transcript, full_text, contact_context, call_metadata
-        )
-
-        # Step 5: Build AI actions
-        ai_actions = build_ai_actions(
-            analysis, str(contact_id) if contact_id else None, call_metadata
-        )
+        analysis = {}
+        ai_actions = []
+        try:
+            logger.info("Analyzing transcript for call %s", call_id)
+            analysis = await asyncio.to_thread(
+                analyze_transcript, full_text, contact_context, call_metadata
+            )
+            # Step 5: Build AI actions
+            ai_actions = build_ai_actions(
+                analysis, str(contact_id) if contact_id else None, call_metadata
+            )
+        except Exception as e:
+            logger.warning("AI analysis failed for call %s (transcript still saved): %s", call_id, e)
 
         # Step 6: Update call_transcripts with results
         word_count = len(full_text.split())

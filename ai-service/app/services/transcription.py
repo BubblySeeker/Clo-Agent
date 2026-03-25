@@ -29,8 +29,7 @@ def transcribe_audio_file(file_path: str) -> dict:
         result = _client.audio.transcriptions.create(
             model="gpt-4o-transcribe",
             file=f,
-            response_format="verbose_json",
-            timestamp_granularities=["segment"],
+            response_format="json",
         )
     return result
 
@@ -87,33 +86,36 @@ def split_channels_and_transcribe(local_path: str, direction: str) -> tuple[str,
         client_result = transcribe_audio_file(client_path)
 
         # Build speaker segments from both transcriptions
+        # gpt-4o-transcribe with response_format="json" returns {"text": "..."}
+        # No segment-level timestamps available, so we create one segment per speaker
         speaker_segments = []
 
-        for seg in getattr(agent_result, "segments", []):
+        agent_text = (getattr(agent_result, "text", "") or "").strip()
+        client_text = (getattr(client_result, "text", "") or "").strip()
+
+        if agent_text:
             speaker_segments.append({
                 "speaker": "agent",
-                "start": seg.start if hasattr(seg, "start") else seg["start"],
-                "end": seg.end if hasattr(seg, "end") else seg["end"],
-                "text": (seg.text if hasattr(seg, "text") else seg["text"]).strip(),
+                "start": 0.0,
+                "end": 0.0,
+                "text": agent_text,
             })
 
-        for seg in getattr(client_result, "segments", []):
+        if client_text:
             speaker_segments.append({
                 "speaker": "client",
-                "start": seg.start if hasattr(seg, "start") else seg["start"],
-                "end": seg.end if hasattr(seg, "end") else seg["end"],
-                "text": (seg.text if hasattr(seg, "text") else seg["text"]).strip(),
+                "start": 0.0,
+                "end": 0.0,
+                "text": client_text,
             })
 
-        # Sort all segments by start timestamp
-        speaker_segments.sort(key=lambda s: s["start"])
-
         # Build full text with speaker labels
-        full_text = "\n".join(
-            f"[{seg['speaker'].title()}]: {seg['text']}"
-            for seg in speaker_segments
-            if seg["text"]
-        )
+        full_text_parts = []
+        if agent_text:
+            full_text_parts.append(f"[Agent]: {agent_text}")
+        if client_text:
+            full_text_parts.append(f"[Client]: {client_text}")
+        full_text = "\n".join(full_text_parts)
 
         logger.info(
             "Transcription complete: %d segments, %d words",
@@ -140,16 +142,17 @@ def _transcribe_mono(audio: AudioSegment) -> tuple[str, list[dict]]:
 
         result = transcribe_audio_file(mono_path)
 
+        text = (getattr(result, "text", "") or "").strip()
         speaker_segments = []
-        for seg in getattr(result, "segments", []):
+        if text:
             speaker_segments.append({
                 "speaker": "unknown",
-                "start": seg.start if hasattr(seg, "start") else seg["start"],
-                "end": seg.end if hasattr(seg, "end") else seg["end"],
-                "text": (seg.text if hasattr(seg, "text") else seg["text"]).strip(),
+                "start": 0.0,
+                "end": 0.0,
+                "text": text,
             })
 
-        full_text = "\n".join(seg["text"] for seg in speaker_segments if seg["text"])
+        full_text = text
         return full_text, speaker_segments
 
     finally:
