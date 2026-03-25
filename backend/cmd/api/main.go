@@ -139,6 +139,7 @@ func run() error {
 		// Contacts
 		r.Get("/api/contacts", handlers.ListContacts(pool))
 		r.Post("/api/contacts", handlers.CreateContact(pool))
+		r.Get("/api/contacts/going-cold-count", handlers.GoingColdCount(pool))
 		r.Get("/api/contacts/{id}", handlers.GetContact(pool))
 		r.Patch("/api/contacts/{id}", handlers.UpdateContact(pool))
 		r.Delete("/api/contacts/{id}", handlers.DeleteContact(pool))
