@@ -1216,11 +1216,17 @@ func ConfirmTranscriptAction(pool *pgxpool.Pool) http.HandlerFunc {
 				return
 			}
 			// Build dynamic SET clause from params (excluding contact_id)
+			// Allowlist of valid buyer_profiles columns to prevent SQL injection
+			allowedCols := map[string]bool{
+				"budget_min": true, "budget_max": true, "bedrooms": true, "bathrooms": true,
+				"locations": true, "must_haves": true, "deal_breakers": true,
+				"property_type": true, "pre_approved": true, "timeline": true,
+			}
 			setCols := []string{}
 			setVals := []interface{}{}
 			paramIdx := 1
 			for k, v := range params {
-				if k == "contact_id" {
+				if k == "contact_id" || !allowedCols[k] {
 					continue
 				}
 				setCols = append(setCols, fmt.Sprintf("%s = $%d", k, paramIdx))
