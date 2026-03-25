@@ -92,17 +92,17 @@ def split_channels_and_transcribe(local_path: str, direction: str) -> tuple[str,
         for seg in getattr(agent_result, "segments", []):
             speaker_segments.append({
                 "speaker": "agent",
-                "start": seg.get("start", seg.start) if hasattr(seg, "start") else seg["start"],
-                "end": seg.get("end", seg.end) if hasattr(seg, "end") else seg["end"],
-                "text": (seg.get("text", seg.text) if hasattr(seg, "text") else seg["text"]).strip(),
+                "start": seg.start if hasattr(seg, "start") else seg["start"],
+                "end": seg.end if hasattr(seg, "end") else seg["end"],
+                "text": (seg.text if hasattr(seg, "text") else seg["text"]).strip(),
             })
 
         for seg in getattr(client_result, "segments", []):
             speaker_segments.append({
                 "speaker": "client",
-                "start": seg.get("start", seg.start) if hasattr(seg, "start") else seg["start"],
-                "end": seg.get("end", seg.end) if hasattr(seg, "end") else seg["end"],
-                "text": (seg.get("text", seg.text) if hasattr(seg, "text") else seg["text"]).strip(),
+                "start": seg.start if hasattr(seg, "start") else seg["start"],
+                "end": seg.end if hasattr(seg, "end") else seg["end"],
+                "text": (seg.text if hasattr(seg, "text") else seg["text"]).strip(),
             })
 
         # Sort all segments by start timestamp
@@ -144,9 +144,9 @@ def _transcribe_mono(audio: AudioSegment) -> tuple[str, list[dict]]:
         for seg in getattr(result, "segments", []):
             speaker_segments.append({
                 "speaker": "unknown",
-                "start": seg.get("start", seg.start) if hasattr(seg, "start") else seg["start"],
-                "end": seg.get("end", seg.end) if hasattr(seg, "end") else seg["end"],
-                "text": (seg.get("text", seg.text) if hasattr(seg, "text") else seg["text"]).strip(),
+                "start": seg.start if hasattr(seg, "start") else seg["start"],
+                "end": seg.end if hasattr(seg, "end") else seg["end"],
+                "text": (seg.text if hasattr(seg, "text") else seg["text"]).strip(),
             })
 
         full_text = "\n".join(seg["text"] for seg in speaker_segments if seg["text"])
