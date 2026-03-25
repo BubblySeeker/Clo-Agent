@@ -166,6 +166,59 @@ async def run_transcription_pipeline(call_id: str, agent_id: str, local_path: st
         except Exception as e:
             logger.warning("AI analysis failed for call %s (transcript still saved): %s", call_id, e)
 
+        # Step 5.5: Auto-log a note on the contact with AI insights
+        if contact_id and full_text:
+            note_parts = []
+            summary = analysis.get("summary", "")
+            if summary:
+                note_parts.append(f"📞 Call Summary:\n{summary}")
+
+            key_quotes = analysis.get("key_quotes", [])
+            if key_quotes:
+                note_parts.append("💬 Key Quotes:\n" + "\n".join(f"• \"{q}\"" for q in key_quotes))
+
+            tasks = analysis.get("tasks", [])
+            if tasks:
+                note_parts.append("✅ Action Items:\n" + "\n".join(
+                    f"• {t['body']}" + (f" (due {t['due_date']})" if t.get('due_date') else "")
+                    for t in tasks
+                ))
+
+            buyer_updates = analysis.get("buyer_profile_updates", {})
+            non_null = {k: v for k, v in buyer_updates.items() if v is not None and v != [] and v != ""}
+            if non_null:
+                note_parts.append("🏠 Buyer Profile Updates:\n" + "\n".join(
+                    f"• {k.replace('_', ' ').title()}: {v}" for k, v in non_null.items()
+                ))
+
+            stage = analysis.get("deal_stage_suggestion")
+            if stage:
+                note_parts.append(f"📊 Suggested Deal Stage: {stage}")
+
+            # Fallback: if no analysis but we have transcript, log that
+            if not note_parts:
+                note_parts.append(f"📞 Call Transcript:\n{full_text[:2000]}")
+
+            note_body = "\n\n".join(note_parts)
+
+            def _auto_log_note():
+                with get_conn() as conn:
+                    cur = conn.cursor()
+                    cur.execute(
+                        f"SET LOCAL app.current_agent_id = '{agent_id}'"
+                    )
+                    cur.execute(
+                        """INSERT INTO activities (contact_id, agent_id, type, body)
+                           VALUES (%s, %s, 'note', %s)""",
+                        (contact_id, agent_id, note_body),
+                    )
+
+            try:
+                await run_query(_auto_log_note)
+                logger.info("Auto-logged call note for contact %s", contact_id)
+            except Exception as e:
+                logger.warning("Failed to auto-log note for call %s: %s", call_id, e)
+
         # Step 6: Update call_transcripts with results
         word_count = len(full_text.split())
 
