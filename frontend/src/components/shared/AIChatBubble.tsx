@@ -3,15 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { usePathname } from "next/navigation";
-import { Bot, Send, Minimize2, Check, XCircle, Loader2 } from "lucide-react";
+import { Bot, Send, Minimize2, Check, XCircle, Loader2, Undo2 } from "lucide-react";
 import {
-  streamMessage,
   createConversation,
   getMessages,
   confirmToolAction,
-  type SSEEvent,
+  undoAutoAction,
 } from "@/lib/api/conversations";
 import { useUIStore } from "@/store/ui-store";
+import { useAIStream } from "@/hooks/useAIStream";
 import { toolLabel, confirmLabel, formatPreview } from "@/lib/ai-chat-helpers";
 import MessageContent from "./MessageContent";
 // CitationBadge available for future use
@@ -32,10 +32,8 @@ export default function AIChatBubble() {
   } = useUIStore();
 
   const [input, setInput] = useState("");
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [activeToolName, setActiveToolName] = useState<string | null>(null);
+  const { isStreaming, activeToolName, startStream } = useAIStream();
   const bottomRef = useRef<HTMLDivElement>(null);
-  const cleanupRef = useRef<(() => void) | null>(null);
 
   // Detect if we're on a contact detail page
   const contactMatch = pathname.match(/\/dashboard\/contacts\/([a-f0-9-]{36})/);
@@ -105,57 +103,46 @@ export default function AIChatBubble() {
       toolCalls: [],
     });
 
-    setIsStreaming(true);
-    let accumulated = "";
-
-    cleanupRef.current = streamMessage(
-      token,
-      chatConversationId,
-      msg,
-      (event: SSEEvent) => {
-        if (event.type === "text") {
-          accumulated += event.content;
-          updateLastMessage({ content: accumulated, isStreaming: true });
-        } else if (event.type === "tool_call") {
-          setActiveToolName(event.name);
-          const toolName = event.name;
-          const current = useUIStore.getState().chatMessages;
-          if (current.length > 0) {
-            const last = current[current.length - 1];
-            useUIStore.getState().setChatMessages([
-              ...current.slice(0, -1),
-              { ...last, toolCalls: [...(last.toolCalls ?? []), toolName] },
-            ]);
-          }
-        } else if (event.type === "tool_result") {
-          setActiveToolName(null);
-        } else if (event.type === "confirmation") {
-          updateLastMessage({
-            confirmationData: {
-              tool: event.tool,
-              preview: event.preview,
-              pending_id: event.pending_id,
-            },
-          });
+    startStream(token, chatConversationId, msg, {
+      onTextUpdate: (text) => {
+        updateLastMessage({ content: text, isStreaming: true });
+      },
+      onToolCall: (name) => {
+        const current = useUIStore.getState().chatMessages;
+        if (current.length > 0) {
+          const last = current[current.length - 1];
+          useUIStore.getState().setChatMessages([
+            ...current.slice(0, -1),
+            { ...last, toolCalls: [...(last.toolCalls ?? []), name] },
+          ]);
         }
       },
-      () => {
-        setIsStreaming(false);
-        setActiveToolName(null);
+      onToolResult: () => {},
+      onConfirmation: (data) => {
+        updateLastMessage({ confirmationData: data });
+      },
+      onAutoExecuted: (data) => {
+        const current = useUIStore.getState().chatMessages;
+        const last = current[current.length - 1];
+        const existing = last?.autoExecutedActions ?? [];
+        useUIStore.getState().setChatMessages([
+          ...current.slice(0, -1),
+          { ...last, autoExecutedActions: [...existing, { tool: data.name, result: data.result, status: data.status }] },
+        ]);
+      },
+      onDone: () => {
         const current = useUIStore.getState().chatMessages;
         const last = current.length > 0 ? current[current.length - 1] : null;
         updateLastMessage({
           isStreaming: false,
-          content: (last?.content) || "Sorry, I couldn\u2019t generate a response. Please try again.",
+          content: last?.content || "Sorry, I couldn\u2019t generate a response. Please try again.",
         });
       },
-      (err) => {
+      onError: (err) => {
         console.error("AI stream error:", err);
-        setIsStreaming(false);
-        setActiveToolName(null);
         updateLastMessage({ content: "Sorry, something went wrong. Please try again.", isStreaming: false });
-      }
-    );
+      },
+    });
   };
 
   const handleConfirm = async (pendingId: string) => {
@@ -189,6 +176,26 @@ export default function AIChatBubble() {
       content: "",
       resolvedAction: actionInfo ? { tool: actionInfo.tool, preview: actionInfo.preview, status: "cancelled" } : undefined,
     });
+  };
+
+  const handleUndo = async (actionIndex: number) => {
+    const token = await getToken();
+    if (!token || !chatConversationId) return;
+    try {
+      await undoAutoAction(token, chatConversationId);
+      const current = useUIStore.getState().chatMessages;
+      const last = current[current.length - 1];
+      if (last?.autoExecutedActions) {
+        const updated = [...last.autoExecutedActions];
+        updated[actionIndex] = { ...updated[actionIndex], status: "undone" };
+        useUIStore.getState().setChatMessages([
+          ...current.slice(0, -1),
+          { ...last, autoExecutedActions: updated },
+        ]);
+      }
+    } catch {
+      // silently fail — undo is best-effort
+    }
   };
 
   const placeholder = contactId
@@ -348,6 +355,46 @@ export default function AIChatBubble() {
                 </p>
               </div>
             )}
+
+            {/* Auto-executed action cards — with Undo button */}
+            {msg.autoExecutedActions?.map((action, idx) => (
+              <div key={idx} className={`rounded-xl p-3 w-full max-w-[90%] text-xs border ${
+                action.status === "success"
+                  ? "bg-green-50 border-green-200"
+                  : action.status === "undone"
+                  ? "bg-gray-50 border-gray-200"
+                  : "bg-red-50 border-red-200"
+              }`}>
+                <div className="flex items-center justify-between gap-1.5 mb-1">
+                  <div className="flex items-center gap-1.5">
+                    {action.status === "success" ? (
+                      <Check size={12} className="text-green-600" />
+                    ) : action.status === "undone" ? (
+                      <Undo2 size={12} className="text-gray-500" />
+                    ) : (
+                      <XCircle size={12} className="text-red-500" />
+                    )}
+                    <span className={`font-semibold ${
+                      action.status === "success" ? "text-green-700" : action.status === "undone" ? "text-gray-700" : "text-red-700"
+                    }`}>
+                      {confirmLabel[action.tool] ?? action.tool}
+                      {action.status === "success" ? " — Auto-applied" : action.status === "undone" ? " — Undone" : " — Failed"}
+                    </span>
+                  </div>
+                  {action.status === "success" && (
+                    <button
+                      onClick={() => handleUndo(idx)}
+                      className="flex items-center gap-1 px-2 py-0.5 bg-white border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-100 text-xs"
+                    >
+                      <Undo2 size={10} /> Undo
+                    </button>
+                  )}
+                </div>
+                <p className="text-gray-600">
+                  {formatPreview(action.tool, action.result)}
+                </p>
+              </div>
+            ))}
           </div>
         ))}
         <div ref={bottomRef} />

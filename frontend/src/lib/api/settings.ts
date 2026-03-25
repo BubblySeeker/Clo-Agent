@@ -3,6 +3,7 @@ import { apiRequest } from "./client";
 export interface AgentSettings {
   commission_rate?: number;
   commission_split?: number;
+  show_lead_scores?: boolean;
   notifications?: {
     new_leads?: boolean;
     deal_updates?: boolean;

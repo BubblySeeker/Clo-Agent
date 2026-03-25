@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 
 	"crm-api/internal/database"
 	"crm-api/internal/middleware"
+	"crm-api/internal/scoring"
 )
 
 type BuyerProfile struct {
@@ -122,6 +124,11 @@ func CreateBuyerProfile(pool *pgxpool.Pool) http.HandlerFunc {
 			return
 		}
 
+		// Recompute lead score after buyer profile creation
+		if err := scoring.ComputeLeadScore(r.Context(), tx, contactID); err != nil {
+			log.Printf("scoring: ComputeLeadScore failed for contact %s: %v", contactID, err)
+		}
+
 		tx.Commit(r.Context())
 		respondJSON(w, http.StatusCreated, bp)
 	}
@@ -175,6 +182,11 @@ func UpdateBuyerProfile(pool *pgxpool.Pool) http.HandlerFunc {
 		if err != nil {
 			respondErrorWithCode(w, http.StatusNotFound, "buyer profile not found", ErrCodeNotFound)
 			return
+		}
+
+		// Recompute lead score after buyer profile update
+		if err := scoring.ComputeLeadScore(r.Context(), tx, contactID); err != nil {
+			log.Printf("scoring: ComputeLeadScore failed for contact %s: %v", contactID, err)
 		}
 
 		tx.Commit(r.Context())

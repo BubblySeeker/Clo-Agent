@@ -4,7 +4,11 @@ import { useState, useRef, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { listContacts, createContact, type ContactFilters } from "@/lib/api/contacts";
+import { listContacts, createContact, getGoingColdCount, type ContactFilters } from "@/lib/api/contacts";
+import { getSettings } from "@/lib/api/settings";
+import { ScoreBadge } from "../components/score-badge";
+import { ScorePanel } from "../components/score-panel";
+import { useUIStore } from "@/store/ui-store";
 import { createBuyerProfile } from "@/lib/api/buyer-profiles";
 import {
   listContactFolders,
@@ -34,6 +38,8 @@ import {
   AlertTriangle,
   Users,
   Check,
+  ArrowUpDown,
+  TrendingDown,
 } from "lucide-react";
 
 type ViewMode = "table" | "grid";
@@ -95,6 +101,10 @@ export default function ContactsPage() {
   const [view, setView] = useState<ViewMode>("table");
   const [page, setPage] = useState(1);
   const filterRef = useRef<HTMLDivElement>(null);
+  const [sortBy, setSortBy] = useState<string>("recent");
+  const [coldBannerDismissed, setColdBannerDismissed] = useState(false);
+  const openScorePanel = useUIStore((s) => s.openScorePanel);
+  const scorePanelContactId = useUIStore((s) => s.scorePanelContactId);
 
   // Folder state
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null); // null = all, "unfiled", or folder ID
@@ -173,6 +183,31 @@ export default function ContactsPage() {
     if (renamingFolderId && renameRef.current) renameRef.current.focus();
   }, [renamingFolderId]);
 
+  // Check cold banner dismiss from localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("going-cold-banner-dismiss");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed.dismissed && parsed.expiresAt > Date.now()) {
+          setColdBannerDismissed(true);
+        } else {
+          localStorage.removeItem("going-cold-banner-dismiss");
+        }
+      }
+    } catch {}
+  }, []);
+
+  function dismissColdBanner() {
+    setColdBannerDismissed(true);
+    try {
+      localStorage.setItem("going-cold-banner-dismiss", JSON.stringify({
+        dismissed: true,
+        expiresAt: Date.now() + 86400000,
+      }));
+    } catch {}
+  }
+
   // Active filter count
   const activeCount =
     activeFilters.sources.length +
@@ -188,6 +223,7 @@ export default function ContactsPage() {
     search: search || undefined,
     source: activeFilters.sources.length === 1 ? activeFilters.sources[0] : undefined,
     folder_id: selectedFolder ?? undefined,
+    sort: sortBy === "score" ? "score" : undefined,
     page,
     limit: 25,
   };
@@ -207,6 +243,25 @@ export default function ContactsPage() {
       const token = await getToken();
       return listContactFolders(token!);
     },
+  });
+
+  const { data: settingsData } = useQuery({
+    queryKey: ["settings"],
+    queryFn: async () => {
+      const token = await getToken();
+      return getSettings(token!);
+    },
+  });
+
+  const showScores = settingsData?.show_lead_scores !== false;
+
+  const { data: coldCountData } = useQuery({
+    queryKey: ["going-cold-count"],
+    queryFn: async () => {
+      const token = await getToken();
+      return getGoingColdCount(token!);
+    },
+    enabled: showScores,
   });
 
   const folders = foldersData?.folders ?? [];
@@ -378,6 +433,20 @@ export default function ContactsPage() {
     }
   }
 
+  const coldCount = coldCountData?.count ?? 0;
+
+  function getSignalTags(signals: Record<string, any> | null) {
+    if (!signals || !signals.top_signals) return [];
+    const topSignals = signals.top_signals as Array<{ label: string; weight: number; type?: string }>;
+    return topSignals;
+  }
+
+  function signalColor(type?: string): { bg: string; text: string; border: string } {
+    if (type === "positive") return { bg: "bg-green-50", text: "text-green-700", border: "border-green-200" };
+    if (type === "warning") return { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200" };
+    return { bg: "bg-gray-50", text: "text-gray-600", border: "border-gray-200" };
+  }
+
   if (isError) {
     return (
       <div className="flex flex-col items-center justify-center h-full min-h-[400px] gap-4 p-6 text-center">
@@ -547,6 +616,22 @@ export default function ContactsPage() {
             <Plus size={16} /> Add Contact
           </button>
         </div>
+
+        {/* Going cold banner */}
+        {showScores && coldCount > 0 && !coldBannerDismissed && (
+          <div className="flex items-center gap-3 px-4 py-3 mb-4 rounded-xl bg-amber-50 border border-amber-200">
+            <TrendingDown size={18} className="text-amber-600 shrink-0" />
+            <p className="text-sm font-medium text-amber-800 flex-1">
+              {coldCount === 1 ? "1 contact is going cold" : `${coldCount} contacts going cold`}
+            </p>
+            <button
+              onClick={dismissColdBanner}
+              className="w-6 h-6 rounded-lg flex items-center justify-center hover:bg-amber-100 transition-colors"
+            >
+              <X size={14} className="text-amber-600" />
+            </button>
+          </div>
+        )}
 
         {/* Bulk selection toolbar */}
         {selectedContacts.size > 0 && (
@@ -729,6 +814,27 @@ export default function ContactsPage() {
                 )}
               </div>
 
+              {/* Sort dropdown */}
+              {showScores && (
+                <div className="relative">
+                  <button
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-sm font-semibold transition-colors ${
+                      sortBy === "score"
+                        ? "border-[#0EA5E9] text-[#0EA5E9] bg-blue-50"
+                        : "border-gray-200 text-gray-600 hover:border-gray-300 bg-white"
+                    }`}
+                    onClick={() => {
+                      const next = sortBy === "score" ? "recent" : "score";
+                      setSortBy(next);
+                      setPage(1);
+                    }}
+                  >
+                    <ArrowUpDown size={14} />
+                    {sortBy === "score" ? "Score" : "Recent"}
+                  </button>
+                </div>
+              )}
+
               {/* View toggle */}
               <div className="flex rounded-xl overflow-hidden border border-gray-200">
                 <button onClick={() => setView("table")} className={`p-2 transition-colors ${view === "table" ? "text-white" : "bg-white text-gray-400"}`} style={view === "table" ? { backgroundColor: "#1E3A5F" } : {}}>
@@ -763,6 +869,7 @@ export default function ContactsPage() {
                     />
                   </th>
                   <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3">Name</th>
+                  {showScores && <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3">Score</th>}
                   <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3">Email</th>
                   <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3">Phone</th>
                   <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3">Source</th>
@@ -774,7 +881,7 @@ export default function ContactsPage() {
               <tbody>
                 {contacts.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="text-center py-12 text-gray-400 text-sm">
+                    <td colSpan={showScores ? 9 : 8} className="text-center py-12 text-gray-400 text-sm">
                       {activeCount > 0 ? "No contacts match these filters." : "No contacts yet — add your first one!"}
                     </td>
                   </tr>
@@ -807,6 +914,39 @@ export default function ContactsPage() {
                           </span>
                         </div>
                       </td>
+                      {showScores && (
+                        <td className="px-4 py-3" onClick={() => router.push(`/dashboard/contacts/${c.id}`)}>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <ScoreBadge
+                              score={c.lead_score}
+                              previousScore={c.previous_lead_score}
+                              onClick={(e) => { e.stopPropagation(); openScorePanel(c.id, `${c.first_name} ${c.last_name}`); }}
+                            />
+                            {(() => {
+                              const tags = getSignalTags(c.lead_score_signals);
+                              const visible = tags.slice(0, 3);
+                              const extra = tags.length - 3;
+                              return (
+                                <>
+                                  {visible.map((s, idx) => {
+                                    const color = signalColor(s.type);
+                                    return (
+                                      <span key={idx} className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full border ${color.bg} ${color.text} ${color.border}`}>
+                                        {s.label}
+                                      </span>
+                                    );
+                                  })}
+                                  {extra > 0 && (
+                                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full border bg-gray-50 text-gray-500 border-gray-200">
+                                      +{extra}
+                                    </span>
+                                  )}
+                                </>
+                              );
+                            })()}
+                          </div>
+                        </td>
+                      )}
                       <td className="px-4 py-3 text-sm text-gray-600" onClick={() => router.push(`/dashboard/contacts/${c.id}`)}>{c.email ?? "—"}</td>
                       <td className="px-4 py-3 text-sm text-gray-600" onClick={() => router.push(`/dashboard/contacts/${c.id}`)}>{c.phone ?? "—"}</td>
                       <td className="px-4 py-3" onClick={() => router.push(`/dashboard/contacts/${c.id}`)}>
@@ -870,11 +1010,20 @@ export default function ContactsPage() {
                   className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 hover:border-[#0EA5E9]/40 hover:shadow-md cursor-pointer transition-all flex flex-col gap-3"
                 >
                   <div className="flex items-start justify-between">
-                    <div
-                      className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold"
-                      style={{ backgroundColor: getColor(c.id) }}
-                    >
-                      {initials(c.first_name, c.last_name)}
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold"
+                        style={{ backgroundColor: getColor(c.id) }}
+                      >
+                        {initials(c.first_name, c.last_name)}
+                      </div>
+                      {showScores && (
+                        <ScoreBadge
+                          score={c.lead_score}
+                          previousScore={c.previous_lead_score}
+                          onClick={(e) => { e.stopPropagation(); openScorePanel(c.id, `${c.first_name} ${c.last_name}`); }}
+                        />
+                      )}
                     </div>
                     <input
                       type="checkbox"
@@ -894,6 +1043,29 @@ export default function ContactsPage() {
                         <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100">{c.folder_name}</span>
                       )}
                     </div>
+                    {showScores && (() => {
+                      const tags = getSignalTags(c.lead_score_signals);
+                      const visible = tags.slice(0, 3);
+                      const extra = tags.length - 3;
+                      if (visible.length === 0) return null;
+                      return (
+                        <div className="flex items-center gap-1 mt-1 flex-wrap">
+                          {visible.map((s, idx) => {
+                            const color = signalColor(s.type);
+                            return (
+                              <span key={idx} className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full border ${color.bg} ${color.text} ${color.border}`}>
+                                {s.label}
+                              </span>
+                            );
+                          })}
+                          {extra > 0 && (
+                            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full border bg-gray-50 text-gray-500 border-gray-200">
+                              +{extra}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                   <div className="flex flex-col gap-1">
                     <p className="text-xs text-gray-500">{c.email ?? "No email"}</p>
@@ -1086,6 +1258,10 @@ export default function ContactsPage() {
           </div>
         </div>
       )}
+      {/* Score slide-over panel */}
+      <ScorePanel
+        contact={data?.contacts.find((c) => c.id === scorePanelContactId) ?? null}
+      />
     </div>
   );
 }
