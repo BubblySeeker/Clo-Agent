@@ -564,6 +564,13 @@ WRITE_TOOLS = {
     "send_email",
 }
 
+# Tools that are write operations but safe to auto-execute without confirmation.
+# These modify existing records (no creates/deletes of primary entities, no emails).
+AUTO_EXECUTE_TOOLS = {
+    "update_contact", "log_activity", "complete_task", "reschedule_task",
+    "update_buyer_profile", "update_deal", "update_property",
+}
+
 # ---------------------------------------------------------------------------
 # Read tool executors
 # ---------------------------------------------------------------------------
@@ -953,6 +960,51 @@ def cleanup_expired_actions() -> int:
 
 
 # ---------------------------------------------------------------------------
+# Write tool dispatch (shared by execute_write_tool and auto-execute path)
+# ---------------------------------------------------------------------------
+
+async def _dispatch_write_tool(tool_name: str, tool_input: dict, agent_id: str) -> dict:
+    """Dispatch a write tool to its handler. Returns the tool result dict."""
+    if tool_name == "create_contact":
+        return await run_query(lambda: _create_contact(agent_id, tool_input))
+    elif tool_name == "update_contact":
+        return await run_query(lambda: _update_contact(agent_id, tool_input))
+    elif tool_name == "delete_contact":
+        return await run_query(lambda: _delete_contact(agent_id, tool_input))
+    elif tool_name == "log_activity":
+        return await run_query(lambda: _log_activity(agent_id, tool_input))
+    elif tool_name == "create_deal":
+        return await run_query(lambda: _create_deal(agent_id, tool_input))
+    elif tool_name == "update_deal":
+        return await run_query(lambda: _update_deal(agent_id, tool_input))
+    elif tool_name == "delete_deal":
+        return await run_query(lambda: _delete_deal(agent_id, tool_input))
+    elif tool_name == "create_buyer_profile":
+        return await run_query(lambda: _create_buyer_profile(agent_id, tool_input))
+    elif tool_name == "update_buyer_profile":
+        return await run_query(lambda: _update_buyer_profile(agent_id, tool_input))
+    elif tool_name == "create_task":
+        return await run_query(lambda: _create_task(agent_id, tool_input))
+    elif tool_name == "complete_task":
+        return await run_query(lambda: _complete_task(agent_id, tool_input))
+    elif tool_name == "reschedule_task":
+        return await run_query(lambda: _reschedule_task(agent_id, tool_input))
+    elif tool_name == "create_property":
+        return await run_query(lambda: _create_property(agent_id, tool_input))
+    elif tool_name == "update_property":
+        return await run_query(lambda: _update_property(agent_id, tool_input))
+    elif tool_name == "delete_property":
+        return await run_query(lambda: _delete_property(agent_id, tool_input))
+    elif tool_name == "send_email":
+        # Proxy to Go backend — this is an HTTP call, not a DB query.
+        # Flow: AI Service → Go Backend → Gmail API (two-hop proxy,
+        # avoids duplicating OAuth/token-refresh logic in Python).
+        return await _proxy_to_backend("POST", "/api/gmail/send", agent_id, tool_input)
+    else:
+        return {"error": f"Unknown write tool: {tool_name}"}
+
+
+# ---------------------------------------------------------------------------
 # Write tool executor (called from /ai/confirm)
 # ---------------------------------------------------------------------------
 
@@ -978,44 +1030,7 @@ async def execute_write_tool(pending_id: str, agent_id: str) -> dict:
     inp = action["input"]
     agent_id = action["agent_id"]
 
-    result: dict | None = None
-    if tool_name == "create_contact":
-        result = await run_query(lambda: _create_contact(agent_id, inp))
-    elif tool_name == "update_contact":
-        result = await run_query(lambda: _update_contact(agent_id, inp))
-    elif tool_name == "delete_contact":
-        result = await run_query(lambda: _delete_contact(agent_id, inp))
-    elif tool_name == "log_activity":
-        result = await run_query(lambda: _log_activity(agent_id, inp))
-    elif tool_name == "create_deal":
-        result = await run_query(lambda: _create_deal(agent_id, inp))
-    elif tool_name == "update_deal":
-        result = await run_query(lambda: _update_deal(agent_id, inp))
-    elif tool_name == "delete_deal":
-        result = await run_query(lambda: _delete_deal(agent_id, inp))
-    elif tool_name == "create_buyer_profile":
-        result = await run_query(lambda: _create_buyer_profile(agent_id, inp))
-    elif tool_name == "update_buyer_profile":
-        result = await run_query(lambda: _update_buyer_profile(agent_id, inp))
-    elif tool_name == "create_task":
-        result = await run_query(lambda: _create_task(agent_id, inp))
-    elif tool_name == "complete_task":
-        result = await run_query(lambda: _complete_task(agent_id, inp))
-    elif tool_name == "reschedule_task":
-        result = await run_query(lambda: _reschedule_task(agent_id, inp))
-    elif tool_name == "create_property":
-        result = await run_query(lambda: _create_property(agent_id, inp))
-    elif tool_name == "update_property":
-        result = await run_query(lambda: _update_property(agent_id, inp))
-    elif tool_name == "delete_property":
-        result = await run_query(lambda: _delete_property(agent_id, inp))
-    elif tool_name == "send_email":
-        # Proxy to Go backend — this is an HTTP call, not a DB query.
-        # Flow: AI Service → Go Backend → Gmail API (two-hop proxy,
-        # avoids duplicating OAuth/token-refresh logic in Python).
-        result = await _proxy_to_backend("POST", "/api/gmail/send", agent_id, inp)
-    else:
-        return {"error": f"Unknown write tool: {tool_name}"}
+    result = await _dispatch_write_tool(tool_name, inp, agent_id)
 
     # Fire workflow triggers (fire-and-forget)
     if result and "error" not in result:
