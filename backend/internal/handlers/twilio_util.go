@@ -107,7 +107,7 @@ func validateTwilioSignature(authToken, url string, params url.Values, signature
 
 // encryptToken encrypts plaintext using AES-256-GCM. The nonce is prepended to the
 // ciphertext and the result is hex-encoded.
-func encryptToken(plaintext string, key []byte) (string, error) {
+func encryptTwilioToken(plaintext string, key []byte) (string, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return "", fmt.Errorf("aes cipher: %w", err)
@@ -125,7 +125,7 @@ func encryptToken(plaintext string, key []byte) (string, error) {
 }
 
 // decryptToken decrypts a hex-encoded AES-256-GCM ciphertext (nonce prepended).
-func decryptToken(ciphertextHex string, key []byte) (string, error) {
+func decryptTwilioToken(ciphertextHex string, key []byte) (string, error) {
 	data, err := hex.DecodeString(ciphertextHex)
 	if err != nil {
 		return "", fmt.Errorf("hex decode: %w", err)
@@ -164,7 +164,7 @@ func getTwilioConfig(ctx context.Context, pool *pgxpool.Pool, agentID string, cf
 	if cfg.TwilioEncryptionKey != "" {
 		keyBytes, kerr := hex.DecodeString(cfg.TwilioEncryptionKey)
 		if kerr == nil && len(keyBytes) == 32 {
-			decrypted, derr := decryptToken(authToken, keyBytes)
+			decrypted, derr := decryptTwilioToken(authToken, keyBytes)
 			if derr == nil {
 				authToken = decrypted
 			} else {

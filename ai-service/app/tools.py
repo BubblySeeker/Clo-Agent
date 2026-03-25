@@ -11,8 +11,10 @@ import logging
 import uuid
 from typing import Any
 
+import httpx
 import psycopg2.extras
 
+from app.config import BACKEND_URL, AI_SERVICE_SECRET
 from app.database import get_conn, run_query
 
 logger = logging.getLogger(__name__)
@@ -33,7 +35,14 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "search_contacts",
-        "description": "Search for contacts by name, email, or filter by source. Returns matching contacts. The query matches against first name, last name, email, and full name (first + last). You can search with a full name like 'John Doe' or just a first/last name.",
+        "description": (
+            "Search for contacts by name, email, or filter by source. "
+            "Use this tool before any operation that needs a contact_id — never guess UUIDs. "
+            "The query matches against first_name, last_name, email, and full name (first + last concatenated). "
+            "Pass a full name like 'Rohan Batre' or just a partial name like 'Rohan'. "
+            "For recency references ('my last contact'), call with no query and limit=1 — results are sorted newest first. "
+            "Returns: id, first_name, last_name, email, source, created_at, last_activity_at."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -149,7 +158,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "create_contact",
-        "description": "Create a new contact. Requires user confirmation before executing.",
+        "description": "IMPORTANT: Only use this to create a brand-new contact that does NOT already exist. If you found the contact via search, use update_contact instead. Create a new contact. Requires user confirmation before executing.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -164,7 +173,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "update_contact",
-        "description": "Update contact information. Requires user confirmation before executing.",
+        "description": "Use this to add or change any field on an EXISTING contact. This includes adding email, phone, or any other field to a contact found via search. Update contact information. Requires user confirmation before executing.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -180,7 +189,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "log_activity",
-        "description": "Log a call, email, note, showing, or task for a contact. Requires user confirmation before executing.",
+        "description": "Use this to record something that already happened — a call, meeting, note, showing, or email interaction. Log a call, email, note, showing, or task for a contact. Requires user confirmation before executing.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -324,6 +333,37 @@ TOOL_DEFINITIONS = [
             "required": ["task_id", "new_due_date"],
         },
     },
+    # --- Document RAG tools ---
+    {
+        "name": "search_documents",
+        "description": (
+            "Search uploaded documents using hybrid semantic + keyword search. "
+            "Returns relevant passages with source citations (document name, page number, section). "
+            "Use this when the user asks questions that might be answered by their uploaded documents "
+            "(contracts, listings, reports, spreadsheets, etc.)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "The search query — be specific for best results"},
+                "document_id": {"type": "string", "description": "Optional: limit search to a specific document UUID"},
+                "contact_id": {"type": "string", "description": "Optional: search only documents linked to this contact"},
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "list_documents",
+        "description": "List all documents uploaded by the agent. Use to see what documents are available before searching.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "contact_id": {"type": "string", "description": "Optional: filter to documents linked to this contact"},
+            },
+            "required": [],
+        },
+    },
+    # --- Property tools ---
     {
         "name": "search_properties",
         "description": "Search properties by address, MLS ID, status, type, price range, or bedrooms. Returns matching property listings.",
@@ -438,6 +478,21 @@ TOOL_DEFINITIONS = [
             "required": [],
         },
     },
+    # ----- Gmail / Email tools -----
+    {
+        "name": "search_emails",
+        "description": "Search synced Gmail emails. Use contacts_only=true when asked about emails from/to contacts (filters out spam/marketing). Without contacts_only, returns all emails including promotional ones.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search term to match against subject, sender name, or snippet"},
+                "contact_id": {"type": "string", "description": "Filter to emails linked to this contact UUID"},
+                "contacts_only": {"type": "boolean", "description": "If true, only return emails linked to a CRM contact (excludes spam/marketing). Use this when asked about contact messages."},
+                "limit": {"type": "integer", "description": "Max results (default 10, use higher like 50 when searching across all contacts)"},
+            },
+            "required": [],
+        },
+    },
     {
         "name": "get_sms_conversation",
         "description": "Get all SMS messages with a specific contact or phone number, ordered chronologically.",
@@ -485,6 +540,57 @@ TOOL_DEFINITIONS = [
             "properties": {
                 "contact_id": {"type": "string", "description": "UUID of the contact"},
                 "limit": {"type": "integer", "description": "Max results (default 20)"},
+            },
+            "required": ["contact_id"],
+        },
+    },
+    {
+        "name": "get_email_thread",
+        "description": "Get all emails in a thread (conversation) by thread ID. Returns emails in chronological order. Use search_emails first to find the thread_id.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "thread_id": {"type": "string", "description": "Gmail thread ID"},
+                "limit": {"type": "integer", "description": "Max emails to return (default 20)"},
+            },
+            "required": ["thread_id"],
+        },
+    },
+    {
+        "name": "draft_email",
+        "description": "Generate an email draft for the agent to review and edit before sending. Returns structured {to, subject, body} fields. Does NOT send the email.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "to": {"type": "string", "description": "Recipient email address"},
+                "subject": {"type": "string", "description": "Email subject line"},
+                "context": {"type": "string", "description": "What the email should be about — the AI will write the body"},
+                "contact_id": {"type": "string", "description": "Optional contact UUID for context about the recipient"},
+            },
+            "required": ["to", "context"],
+        },
+    },
+    {
+        "name": "send_email",
+        "description": "Send an email via the agent's connected Gmail account. Requires Gmail to be connected and user confirmation before sending.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "to": {"type": "string", "description": "Recipient email address"},
+                "subject": {"type": "string", "description": "Email subject line"},
+                "body": {"type": "string", "description": "Email body (plain text)"},
+                "cc": {"type": "string", "description": "CC recipient email address (optional)"},
+            },
+            "required": ["to", "subject", "body"],
+        },
+    },
+    {
+        "name": "get_lead_score",
+        "description": "Get a contact's lead score with tier classification, dimension breakdown, top signals, and suggested next action. Use this when the user asks about a contact's score, priority, or engagement level.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "contact_id": {"type": "string", "description": "UUID of the contact to get lead score for"},
             },
             "required": ["contact_id"],
         },
@@ -540,6 +646,8 @@ READ_TOOLS = {
     "get_analytics",
     "get_overdue_tasks",
     "semantic_search",
+    "search_documents",
+    "list_documents",
     "search_properties",
     "get_property",
     "match_buyer_to_properties",
@@ -549,6 +657,10 @@ READ_TOOLS = {
     "get_call_history",
     "get_call_transcript",
     "search_call_transcripts",
+    "search_emails",
+    "get_email_thread",
+    "draft_email",
+    "get_lead_score",
 }
 
 WRITE_TOOLS = {
@@ -569,6 +681,14 @@ WRITE_TOOLS = {
     "delete_property",
     "send_sms",
     "initiate_call",
+    "send_email",
+}
+
+# Tools that are write operations but safe to auto-execute without confirmation.
+# These modify existing records (no creates/deletes of primary entities, no emails).
+AUTO_EXECUTE_TOOLS = {
+    "update_contact", "log_activity", "complete_task", "reschedule_task",
+    "update_buyer_profile", "update_deal", "update_property",
 }
 
 # ---------------------------------------------------------------------------
@@ -600,6 +720,10 @@ async def execute_read_tool(tool_name: str, tool_input: dict, agent_id: str) -> 
         return await run_query(lambda: _get_overdue_tasks(agent_id, tool_input.get("limit", 20)))
     elif tool_name == "semantic_search":
         return await run_query(lambda: _semantic_search(agent_id, tool_input))
+    elif tool_name == "search_documents":
+        return await run_query(lambda: _search_documents(agent_id, tool_input))
+    elif tool_name == "list_documents":
+        return await run_query(lambda: _list_documents(agent_id, tool_input))
     elif tool_name == "search_properties":
         return await run_query(lambda: _search_properties(agent_id, tool_input))
     elif tool_name == "get_property":
@@ -618,6 +742,14 @@ async def execute_read_tool(tool_name: str, tool_input: dict, agent_id: str) -> 
         return await run_query(lambda: _get_call_transcript(agent_id, tool_input))
     elif tool_name == "search_call_transcripts":
         return await run_query(lambda: _search_call_transcripts(agent_id, tool_input))
+    elif tool_name == "search_emails":
+        return await run_query(lambda: _search_emails(agent_id, tool_input))
+    elif tool_name == "get_email_thread":
+        return await run_query(lambda: _get_email_thread(agent_id, tool_input["thread_id"], tool_input.get("limit", 20)))
+    elif tool_name == "draft_email":
+        return await _draft_email(agent_id, tool_input)
+    elif tool_name == "get_lead_score":
+        return await run_query(lambda: _get_lead_score(agent_id, tool_input["contact_id"]))
     else:
         return {"error": f"Unknown tool: {tool_name}"}
 
@@ -717,6 +849,77 @@ def _get_contact_details(agent_id: str, contact_id: str) -> dict:
         result = dict(contact)
         result["buyer_profile"] = dict(bp) if bp else None
         return result
+
+
+def _get_lead_score(agent_id: str, contact_id: str) -> dict:
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            "SELECT first_name, last_name, lead_score, lead_score_signals, previous_lead_score "
+            "FROM contacts WHERE id = %s AND agent_id = %s",
+            (contact_id, agent_id),
+        )
+        row = cur.fetchone()
+        if not row:
+            return {"error": "Contact not found"}
+
+        score = row["lead_score"]
+        if score is None:
+            return {"error": "No lead score calculated yet for this contact"}
+
+        signals = row["lead_score_signals"] or {}
+        previous = row["previous_lead_score"]
+
+        # Determine tier
+        if score >= 80:
+            tier = "Hot"
+        elif score >= 50:
+            tier = "Warm"
+        elif score >= 25:
+            tier = "Cool"
+        else:
+            tier = "Cold"
+
+        # Dimension breakdown — signals JSONB has a `dimensions` key with sub-objects each having a `score` field
+        dims_raw = signals.get("dimensions", {})
+        dimensions = {
+            "engagement": dims_raw.get("engagement", {}).get("score", 0) if isinstance(dims_raw.get("engagement"), dict) else dims_raw.get("engagement", 0),
+            "readiness": dims_raw.get("readiness", {}).get("score", 0) if isinstance(dims_raw.get("readiness"), dict) else dims_raw.get("readiness", 0),
+            "velocity": dims_raw.get("velocity", {}).get("score", 0) if isinstance(dims_raw.get("velocity"), dict) else dims_raw.get("velocity", 0),
+            "profile_completeness": dims_raw.get("profile", {}).get("score", 0) if isinstance(dims_raw.get("profile"), dict) else dims_raw.get("profile_completeness", 0),
+        }
+
+        # Top 3 signals from the `signals` list in the JSONB
+        top_signals = signals.get("signals", [])[:3]
+
+        # Trend
+        if previous is None:
+            trend = "new"
+        elif score > previous:
+            trend = "rising"
+        elif score < previous:
+            trend = "falling"
+        else:
+            trend = "stable"
+
+        # Suggested action based on tier
+        actions = {
+            "Hot": "High priority — reach out today, this lead is actively engaged",
+            "Warm": "Good momentum — schedule a follow-up within 2-3 days",
+            "Cool": "Needs nurturing — send relevant listings or market updates",
+            "Cold": "Re-engage — consider a check-in call or remove from active pipeline",
+        }
+
+        return {
+            "contact": f"{row['first_name']} {row['last_name']}",
+            "score": score,
+            "tier": tier,
+            "trend": trend,
+            "previous_score": previous,
+            "dimensions": dimensions,
+            "top_signals": top_signals,
+            "suggested_action": actions[tier],
+        }
 
 
 def _get_contact_activities(agent_id: str, contact_id: str, limit: int) -> list:
@@ -1109,6 +1312,7 @@ _TOOL_TO_TRIGGER = {
     "update_deal": "deal_stage_changed",
     "send_sms": "sms_sent",
     "initiate_call": "call_initiated",
+    "send_email": "email_sent",
 }
 
 
@@ -1168,17 +1372,67 @@ def cleanup_expired_actions() -> int:
 
 
 # ---------------------------------------------------------------------------
+# Write tool dispatch (shared by execute_write_tool and auto-execute path)
+# ---------------------------------------------------------------------------
+
+async def _dispatch_write_tool(tool_name: str, tool_input: dict, agent_id: str) -> dict:
+    """Dispatch a write tool to its handler. Returns the tool result dict."""
+    if tool_name == "create_contact":
+        return await run_query(lambda: _create_contact(agent_id, tool_input))
+    elif tool_name == "update_contact":
+        return await run_query(lambda: _update_contact(agent_id, tool_input))
+    elif tool_name == "delete_contact":
+        return await run_query(lambda: _delete_contact(agent_id, tool_input))
+    elif tool_name == "log_activity":
+        return await run_query(lambda: _log_activity(agent_id, tool_input))
+    elif tool_name == "create_deal":
+        return await run_query(lambda: _create_deal(agent_id, tool_input))
+    elif tool_name == "update_deal":
+        return await run_query(lambda: _update_deal(agent_id, tool_input))
+    elif tool_name == "delete_deal":
+        return await run_query(lambda: _delete_deal(agent_id, tool_input))
+    elif tool_name == "create_buyer_profile":
+        return await run_query(lambda: _create_buyer_profile(agent_id, tool_input))
+    elif tool_name == "update_buyer_profile":
+        return await run_query(lambda: _update_buyer_profile(agent_id, tool_input))
+    elif tool_name == "create_task":
+        return await run_query(lambda: _create_task(agent_id, tool_input))
+    elif tool_name == "complete_task":
+        return await run_query(lambda: _complete_task(agent_id, tool_input))
+    elif tool_name == "reschedule_task":
+        return await run_query(lambda: _reschedule_task(agent_id, tool_input))
+    elif tool_name == "create_property":
+        return await run_query(lambda: _create_property(agent_id, tool_input))
+    elif tool_name == "update_property":
+        return await run_query(lambda: _update_property(agent_id, tool_input))
+    elif tool_name == "delete_property":
+        return await run_query(lambda: _delete_property(agent_id, tool_input))
+    elif tool_name == "send_sms":
+        return await _send_sms_via_backend(agent_id, tool_input)
+    elif tool_name == "initiate_call":
+        return await _initiate_call_via_backend(agent_id, tool_input)
+    elif tool_name == "send_email":
+        # Proxy to Go backend — this is an HTTP call, not a DB query.
+        # Flow: AI Service → Go Backend → Gmail API (two-hop proxy,
+        # avoids duplicating OAuth/token-refresh logic in Python).
+        return await _proxy_to_backend("POST", "/api/gmail/send", agent_id, tool_input)
+    else:
+        return {"error": f"Unknown write tool: {tool_name}"}
+
+
+# ---------------------------------------------------------------------------
 # Write tool executor (called from /ai/confirm)
 # ---------------------------------------------------------------------------
 
-async def execute_write_tool(pending_id: str) -> dict:
-    # Fetch and delete the pending action atomically
+async def execute_write_tool(pending_id: str, agent_id: str) -> dict:
+    # Fetch and delete the pending action atomically, verifying agent ownership
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute(
-            """DELETE FROM pending_actions WHERE id = %s AND expires_at >= NOW()
+            """DELETE FROM pending_actions
+               WHERE id = %s AND agent_id = %s AND expires_at >= NOW()
                RETURNING tool, input, agent_id""",
-            (pending_id,),
+            (pending_id, agent_id),
         )
         action = cur.fetchone()
     if not action:
@@ -1192,43 +1446,7 @@ async def execute_write_tool(pending_id: str) -> dict:
     inp = action["input"]
     agent_id = action["agent_id"]
 
-    result: dict | None = None
-    if tool_name == "create_contact":
-        result = await run_query(lambda: _create_contact(agent_id, inp))
-    elif tool_name == "update_contact":
-        result = await run_query(lambda: _update_contact(agent_id, inp))
-    elif tool_name == "delete_contact":
-        result = await run_query(lambda: _delete_contact(agent_id, inp))
-    elif tool_name == "log_activity":
-        result = await run_query(lambda: _log_activity(agent_id, inp))
-    elif tool_name == "create_deal":
-        result = await run_query(lambda: _create_deal(agent_id, inp))
-    elif tool_name == "update_deal":
-        result = await run_query(lambda: _update_deal(agent_id, inp))
-    elif tool_name == "delete_deal":
-        result = await run_query(lambda: _delete_deal(agent_id, inp))
-    elif tool_name == "create_buyer_profile":
-        result = await run_query(lambda: _create_buyer_profile(agent_id, inp))
-    elif tool_name == "update_buyer_profile":
-        result = await run_query(lambda: _update_buyer_profile(agent_id, inp))
-    elif tool_name == "create_task":
-        result = await run_query(lambda: _create_task(agent_id, inp))
-    elif tool_name == "complete_task":
-        result = await run_query(lambda: _complete_task(agent_id, inp))
-    elif tool_name == "reschedule_task":
-        result = await run_query(lambda: _reschedule_task(agent_id, inp))
-    elif tool_name == "create_property":
-        result = await run_query(lambda: _create_property(agent_id, inp))
-    elif tool_name == "update_property":
-        result = await run_query(lambda: _update_property(agent_id, inp))
-    elif tool_name == "delete_property":
-        result = await run_query(lambda: _delete_property(agent_id, inp))
-    elif tool_name == "send_sms":
-        result = await _send_sms_via_backend(agent_id, inp)
-    elif tool_name == "initiate_call":
-        result = await _initiate_call_via_backend(agent_id, inp)
-    else:
-        return {"error": f"Unknown write tool: {tool_name}"}
+    result = await _dispatch_write_tool(tool_name, inp, agent_id)
 
     # Fire workflow triggers (fire-and-forget)
     if result and "error" not in result:
@@ -1276,10 +1494,19 @@ def _update_contact(agent_id: str, inp: dict) -> dict:
     inp = {k: v for k, v in inp.items() if k in _CONTACT_FIELDS}
     if not inp:
         return {"error": "No fields to update"}
+    select_cols = ", ".join(inp.keys())
     fields = ", ".join(f"{k} = %s" for k in inp)
     vals = list(inp.values()) + [contact_id, agent_id]
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            f"SELECT {select_cols} FROM contacts WHERE id = %s AND agent_id = %s",
+            (contact_id, agent_id),
+        )
+        prev_row = cur.fetchone()
+        if not prev_row:
+            return {"error": "Contact not found"}
+        previous = dict(prev_row)
         cur.execute(
             f"UPDATE contacts SET {fields} WHERE id = %s AND agent_id = %s RETURNING id",
             vals,
@@ -1287,7 +1514,7 @@ def _update_contact(agent_id: str, inp: dict) -> dict:
         row = cur.fetchone()
         if row:
             _schedule_embed("contact", contact_id, agent_id)
-        return {"updated": bool(row), "contact_id": contact_id}
+        return {"updated": True, "contact_id": contact_id, "previous": previous, "new": {k: inp[k] for k in inp}}
 
 
 def _log_activity(agent_id: str, inp: dict) -> dict:
@@ -1339,6 +1566,15 @@ def _update_deal(agent_id: str, inp: dict) -> dict:
         inp = {k: v for k, v in inp.items() if k in _DEAL_FIELDS}
         if not inp:
             return {"error": "No fields to update"}
+        select_cols = ", ".join(inp.keys())
+        cur.execute(
+            f"SELECT {select_cols} FROM deals WHERE id = %s AND agent_id = %s",
+            (deal_id, agent_id),
+        )
+        prev_row = cur.fetchone()
+        if not prev_row:
+            return {"error": "Deal not found"}
+        previous = dict(prev_row)
         fields = ", ".join(f"{k} = %s" for k in inp)
         vals = list(inp.values()) + [deal_id, agent_id]
         cur.execute(
@@ -1346,7 +1582,7 @@ def _update_deal(agent_id: str, inp: dict) -> dict:
             vals,
         )
         row = cur.fetchone()
-        return {"updated": bool(row), "deal_id": deal_id}
+        return {"updated": True, "deal_id": deal_id, "previous": previous, "new": {k: inp[k] for k in inp}}
 
 
 def _delete_contact(agent_id: str, inp: dict) -> dict:
@@ -1439,16 +1675,22 @@ def _update_buyer_profile(agent_id: str, inp: dict) -> dict:
         cur.execute("SELECT id FROM contacts WHERE id = %s AND agent_id = %s", (contact_id, agent_id))
         if not cur.fetchone():
             return {"error": "Contact not found"}
+        select_cols = ", ".join(inp.keys())
+        cur.execute(
+            f"SELECT {select_cols} FROM buyer_profiles WHERE contact_id = %s",
+            (contact_id,),
+        )
+        prev_row = cur.fetchone()
+        if not prev_row:
+            return {"error": "No buyer profile exists for this contact. Use create_buyer_profile first."}
+        previous = dict(prev_row)
         fields = ", ".join(f"{k} = %s" for k in inp)
         vals = list(inp.values()) + [contact_id]
         cur.execute(
             f"UPDATE buyer_profiles SET {fields} WHERE contact_id = %s RETURNING id",
             vals,
         )
-        row = cur.fetchone()
-        if not row:
-            return {"error": "No buyer profile exists for this contact. Use create_buyer_profile first."}
-        return {"updated": True, "contact_id": contact_id}
+        return {"updated": True, "contact_id": contact_id, "previous": previous, "new": {k: inp[k] for k in inp}}
 
 
 def _semantic_search(agent_id: str, inp: dict) -> list:
@@ -1457,6 +1699,64 @@ def _semantic_search(agent_id: str, inp: dict) -> list:
         return semantic_search(inp["query"], agent_id, inp.get("limit", 10))
     except Exception as e:
         return [{"error": str(e)}]
+
+
+def _search_documents(agent_id: str, inp: dict) -> dict:
+    """Hybrid semantic + keyword search across uploaded documents."""
+    try:
+        from app.services.document_search import hybrid_search, determine_k, refine_results_by_score_gap
+
+        query = inp["query"]
+        document_id = inp.get("document_id")
+        contact_id = inp.get("contact_id")
+        k = determine_k(query)
+
+        raw_results = hybrid_search(query, agent_id, k, document_id, contact_id)
+        results = refine_results_by_score_gap(raw_results, k)
+
+        formatted = []
+        for r in results:
+            formatted.append({
+                "chunk_id": r["chunk_id"],
+                "document_id": r["document_id"],
+                "filename": r["filename"],
+                "page_number": r.get("page_number"),
+                "section_heading": r.get("section_heading"),
+                "content": r["content"],
+                "score": round(r["rrf_score"], 4),
+            })
+
+        return {
+            "results": formatted,
+            "total_found": len(formatted),
+            "query": query,
+            "k_used": k,
+        }
+    except Exception as e:
+        logger.exception("search_documents tool error")
+        return {"error": str(e), "results": []}
+
+
+def _list_documents(agent_id: str, inp: dict) -> list:
+    """List all documents for the agent, optionally filtered by contact."""
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        contact_id = inp.get("contact_id")
+        if contact_id:
+            cur.execute(
+                """SELECT id, filename, file_type, file_size, status, page_count, chunk_count, created_at
+                   FROM documents WHERE agent_id = %s AND contact_id = %s AND status = 'ready'
+                   ORDER BY created_at DESC""",
+                (agent_id, contact_id),
+            )
+        else:
+            cur.execute(
+                """SELECT id, filename, file_type, file_size, status, page_count, chunk_count, created_at
+                   FROM documents WHERE agent_id = %s AND status = 'ready'
+                   ORDER BY created_at DESC""",
+                (agent_id,),
+            )
+        return [dict(r) for r in cur.fetchall()]
 
 
 def _get_overdue_tasks(agent_id: str, limit: int) -> list:
@@ -1677,18 +1977,26 @@ def _update_property(agent_id: str, inp: dict) -> dict:
     inp = {k: v for k, v in inp.items() if k in _PROPERTY_FIELDS}
     if not inp:
         return {"error": "No fields to update"}
-    fields = ", ".join(f"{k} = %s" for k in inp)
-    vals = list(inp.values()) + [property_id, agent_id]
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        select_cols = ", ".join(inp.keys())
+        cur.execute(
+            f"SELECT {select_cols}, address FROM properties WHERE id = %s AND agent_id = %s",
+            (property_id, agent_id),
+        )
+        prev_row = cur.fetchone()
+        if not prev_row:
+            return {"error": "Property not found"}
+        address = prev_row["address"]
+        previous = {k: prev_row[k] for k in inp.keys()}
+        fields = ", ".join(f"{k} = %s" for k in inp)
+        vals = list(inp.values()) + [property_id, agent_id]
         cur.execute(
             f"UPDATE properties SET {fields} WHERE id = %s AND agent_id = %s RETURNING id, address",
             vals,
         )
         row = cur.fetchone()
-        if not row:
-            return {"error": "Property not found"}
-        return {"updated": True, "property_id": property_id, "address": row["address"]}
+        return {"updated": True, "property_id": property_id, "address": row["address"], "previous": previous, "new": {k: inp[k] for k in inp}}
 
 
 def _delete_property(agent_id: str, inp: dict) -> dict:
@@ -1704,3 +2012,202 @@ def _delete_property(agent_id: str, inp: dict) -> dict:
             return {"error": "Property not found"}
         cur.execute("DELETE FROM properties WHERE id = %s AND agent_id = %s", (property_id, agent_id))
         return {"deleted": True, "property": prop["address"]}
+
+
+# ---------------------------------------------------------------------------
+# Proxy helper: AI Service → Go Backend (for tools that need Go's APIs)
+# ---------------------------------------------------------------------------
+
+async def _proxy_to_backend(method: str, path: str, agent_id: str, payload: dict) -> dict:
+    """Call the Go backend on behalf of an agent. Used by send_email to
+    proxy through Go's Gmail API integration (avoids duplicating OAuth logic)."""
+    url = f"{BACKEND_URL}{path}"
+    headers = {
+        "X-AI-Service-Secret": AI_SERVICE_SECRET,
+        "X-Agent-ID": agent_id,
+        "Content-Type": "application/json",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.request(method, url, json=payload, headers=headers)
+        if resp.status_code == 200 or resp.status_code == 201:
+            return resp.json()
+        # Surface Go backend errors as structured tool results
+        try:
+            body = resp.json()
+            error_msg = body.get("error", resp.text)
+        except Exception:
+            error_msg = resp.text
+        if resp.status_code == 429:
+            return {"error": f"Gmail rate limit — try again later. ({error_msg})"}
+        if resp.status_code == 401:
+            return {"error": "Email service authentication failed. Check AI_SERVICE_SECRET config."}
+        return {"error": f"Email service error ({resp.status_code}): {error_msg}"}
+    except httpx.ConnectError:
+        return {"error": "Email service unavailable — Go backend is not reachable."}
+    except httpx.TimeoutException:
+        return {"error": "Email service timed out — try again."}
+    except Exception as e:
+        logger.error("Proxy to backend failed: %s", e)
+        return {"error": f"Email service error: {str(e)}"}
+
+
+# ---------------------------------------------------------------------------
+# Gmail / Email tool handlers
+# ---------------------------------------------------------------------------
+
+def _search_emails(agent_id: str, inp: dict) -> list:
+    query = inp.get("query", "")
+    contact_id = inp.get("contact_id")
+    contacts_only = inp.get("contacts_only", False)
+    limit = inp.get("limit", 50 if contacts_only else 10)
+
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        params: list = [agent_id]
+        where_clauses = ["e.agent_id = %s"]
+
+        if contacts_only:
+            where_clauses.append("e.contact_id IS NOT NULL")
+        if query:
+            params.extend([f"%{query}%"] * 3)
+            where_clauses.append(
+                "(e.subject ILIKE %s OR e.from_name ILIKE %s OR e.snippet ILIKE %s)"
+            )
+        if contact_id:
+            params.append(contact_id)
+            where_clauses.append("e.contact_id = %s")
+
+        params.append(limit)
+        sql = f"""
+            SELECT e.id, e.thread_id, e.subject, e.snippet, e.from_name, e.from_address,
+                   e.to_addresses, e.is_read, e.is_outbound, e.labels, e.gmail_date,
+                   e.contact_id,
+                   CASE WHEN c.id IS NOT NULL THEN c.first_name || ' ' || c.last_name ELSE NULL END AS contact_name
+            FROM emails e
+            LEFT JOIN contacts c ON c.id = e.contact_id
+            WHERE {' AND '.join(where_clauses)}
+            ORDER BY e.gmail_date DESC LIMIT %s
+        """
+        cur.execute(sql, params)
+        results = [dict(r) for r in cur.fetchall()]
+        return results
+
+
+def _get_email_thread(agent_id: str, thread_id: str, limit: int) -> list:
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            """SELECT id, subject, snippet, from_name, from_address,
+                      to_addresses, cc_addresses, body_text, is_read,
+                      is_outbound, gmail_date
+               FROM emails
+               WHERE agent_id = %s AND thread_id = %s
+               ORDER BY gmail_date ASC LIMIT %s""",
+            (agent_id, thread_id, limit),
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+
+async def _draft_email(agent_id: str, inp: dict) -> dict:
+    """Generate an email draft using Claude. Returns structured fields for
+    the frontend compose modal — does NOT send anything."""
+    to = inp.get("to", "")
+    subject = inp.get("subject", "")
+    context = inp.get("context", "")
+    contact_id = inp.get("contact_id")
+
+    # Gather contact context if available
+    contact_info = ""
+    if contact_id:
+        contact_data = await run_query(lambda: _get_contact_details(agent_id, contact_id))
+        if isinstance(contact_data, dict) and "error" not in contact_data:
+            name = f"{contact_data.get('first_name', '')} {contact_data.get('last_name', '')}".strip()
+            contact_info = f"\nRecipient: {name} ({contact_data.get('email', to)})"
+
+    # Get agent name for signature
+    agent_name = "Agent"
+    try:
+        def _get_agent_name():
+            with get_conn() as conn:
+                cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+                cur.execute("SELECT name FROM users WHERE id = %s", (agent_id,))
+                row = cur.fetchone()
+                return row["name"] if row else "Agent"
+        agent_name = await run_query(_get_agent_name)
+    except Exception:
+        pass
+
+    import anthropic
+    from app.config import ANTHROPIC_API_KEY, ANTHROPIC_MODEL
+    client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+
+    prompt = (
+        f"Write a professional, friendly email for a real estate agent named {agent_name}.\n"
+        f"To: {to}{contact_info}\n"
+        f"Subject suggestion: {subject or '(generate an appropriate subject)'}\n"
+        f"Context: {context}\n\n"
+        "Return ONLY a JSON object with exactly these fields:\n"
+        '{"subject": "...", "body": "..."}\n'
+        "The body should be plain text, professional but warm. Include a sign-off with the agent's name. "
+        "Do NOT include any markdown, code fences, or explanation — just the JSON."
+    )
+
+    try:
+        response = await client.messages.create(
+            model=ANTHROPIC_MODEL,
+            max_tokens=1024,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = response.content[0].text.strip()
+        # Parse the JSON response
+        draft = json.loads(text)
+        return {
+            "draft": True,
+            "to": to,
+            "subject": draft.get("subject", subject or ""),
+            "body": draft.get("body", ""),
+        }
+    except json.JSONDecodeError:
+        # If Claude didn't return valid JSON, use the raw text as the body
+        return {
+            "draft": True,
+            "to": to,
+            "subject": subject or "",
+            "body": text if 'text' in dir() else "Failed to generate draft.",
+        }
+    except Exception as e:
+        logger.error("Draft email generation failed: %s", e)
+        return {"error": f"Failed to generate email draft: {str(e)}"}
+
+
+def check_gmail_status(agent_id: str) -> dict:
+    """Check if Gmail is connected for this agent. Used by agent.py for system prompt."""
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            "SELECT gmail_address, last_synced_at FROM gmail_tokens WHERE agent_id = %s",
+            (agent_id,),
+        )
+        row = cur.fetchone()
+        if row:
+            return {
+                "connected": True,
+                "gmail_address": row["gmail_address"],
+                "last_synced_at": row["last_synced_at"],
+            }
+        return {"connected": False}
+
+
+def get_recent_emails_for_contact(contact_id: str, agent_id: str, limit: int = 5) -> list:
+    """Get recent emails for a contact. Used by agent.py for contact-scoped context."""
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            """SELECT subject, snippet, from_name, is_outbound, gmail_date
+               FROM emails
+               WHERE contact_id = %s AND agent_id = %s
+               ORDER BY gmail_date DESC LIMIT %s""",
+            (contact_id, agent_id, limit),
+        )
+        return [dict(r) for r in cur.fetchall()]

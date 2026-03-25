@@ -1,818 +1,508 @@
-# CloAgent Codebase — Technical Debt & Concerns
+# Codebase Concerns
 
-Last assessed: 2026-03-17
+**Analysis Date:** 2026-03-24
 
-## Executive Summary
+## Tech Debt
 
-CloAgent has solid foundational architecture but contains several critical issues that must be addressed before production:
-- **Critical (block production)**: In-memory pending actions, silent errors in I/O operations, missing input validation
-- **High (block feature parity)**: Hardcoded AI service secret, no error handling in critical paths, unused embeddings table
-- **Medium (reduce risk)**: Cascading deletes without confirmation feedback, type-unsafe operations, missing validation
+### Monolithic tool dispatcher in AI service
+
+**Issue:** The `execute_read_tool()` and `execute_write_tool()` functions in `ai-service/app/tools.py` use long if/elif chains (15+ branches each) to route tool calls.
+
+**Files:** `ai-service/app/tools.py` (lines 550-606)
+
+**Impact:**
+- Adding a new tool requires touching 3 places: TOOL_DEFINITIONS list, READ_TOOLS/WRITE_TOOLS sets, and the dispatcher chain
+- High risk of forgetting to add a dispatcher branch (tool defined but unreachable)
+- 1743-line file with mixed concerns (definitions, dispatch, implementations)
+
+**Fix approach:** Refactor to dict-based dispatchers: `{"tool_name": (handler_fn, required_args)}`. Consolidate tool implementations into separate handler functions. Reduces touch points to 2 (definitions + dispatcher dict).
+
+**Priority:** P3 (works, but grows harder to maintain with each tool)
 
 ---
 
-## Critical Issues
+### Oversized Python service files
 
-### 1. In-Memory Pending Actions — Data Loss on Restart
+**Issue:** Business logic concentrated in files that exceed best-practice sizes:
 
-**Severity**: CRITICAL
-**File**: `/Users/matthewfaust/CloAgent/Clo-Agent/ai-service/app/tools.py` (line 19)
-**Issue**: Write tool confirmations stored in a Python dict, lost on service restart.
+**Files:**
+- `ai-service/app/tools.py` (1743 lines)
+- `ai-service/app/services/document_processor.py` (978 lines)
 
+**Impact:**
+- Hard to navigate and understand at a glance
+- Difficult to test in isolation (tools.py defines 30+ functions mixed with schemas)
+- Higher cognitive load during debugging and modifications
+
+**Fix approach:**
+- Split `tools.py` into `tools/definitions.py`, `tools/dispatchers.py`, `tools/implementations.py`
+- Extract document processor subsystems into separate modules (e.g., `pdf_extraction.py`, `chunking.py`)
+
+**Priority:** P3 (readability, not functionality)
+
+---
+
+## Known Bugs
+
+### Missing error state handling in frontend dashboard
+
+**Issue:** Dashboard pages use TanStack Query but ignore the `error` state. If an API call fails, no error UI is shown to the user.
+
+**Files:**
+- `frontend/src/app/dashboard/page.tsx` (lines 864-866: `const { data, isLoading, isError, refetch } = useQuery()` — `isError` not used)
+- Similar patterns in: `contacts/page.tsx`, `pipeline/page.tsx`, `tasks/page.tsx`, `analytics/page.tsx`, `chat/page.tsx`, `documents/page.tsx`, `communication/page.tsx`, `workflows/page.tsx`
+
+**Symptoms:**
+- User clicks button, API fails silently
+- Dashboard shows nothing (no error message, no retry button)
+- User must manually refresh page
+
+**Trigger:** Network error or backend 5xx response during any dashboard query
+
+**Workaround:** Manual page refresh (`Cmd+R`)
+
+**Fix approach:**
+1. Add error boundary around dashboard layout (catches React errors)
+2. Check `error` state in each `useQuery` and render an error card with retry button
+3. Catch errors in `apiRequest()` client function and provide context
+
+**Priority:** P2 (affects user experience on every error)
+
+---
+
+### Unhandled API errors in confirmation flow
+
+**Issue:** When user confirms a pending write action (`POST /api/ai/confirm`), if execution fails mid-operation (e.g., database constraint violation), the frontend shows no error and the action appears stuck.
+
+**Files:**
+- `frontend/src/lib/api/conversations.ts` (confirm endpoint call, no error handling shown in context)
+- `ai-service/app/routes/chat.py` (lines 64-70: `execute_write_tool()` errors converted to 404 with no detail)
+
+**Impact:**
+- Users don't know if their write succeeded or failed
+- Multiple confirmation attempts may be submitted
+- Pending actions orphaned in database
+
+**Fix approach:**
+1. Return detailed error responses (not just 404) from `/api/ai/confirm`
+2. Frontend catches confirm errors and shows a dismissible alert: "Action failed: {reason}. Retry?"
+3. Add cleanup task to expire stale pending_actions (already in schema, auto-cleanup via TTL)
+
+**Priority:** P2 (critical for write operations)
+
+---
+
+### Silent SQL errors in tool implementations
+
+**Issue:** Tool implementation functions in `ai-service/app/tools.py` execute queries but don't distinguish between "not found" (0 rows) and "query error" (database failure).
+
+**Files:** `ai-service/app/tools.py` (e.g., lines 687-703 `_get_contact_details`, 718-735 `_get_deal`)
+
+**Pattern:**
 ```python
-# Line 19 — apt to lose data
-pending_actions: dict[str, dict] = {}
+cur.execute(...)
+row = cur.fetchone()
+if not row:
+    return {"error": "Contact not found"}
 ```
 
-**Impact**:
-- Users confirm a tool (e.g., "Create Contact John Doe") → `pending_id` stored
-- AI service crashes/restarts → `pending_id` disappears
-- User's confirmation is orphaned; backend still waiting for execution
-- No way to recover the action
+**Impact:**
+- Network timeout or database crash returns same response as "contact doesn't exist"
+- Frontend can't distinguish between user error and system error
+- No logging of query failures makes debugging production issues hard
 
-**Affected Users**: Anyone using write tools (create/update/delete contacts, deals, profiles, tasks).
+**Fix approach:**
+1. Wrap all DB queries in try/except, log failures with query name and error
+2. Return structured errors: `{"error": "...", "error_type": "not_found" | "db_error"}`
+3. Frontend logs error types for monitoring
 
-**Mitigation Required**:
-1. **Persist** pending actions to PostgreSQL (`pending_actions` table with TTL)
-2. **Cleanup**: Add job to expire old pending actions (>1 hour)
-3. **Idempotency**: Ensure confirm endpoint handles double-confirms gracefully
-
----
-
-### 2. Hardcoded AI Service Secret
-
-**Severity**: CRITICAL
-**File**: `/Users/matthewfaust/CloAgent/Clo-Agent/ai-service/app/config.py` (line 10)
-**Issue**: Default secret exposed in source code.
-
-```python
-AI_SERVICE_SECRET: str = os.getenv("AI_SERVICE_SECRET", "cloagent-internal-secret-change-me")
-```
-
-**Impact**:
-- Anyone cloning the repo can bypass AI service auth with the default secret
-- In production, if `AI_SERVICE_SECRET` env var is not set, the default applies
-- Go backend and Python service both check `X-AI-Service-Secret` header, but the secret itself is public
-
-**Mitigation Required**:
-1. **Never** provide a default secret — raise error if env var missing
-2. **Rotate** secret in all environments immediately
-3. **Document**: Add warning in CLAUDE.md that this MUST be set in production
+**Priority:** P2 (affects debugging and error recovery)
 
 ---
 
-### 3. Silent I/O Errors in Critical Paths
+## Security Considerations
 
-**Severity**: CRITICAL
-**Files**:
-- `/Users/matthewfaust/CloAgent/Clo-Agent/backend/internal/handlers/messages.go` (line 161)
-- `/Users/matthewfaust/CloAgent/Clo-Agent/backend/internal/handlers/ai_profile.go` (line 100)
-- `/Users/matthewfaust/CloAgent/Clo-Agent/backend/internal/handlers/confirm.go` (similar)
+### Missing API request validation in frontend
 
-**Issue**: Errors silently ignored with `//nolint:errcheck` in response streaming.
+**Issue:** The `apiRequest()` client in `frontend/src/lib/api/client.ts` trusts all server responses. No runtime validation of response shape.
 
-```go
-// Line 161 in messages.go — write errors silently dropped
-w.Write(buf[:n]) //nolint:errcheck
+**Files:** `frontend/src/lib/api/client.ts` (lines 17-24)
 
-// Line 100 in ai_profile.go — copy errors ignored
-io.Copy(w, resp.Body) //nolint:errcheck
-```
+**Risk:**
+- Backend schema changes cause runtime crashes in frontend (undefined property access)
+- Malformed responses cause silent failures in TanStack Query caching
+- No early warning of API contract violations
 
-**Impact**:
-- Frontend receives partial/corrupted SSE stream if write fails
-- No indication that the response was incomplete
-- User sees frozen chat bubble, unclear why
-- Production debugging becomes very difficult
+**Current mitigation:** TypeScript types (compile-time only, not enforced at runtime)
 
-**Mitigation Required**:
-1. Check errors on `w.Write()` — break stream and log on error
-2. Check `io.Copy()` result — log and return error response
-3. Add context to error logs (conversation ID, agent ID, operation)
+**Recommendations:**
+1. Add Zod schemas for all API responses
+2. Parse responses through schema in `apiRequest()` before returning
+3. Throw validation error if response shape doesn't match (caught by existing error handling)
+
+**Priority:** P3 (low risk, but improves robustness)
 
 ---
 
-### 4. Missing Input Validation in JSON Decode
+### Shared secret for AI service auth
 
-**Severity**: CRITICAL
-**File**: `/Users/matthewfaust/CloAgent/Clo-Agent/backend/internal/handlers/conversations.go` (line 72)
-**Issue**: JSON decode error silently ignored.
+**Issue:** Backend-to-AI-service communication uses a shared secret in the `X-AI-Service-Secret` header.
 
-```go
-// Line 72 in conversations.go
-json.NewDecoder(r.Body).Decode(&body)  // Error ignored!
-```
+**Files:**
+- `backend/internal/config/config.go` (lines 46: `AIServiceSecret`)
+- `backend/cmd/api/main.go` (config loading)
+- `ai-service/app/config.py` (validation)
 
-**Impact**:
-- Malformed request body silently accepted
-- `body.ContactID` is `nil` when invalid JSON sent
-- Conversation created without validation
-- Difficult to debug client-side issues
+**Risk:**
+- Secret stored as plaintext in environment files (`.env`)
+- Single shared secret means any compromised service can impersonate the backend
+- No way to rotate secret without downtime
 
-**Mitigation Required**:
-1. Check error from `Decode()`
-2. Return 400 with error message if decode fails
-3. Apply same pattern to all POST/PATCH handlers
+**Current mitigation:** Environment variable separation (backend and AI service not exposed to internet)
 
----
+**Recommendations:**
+1. Use mutual TLS (mTLS) instead of shared secret
+2. Implement secret rotation mechanism (staged rollout of old/new secrets)
+3. Add rate limiting on AI service endpoints to detect abuse
 
-## High-Severity Issues
-
-### 5. Placeholder AI Profile Fallback Leaks to User
-
-**Severity**: HIGH
-**File**: `/Users/matthewfaust/CloAgent/Clo-Agent/backend/internal/handlers/ai_profile.go` (lines 76–94)
-**Issue**: When AI service is down, a hardcoded error message is saved to DB as the AI profile.
-
-```go
-// Line 83 in ai_profile.go
-placeholder := "AI profile generation requires the AI service. Please ensure it is running."
-// ... saves this to DB as if it's a real profile
-```
-
-**Impact**:
-- User regenerates AI profile, AI service is down
-- Error message saved permanently to `ai_profiles.summary`
-- Next time user views profile, they see error text instead of real summary
-- No way to distinguish real profiles from error fallbacks
-
-**Mitigation Required**:
-1. Return 503 (Service Unavailable) instead of saving placeholder
-2. Let frontend retry when AI service recovers
-3. If saving placeholder, mark with a `is_placeholder` flag
-4. Add migration to clean up existing error placeholders
+**Priority:** P3 (internal service, but good hardening)
 
 ---
 
-### 6. Unused Embeddings Table — Incomplete Feature
+### Encryption key management
 
-**Severity**: HIGH
-**File**: `/Users/matthewfaust/CloAgent/Clo-Agent/backend/migrations/001_init.sql` (lines 124–133)
-**Issue**: `embeddings` table and pgvector index created but never used. No embedding generation or search.
+**Issue:** Document encryption key stored as environment variable (`ENCRYPTION_KEY`).
 
-**Schema exists**:
-```sql
-CREATE TABLE embeddings (
-    embedding    vector(1536),
-    ...
-);
-CREATE INDEX idx_embeddings_vector ON embeddings USING ivfflat ...;
-```
+**Files:** `backend/internal/config/config.go` (line 51), `backend/cmd/api/main.go` (line 61)
 
-**But no**:
-- Embedding generation on contact/activity creation
-- Semantic search endpoint
-- Code to call OpenAI embeddings API
+**Risk:**
+- Key exposed in logs if accidentally printed
+- No key rotation mechanism
+- Leaked key decrypts all historical documents
 
-**Impact**:
-- Unused infrastructure taking up resources and disk space
-- Source of confusion: table exists but is abandoned
-- Technical debt for future migrations
-- If ever needed, entire feature must be built from scratch
+**Current mitigation:** Optional (only set if feature is used)
 
-**Mitigation Required**:
-1. **Decision**: Will semantic search be used?
-   - **YES**: Implement embedding generation (add to contact/activity create/update)
-   - **NO**: Drop the table and migration, remove from schema
-2. Document decision in CLAUDE.md
+**Recommendations:**
+1. Use AWS KMS or HashiCorp Vault for key management
+2. Implement key rotation (versioning + re-encryption)
+3. Audit logging on decrypt operations
+
+**Priority:** P3 (only if document encryption is enabled)
 
 ---
 
-### 7. No Validation of Buyer Profile Fields
+## Performance Bottlenecks
 
-**Severity**: HIGH
-**File**: `/Users/matthewfaust/CloAgent/Clo-Agent/ai-service/app/tools.py` (lines 816–840)
-**Issue**: Buyer profile create/update accept any values, no type/range validation.
+### N+1 queries in contact list
 
-```python
-# Line 830-838 — no validation
-cur.execute(
-    """INSERT INTO buyer_profiles (contact_id, budget_min, budget_max, ...)
-       VALUES (%s, %s, %s, ...)""",
-    (contact_id, inp.get("budget_min"), inp.get("budget_max"), ...)
-)
-```
+**Issue:** Dashboard and contact list queries fetch contact rows but might trigger additional queries for buyer profiles or recent activities on each row.
 
-**Impact**:
-- User (or AI) submits `budget_max < budget_min` → accepted
-- User submits negative budget or text → accepted (psycopg2 may cast unpredictably)
-- User submits unrealistic values (e.g., budget = 9999999999) → accepted
-- Data quality degrades over time
+**Files:**
+- `ai-service/app/tools.py` (lines 649-684 `_search_contacts`)
+- `backend/internal/handlers/contacts.go` (contact list handler)
 
-**Mitigation Required**:
-1. Add Pydantic model for buyer profile fields
-2. Validate: `budget_min < budget_max`, positive, <= reasonable max
-3. Validate: `bedrooms, bathrooms` are positive integers
-4. Validate: `timeline` is in allowed set
-5. Same for all write tools
+**Cause:**
+- Contact list query doesn't JOIN with buyer_profiles or activities
+- If UI renders buyer profile preview, separate query fires per contact
+
+**Current capacity:** Tested with ~100 contacts; behavior untested at 1000+
+
+**Scaling path:**
+1. Add JOIN to contact list query to fetch buyer profile + last activity in one pass
+2. Cache deal stages (already done, 1-hour TTL)
+3. Add database indexes on `(agent_id, created_at DESC)` and `(contact_id, created_at DESC)`
+
+**Priority:** P3 (works fine at current scale, refactor when testing larger datasets)
 
 ---
 
-### 8. No Cascade Confirmation on Delete Contact
+### SSE streaming without timeout guards
 
-**Severity**: HIGH
-**File**: `/Users/matthewfaust/CloAgent/Clo-Agent/ai-service/app/tools.py` (lines 771–798)
-**Issue**: `delete_contact` is a write tool, so user gets confirmation. But confirmation shows only `contact_id`, not what will be deleted.
+**Issue:** AI chat streaming via Server-Sent Events has no client-side or server-side timeout. If Claude API hangs, stream hangs forever.
 
-```python
-# Line 634 in tools.py
-return {
-    "confirmation_required": True,
-    "tool": tool_name,
-    "preview": tool_input,  # Only shows {"contact_id": "..."}
-    "pending_id": pending_id,
-}
-```
+**Files:**
+- `ai-service/app/services/agent.py` (Claude API call in `run_agent()`)
+- `ai-service/app/routes/chat.py` (lines 49-61: streaming response, no timeout)
 
-**Impact**:
-- User sees: "Delete contact abc123-def456..." — no context
-- User clicks Confirm without knowing:
-  - Contact name
-  - Number of deals that will cascade-delete
-  - Number of activities/conversations that will be lost
-- Data loss without warning
+**Current behavior:**
+- FastAPI default timeout: none (stream can hang forever)
+- Frontend has no timeout (will wait indefinitely)
 
-**Mitigation Required**:
-1. Fetch contact details in `queue_write_tool`
-2. Include contact name, deal count, activity count in `preview`
-3. Make preview user-readable: `"Delete John Doe (5 deals, 12 activities)"`
-4. Frontend renders rich confirmation card
+**Impact:**
+- Browser tab stays open, consuming connection
+- User can't tell if request is stuck or still processing
+
+**Scaling path:**
+1. Add `timeout=30` to Claude API call
+2. Add frontend 60-second timeout with user-visible countdown
+3. Return SSE error event if timeout occurs: `{"type": "error", "message": "Request timed out"}`
+
+**Priority:** P3 (rare in practice, but improves reliability)
 
 ---
 
-### 9. No Error Handling for Failed Database Commits
+## Fragile Areas
 
-**Severity**: HIGH
-**File**: `/Users/matthewfaust/CloAgent/Clo-Agent/ai-service/app/database.py` (lines 33–35)
-**Issue**: Commit failures are silently swallowed.
+### Contact deletion cascades
 
-```python
-# Lines 33-36
-except Exception:
-    conn.rollback()
-    raise  # Good
-# But: exceptions during commit are lost
-```
+**Files:** `backend/internal/handlers/contacts.go` (delete handler), database migrations (`001_init.sql`)
 
-**Impact**:
-- If `conn.commit()` fails (e.g., constraint violation), exception propagates
-- But in context manager, the `except` block in `run_query` doesn't distinguish commit errors
-- Caller may think action succeeded when it didn't
+**Why fragile:**
+- Single contact delete cascades to activities, deals, buyer_profiles, ai_profiles, embeddings, messages in conversations
+- No soft-delete; data permanently lost
+- User confirms delete but can't see what will be deleted
 
-**Mitigation Required**:
-1. Catch exceptions during `commit()` explicitly
-2. Log with context (agent_id, operation)
-3. Return error response to frontend, not 500
+**Safe modification:**
+1. Before implementing, audit all foreign keys pointing to contacts
+2. Add a confirmation modal showing what will be deleted: "Delete John Doe and X deals, Y activities, Z messages?"
+3. Consider implementing soft-delete (add `deleted_at` column, update RLS policies)
+
+**Test coverage:** No tests for cascade behavior; risk of data loss bugs
+
+**Priority:** P2 (affects data integrity)
 
 ---
 
-## Medium-Severity Issues
+### Workflow execution engine
 
-### 10. Type-Unsafe JSON Conversions in Go
+**Files:** `ai-service/app/services/workflow_engine.py` (248 lines)
 
-**Severity**: MEDIUM
-**Files**:
-- `/Users/matthewfaust/CloAgent/Clo-Agent/backend/internal/handlers/dashboard.go` (multiple)
-- All handlers using `interface{}`
+**Why fragile:**
+- Workflows trigger after write tool confirmation (async with `asyncio.create_task`)
+- If trigger matching fails, workflow doesn't execute but no error is logged
+- Workflow steps execute sequentially; if step fails, remaining steps skip with no retry
+- No visibility into workflow execution state (no logs, no status updates to frontend)
 
-**Issue**: Dashboard layout and other JSONB fields cast to `interface{}` without validation.
+**Safe modification:**
+1. Add comprehensive logging to workflow engine: trigger match, step execution, failures
+2. Implement workflow run history in database (update needed to `workflow_runs` schema)
+3. Add retry logic for failed steps (configurable per step)
 
-```go
-// dashboard.go — reading layout as raw interface{}
-var layout interface{}
-_ = json.Unmarshal(layoutBytes, &layout)
-// No guarantee it's the expected structure
-```
+**Test coverage:** Unit tests exist but integration tests lacking
 
-**Impact**:
-- Frontend sends corrupted layout object
-- Backend stores it without validation
-- Next request, frontend receives unexpected shape
-- Potential for panic if code assumes specific structure
-
-**Mitigation Required**:
-1. Define struct for dashboard layout
-2. Unmarshal into struct, catch errors
-3. Validate structure before storing
+**Priority:** P2 (automation reliability critical for user trust)
 
 ---
 
-### 11. No Pagination Limits on AI Service Queries
+### Document processing with external command execution
 
-**Severity**: MEDIUM
-**File**: `/Users/matthewfaust/CloAgent/Clo-Agent/ai-service/app/tools.py` (lines 414–449)
-**Issue**: `search_contacts` and other read tools accept `limit` from AI without bounds.
+**Files:** `ai-service/app/services/document_processor.py` (lines 30-81)
 
-```python
-# Line 417 in tools.py
-limit = inp.get("limit", 10)  # AI can request any number
-# No check: if limit > 10000: limit = 10000
-```
+**Why fragile:**
+- Uses `subprocess.run()` to call LibreOffice headless for DOCX/XLSX→PDF conversion
+- No timeout on LibreOffice execution (added timeout=60, but could hang if command stuck)
+- If LibreOffice fails or is missing, silently returns None; document processing continues with no text extracted
 
-**Impact**:
-- AI agent requests "get all contacts" with limit=999999
-- Query becomes slow, memory spike
-- Database connection pool exhausted
-- Denial of service (accidental or malicious)
+**Safe modification:**
+1. Add better error recovery: if LibreOffice unavailable, fall back to direct file parsing
+2. Log all conversion failures to file for debugging
+3. Test with malformed/corrupted input files (PDFs with embedded executables, etc.)
 
-**Mitigation Required**:
-1. Set max limit (e.g., 100)
-2. Clamp: `limit = min(inp.get("limit", 10), 100)`
-3. Document in tool schema
+**Test coverage:** No tests for document processing
+
+**Priority:** P3 (edge case, but impacts document feature reliability)
 
 ---
 
-### 12. No Request ID Correlation for SSE Streams
+## Scaling Limits
 
-**Severity**: MEDIUM
-**File**: `/Users/matthewfaust/CloAgent/Clo-Agent/backend/internal/handlers/messages.go` (lines 65–170)
-**Issue**: SSE streaming to frontend has no request/trace ID.
+### Database connection pool saturation
 
-**Impact**:
-- User reports "chat got stuck"
-- Frontend logs don't have request ID to correlate
-- Backend logs don't have same ID
-- Debugging becomes manual, slow
+**Current:** PGX connection pool: 25 max, 5 min idle
 
-**Mitigation Required**:
-1. Add `X-Request-ID` header to SSE response
-2. Frontend reads header, logs it
-3. AI service receives request ID in proxy call, logs it
-4. All three services log same request ID
+**Limit:** With 10 concurrent users each making 2-3 requests, pool fills up (30 potential connections). After that, new requests queue and eventually timeout.
+
+**Scaling path:**
+1. Monitor connection pool utilization in production
+2. If approaching limit, increase max to 50
+3. Switch to connection pooler (PgBouncer in transaction mode) to reduce backend connections
+
+**Priority:** P3 (test with concurrent user load)
 
 ---
 
-### 13. Missing Timestamps on Most Read-Only Tools
+### AI Service request queue
 
-**Severity**: MEDIUM
-**File**: `/Users/matthewfaust/CloAgent/Clo-Agent/ai-service/app/tools.py` (entire file)
-**Issue**: Tool results return raw data; no indication when data was last updated.
+**Current:** FastAPI ASGI server (Uvicorn) with no explicit queue depth limit
 
-```python
-# Line 405 in tools.py
-return {
-    "total_contacts": int(total_contacts),
-    "active_deals": int(row["active"]),
-    # No timestamp — when was this calculated?
-}
-```
+**Limit:** With slow Claude API (30s per request), more than ~5 concurrent users will back up requests
 
-**Impact**:
-- AI agent reports "You have 5 active deals" without knowing if data is 5 minutes or 5 days old
-- Frontend displays stale analytics without indication
-- User makes decisions on outdated data
+**Scaling path:**
+1. Add request queue monitoring
+2. Implement max concurrent request limit (return 503 if exceeded)
+3. Add user-visible queue position: "Your chat request is #3 in queue"
 
-**Mitigation Required**:
-1. Add `timestamp` to all read tool responses
-2. Frontend displays "as of 2 minutes ago"
-3. Alert user if data > 1 hour old
+**Priority:** P3 (acceptable for 5-10 concurrent users; refactor at higher scale)
 
 ---
 
-### 14. No Rate Limiting on Frontend API Client
+## Dependencies at Risk
 
-**Severity**: MEDIUM
-**File**: `/Users/matthewfaust/CloAgent/Clo-Agent/frontend/src/lib/api/client.ts`
-**Issue**: Frontend can make unlimited concurrent requests; no backoff.
+### psycopg2 blocking in async context
 
-```typescript
-// client.ts — naked fetch, no rate limit
-const res = await fetch(`${BASE}/api${path}`, {...});
-```
+**Risk:** AI service uses `psycopg2` (blocking, synchronous library) wrapped in `asyncio.to_thread()`.
 
-**Impact**:
-- User opens dashboard, 10 pages auto-fetch → 30+ concurrent requests
-- User clicks rapidly in contact list → unlimited queries
-- Backend connection pool exhausted
-- Other users' requests timeout
+**Files:** `ai-service/app/database.py` (async wrapper), `ai-service/app/tools.py` (all DB calls)
 
-**Mitigation Required**:
-1. Implement request queue (limit to 4 concurrent)
-2. Add exponential backoff on 429/503
-3. Use TanStack Query's built-in concurrency limits
+**Impact:**
+- Each DB call consumes a thread from the thread pool (default 32 threads)
+- High concurrency (100+ users) exhausts thread pool, blocking all requests
+- Not true async; just threads
+
+**Migration plan:**
+1. Replace psycopg2 with `psycopg` (async version) or `asyncpg`
+2. Update all tool functions to use async/await
+3. Benchmark concurrent performance before/after
+
+**Priority:** P3 (works now, but refactor if scaling beyond 20 concurrent users)
 
 ---
 
-### 15. Activities Table Missing Uniqueness Constraints
+### OpenAI API key configured but unused
 
-**Severity**: MEDIUM
-**File**: `/Users/matthewfaust/CloAgent/Clo-Agent/backend/migrations/001_init.sql` (lines 87–96)
-**Issue**: No constraint prevents duplicate activities for same contact+type+body.
+**Risk:** `frontend/src/lib/api/client.ts` and `ai-service/app/config.py` both reference `OPENAI_API_KEY` in environment.
 
-```sql
--- Line 88 in migrations/001_init.sql — no uniqueness
-CREATE TABLE activities (
-    id UUID PRIMARY KEY,
-    contact_id UUID,
-    type TEXT,
-    body TEXT,
-    created_at TIMESTAMPTZ,
-    -- No UNIQUE(contact_id, type, body, DATE(created_at))
-);
-```
+**Files:**
+- `ai-service/app/config.py` (line 8: loads but unused)
+- `ai-service/requirements.txt` (OpenAI package installed)
 
-**Impact**:
-- AI agent logs "Called John Doe" three times (three separate records)
-- User manually logs same activity twice → duplicate
-- Analytics count activities as 6 instead of 3
-- Data quality issues
+**Impact:**
+- Unused dependency bloats container image
+- If accidentally wired up, billing surprise for OpenAI calls
 
-**Mitigation Required**:
-1. Add soft-duplicate detection (check before insert)
-2. Or: add UNIQUE constraint with caveats (allow duplicates if > 1 hour apart)
-3. Document in tool descriptions: "Duplicate activities are allowed"
+**Fix approach:** Remove OpenAI package, config, and references (only Claude API is used)
+
+**Priority:** P3 (cleanup)
 
 ---
 
-### 16. Frontend Error Boundaries Missing in Key Pages
+## Missing Critical Features
 
-**Severity**: MEDIUM
-**Files**: Frontend app pages (all dashboard routes)
-**Issue**: No error boundary; any component error crashes entire page.
+### Validation schemas never enforced
 
-**Impact**:
-- Contact detail page: one broken component → whole page blank
-- User refreshes, same error
-- Error swallowed, hard to debug
+**Issue:** Zod package installed in frontend, but schemas only used in forms. No API response validation anywhere.
 
-**Mitigation Required**:
-1. Add React Error Boundary component
-2. Wrap dashboard layout and key pages
-3. Display user-friendly error message with error ID
-4. Log to error tracking service
+**Files:**
+- `frontend/package.json` (zod ^4.3.6 installed)
+- `frontend/src/lib/api/` (no .parse() calls on responses)
 
----
+**Blocks:**
+- Confident API refactoring (can't ensure response shape)
+- Early error detection (shape mismatches caught at component, not API layer)
 
-## Low-Severity Issues / Technical Debt
-
-### 17. Inconsistent Error Messages
-
-**Severity**: LOW
-**Files**: Multiple handlers
-**Issue**: Error messages are vague ("database error", "query error", "scan error").
-
-```go
-// handlers/messages.go — unhelpful errors
-if err != nil {
-    respondError(w, http.StatusInternalServerError, "query error")
-}
-```
-
-**Impact**:
-- Developer debugging: not clear what failed
-- User sees generic message
-- Error logs lack context
-
-**Mitigation Required**:
-1. Add context to error messages: "failed to fetch contact (contact_id={id})"
-2. Log full error internally, user sees short message
-3. Assign error IDs: "Error 37a2b9" → user can reference
-4. Add structured logging (JSON with contact_id, agent_id, operation)
+**Priority:** P3 (nice-to-have, not blocking)
 
 ---
 
-### 18. Dashboard Summary Query Inefficient
+### Error codes not standardized
 
-**Severity**: LOW
-**File**: `/Users/matthewfaust/CloAgent/Clo-Agent/ai-service/app/tools.py` (lines 374–411)
-**Issue**: Multiple separate queries; could be single query with aggregation.
+**Issue:** Backend handlers return generic "database error", "query error", "scan error" messages. Frontend has no way to distinguish between different error types.
 
-```python
-# Lines 374-411 — 4 separate queries for dashboard
-cur.execute("SELECT COUNT(*) FROM contacts WHERE agent_id = %s")
-cur.execute("SELECT COUNT(*) FROM deals...")
-cur.execute("SELECT COUNT(*) FROM activities...")
-cur.execute("SELECT COUNT(*) FROM deals...")
-```
+**Files:** `backend/internal/handlers/` (all ~14 handler files using `respondError()`)
 
-**Impact**:
-- Slower than necessary (4 round-trips)
-- Higher load on connection pool
-- Poor perceived performance on slow networks
+**Blocks:**
+- Proper error recovery logic (can't retry specific errors)
+- User-friendly error messages (all errors look the same to frontend)
+- Monitoring/alerting (can't bucket errors by type)
 
-**Mitigation Required**:
-1. Combine into single query with multiple aggregates
-2. Cache result for 5 minutes
-3. Benchmark improvement
+**Planned fix:** TODOS.md #1 — add error codes to all responses
+
+**Priority:** P2 (in backlog, planned for P2 phase)
 
 ---
 
-### 19. Missing EXPLAIN for Slow Queries
+## Test Coverage Gaps
 
-**Severity**: LOW
-**Issue**: No query performance analysis; unclear which queries are slow.
+### No integration tests for AI chat flow
 
-**Impact**:
-- As data grows, queries may suddenly slow
-- No metrics to catch regression
-- Optimization becomes reactive, not proactive
+**Issue:** AI service tests only validate tool definitions (schema consistency), not actual tool execution.
 
-**Mitigation Required**:
-1. Add slow query log (PostgreSQL `log_min_duration_statement`)
-2. Monitor query plans in dev
-3. Add index on frequently-filtered columns (e.g., `contact.source`)
+**Files:** `ai-service/tests/test_tools.py` (unit tests only, no integration)
 
----
+**What's not tested:**
+- End-to-end chat message → Claude → tool call → result flow
+- Confirmation flow for write tools
+- Workflow triggers on write tool execution
+- Concurrent requests handling
 
-### 20. Incomplete Migration Versioning
+**Risk:** Tool bugs only caught in production (user reports them)
 
-**Severity**: LOW
-**File**: Migrations folder
-**Issue**: 5 migrations but no rollback scripts.
-
-**Impact**:
-- Development: easy to break migrations
-- Staging: no way to revert in case of disaster
-- Production: risky deployments
-
-**Mitigation Required**:
-1. Add `DOWN` scripts for each migration (or use Flyway/Goose)
-2. Test down/up cycle before deployment
-3. Document rollback procedure
+**Priority:** P2 (test coverage for critical feature)
 
 ---
 
-## Security Concerns
+### No frontend error boundary integration tests
 
-### 21. Clerk JWT Not Validated on Renewal
+**Issue:** Error boundaries exist but not tested for actual error scenarios.
 
-**Severity**: MEDIUM
-**File**: `/Users/matthewfaust/CloAgent/Clo-Agent/backend/internal/middleware/auth.go`
-**Issue**: JWT verified once per request, but Clerk tokens have expiry. No session refresh logic.
+**Files:** `frontend/src/components/shared/ErrorBoundary.tsx` (exists, but no tests)
 
-**Impact**:
-- User's token expires mid-session
-- Frontend doesn't refresh automatically
-- Request fails with 401 (Unauthorized)
-- User must log in again or refresh page
+**What's not tested:**
+- Component throws error → boundary catches → fallback UI renders
+- Retry button works after error
+- Multiple nested error boundaries
 
-**Mitigation Required**:
-1. Frontend: intercept 401, call `getToken()` again (Clerk SDK does this)
-2. Backend: add `WWW-Authenticate: Bearer error="invalid_token"` on 401
-3. Document session lifetime expectations
+**Risk:** Error boundary breaks silently (component thrown, boundary doesn't catch due to timing issue)
+
+**Priority:** P3 (lower risk, but important for reliability)
 
 ---
 
-### 22. No CSRF Protection on Mutating Endpoints
+### Document processing untested
 
-**Severity**: MEDIUM
-**Issue**: POST/PATCH/DELETE endpoints have no CSRF token or SameSite cookie.
+**Issue:** No tests for PDF extraction, chunking, or embedding generation.
 
-**Impact**:
-- Attacker: craft malicious HTML, trick user into visiting
-- Form submits to `/api/contacts` from attacker's domain
-- User's browser includes auth cookie
-- Contact deleted without user knowledge
+**Files:**
+- `ai-service/app/services/document_processor.py` (978 lines, zero tests)
+- `ai-service/app/services/document_search.py` (345 lines, zero tests)
 
-**Mitigation Required**:
-1. Frontend: add CSRF token to POST/PATCH/DELETE requests (form hidden field)
-2. Backend: validate CSRF token (separate from auth)
-3. Set `SameSite=Strict` on auth cookie (Clerk SDK handles this)
-4. Validate `Origin` header on mutating requests
+**What's not tested:**
+- Handling of corrupted PDFs
+- Chunking with/without overlap
+- Embedding generation for long documents
+- Edge cases (empty files, binary files, etc.)
 
----
+**Risk:** Document feature fails in production on edge cases
 
-### 23. No Rate Limiting on Backend
-
-**Severity**: MEDIUM
-**Issue**: Backend has no rate limiting; attacker can brute-force or spam.
-
-**Impact**:
-- Attacker: spam `/api/contacts` POST 1000 times
-- Database fills with junk data
-- Legitimate requests timeout
-
-**Mitigation Required**:
-1. Add rate limiting middleware (e.g., `github.com/noelyoo/rate-limit-chi`)
-2. Limit by agent ID: 100 requests/minute per agent
-3. Return 429 (Too Many Requests) with `Retry-After` header
+**Priority:** P2 (document feature can't be trusted without tests)
 
 ---
 
-## Missing Features / Incomplete Implementation
+### No load testing
 
-### 24. No Semantic Search Implementation
+**Issue:** No performance tests for concurrent users or large datasets.
 
-**Severity**: MEDIUM
-**Status**: STUB
-**Files**:
-- Table exists: `/Users/matthewfaust/CloAgent/Clo-Agent/backend/migrations/001_init.sql` (lines 124–133)
-- No endpoint, no embedding generation
+**What's not tested:**
+- Dashboard with 1000+ contacts
+- 100 concurrent users on chat
+- Workflow engine with 50+ active workflows
+- Database query performance at scale
 
-**What's Missing**:
-1. Embedding generation on contact/activity create (call OpenAI API)
-2. Backend endpoint: `GET /api/search?q=<query>` (vector similarity)
-3. Frontend integration in contact search/filter
+**Risk:** Scaling limits unknown; performance degrades unexpectedly in production
 
-**Mitigation Required**:
-1. Decide: **Is semantic search needed for MVP?**
-   - If **NO**: Drop embeddings table (migration), delete schema
-   - If **YES**: Implement full feature (ETA: 2-3 days)
-
----
-
-### 25. Communication Page Not Implemented
-
-**Severity**: MEDIUM
-**Status**: MISSING
-**Note**: CLAUDE.md lists as "missing" — no route, no backend support
-
-**What's Needed**:
-1. Frontend route: `/dashboard/communication`
-2. UI: unified inbox for calls, emails, SMS
-3. Backend endpoints: call logs, email threads, SMS history (placeholder for now)
-4. Integration with Twilio / Gmail / Outlook (future)
-
-**Mitigation Required**: Decision on scope for MVP.
-
----
-
-### 26. +New Quick Action Button Missing
-
-**Severity**: LOW
-**Status**: MISSING
-**Note**: CLAUDE.md lists as "missing" from top bar
-
-**What's Needed**:
-1. Button in top bar (next to notifications)
-2. Dropdown: "New Contact", "New Deal", "New Task", "New Activity"
-3. Keyboard shortcut (Cmd+K or /new)
-
-**Mitigation Required**: Low priority; UX improvement only.
-
----
-
-## Architecture / Design Concerns
-
-### 27. Database Credentials Potentially Exposed in Logs
-
-**Severity**: MEDIUM
-**Issue**: DATABASE_URL (with password) may appear in error messages or logs.
-
-**Impact**:
-- If error logged: password visible in log file
-- Attacker gains DB credentials
-
-**Mitigation Required**:
-1. Never log full DATABASE_URL
-2. Create sanitize function: `redact_url(url)`
-3. Log only: "postgres://[REDACTED]@host:5432/db"
-4. Use error wrapping to avoid revealing raw connection strings
-
----
-
-### 28. No Caching Layer for Read-Heavy Queries
-
-**Severity**: LOW
-**Issue**: Dashboard summary, deal stages, analytics queried from DB every time.
-
-**Impact**:
-- Unnecessary DB load
-- Slower response times as data grows
-- No offline resilience
-
-**Mitigation Required**:
-1. Implement Redis caching (configured but unused)
-2. Cache deal stages for 1 hour
-3. Cache dashboard summary for 5 minutes
-4. Invalidate on data change
-
----
-
-## Testing & Observability Gaps
-
-### 29. No Integration Tests for AI Tools
-
-**Severity**: MEDIUM
-**Issue**: 23 tools exist but no test coverage.
-
-**Impact**:
-- Tool refactor may break silently
-- Edge cases (missing contact, invalid stage) untested
-- Regressions discovered by users
-
-**Mitigation Required**:
-1. Add pytest tests for 5 critical tools (create_contact, update_deal, delete_contact, search_contacts, get_buyer_profile)
-2. Test happy path, edge cases, error scenarios
-3. Run in CI/CD
-
----
-
-### 30. No Monitoring / Alerting
-
-**Severity**: MEDIUM
-**Issue**: No metrics, logs, or alerts for production.
-
-**Impact**:
-- Silent failures: service down but no one notices
-- Performance degradation: slow queries, no visibility
-- Audit trail missing: who did what and when
-
-**Mitigation Required**:
-1. Add structured logging (slog in Go, Python logging)
-2. Send logs to centralized service (e.g., Datadog, LogRocket)
-3. Set up alerts: 5xx errors, 95th percentile latency > 1s, database down
-4. Dashboard: request counts, error rates, response times
+**Priority:** P3 (test at 10x current scale before increasing user load)
 
 ---
 
 ## Summary Table
 
-| ID | Issue | Severity | Category | Effort | Blocker |
-|----|-------|----------|----------|--------|---------|
-| 1 | In-memory pending actions | CRITICAL | Data Loss | HIGH | YES |
-| 2 | Hardcoded AI secret | CRITICAL | Security | MEDIUM | YES |
-| 3 | Silent I/O errors | CRITICAL | Stability | MEDIUM | YES |
-| 4 | Missing JSON validation | CRITICAL | Validation | LOW | YES |
-| 5 | Placeholder profile fallback | HIGH | Data Quality | LOW | NO |
-| 6 | Unused embeddings table | HIGH | Debt | MEDIUM | NO |
-| 7 | Missing buyer profile validation | HIGH | Data Quality | MEDIUM | NO |
-| 8 | No cascade delete warning | HIGH | UX | MEDIUM | NO |
-| 9 | Silent commit failures | HIGH | Stability | MEDIUM | NO |
-| 10 | Type-unsafe JSON | MEDIUM | Stability | LOW | NO |
-| 11 | No query limits | MEDIUM | Stability | LOW | NO |
-| 12 | No request ID correlation | MEDIUM | Observability | MEDIUM | NO |
-| 13 | Missing data timestamps | MEDIUM | UX | LOW | NO |
-| 14 | No frontend rate limiting | MEDIUM | Stability | MEDIUM | NO |
-| 15 | No duplicate activity constraint | MEDIUM | Data Quality | LOW | NO |
-| 16 | Missing error boundaries | MEDIUM | Stability | LOW | NO |
-| 17 | Vague error messages | LOW | Debugging | LOW | NO |
-| 18 | Inefficient dashboard query | LOW | Performance | LOW | NO |
-| 19 | No slow query logs | LOW | Observability | MEDIUM | NO |
-| 20 | Missing rollback scripts | LOW | DevOps | MEDIUM | NO |
-| 21 | JWT renewal issue | MEDIUM | Session | MEDIUM | NO |
-| 22 | No CSRF protection | MEDIUM | Security | MEDIUM | NO |
-| 23 | No rate limiting | MEDIUM | Security | MEDIUM | NO |
-| 24 | Semantic search incomplete | MEDIUM | Feature | HIGH | NO |
-| 25 | Communication page missing | MEDIUM | Feature | HIGH | NO |
-| 26 | +New action button missing | LOW | Feature | LOW | NO |
-| 27 | DB credentials in logs | MEDIUM | Security | LOW | NO |
-| 28 | No caching layer | LOW | Performance | MEDIUM | NO |
-| 29 | No integration tests | MEDIUM | Testing | MEDIUM | NO |
-| 30 | No monitoring/alerting | MEDIUM | Observability | MEDIUM | NO |
+| Area | Severity | Priority | Effort | Phase |
+|------|----------|----------|--------|-------|
+| Tool dispatcher monolith | Medium | P3 | Small | Refactor |
+| Missing error UI in dashboard | High | P2 | Medium | Bug fix |
+| Unhandled API errors in confirm | High | P2 | Medium | Bug fix |
+| Silent SQL errors | High | P2 | Small | Bug fix |
+| Contact deletion cascades | High | P2 | Medium | Hardening |
+| Workflow execution fragility | High | P2 | Medium | Hardening |
+| Error codes not standardized | Medium | P2 | Medium | Refactor |
+| AI integration tests missing | Medium | P2 | Medium | Testing |
+| Document processing untested | Medium | P2 | Medium | Testing |
+| API response validation | Low | P3 | Small | Robustness |
+| Encryption key mgmt | Low | P3 | Medium | Security |
+| psycopg2 blocking | Low | P3 | Large | Future |
+| Large Python files | Low | P3 | Small | Refactor |
+| Load testing missing | Low | P3 | Medium | Testing |
 
 ---
 
-## Recommended Action Plan
-
-### Phase 1: Critical (Ship-Blocking)
-**Duration**: 2-3 days
-
-1. ✓ Persist pending actions to DB (issue #1)
-2. ✓ Fix hardcoded AI secret (issue #2)
-3. ✓ Handle I/O errors in streaming (issue #3)
-4. ✓ Add JSON decode validation (issue #4)
-
-### Phase 2: High (Reduce Risk)
-**Duration**: 1-2 days
-
-5. ✓ Fix AI profile placeholder fallback (issue #5)
-6. ✓ Decide on embeddings table (issue #6)
-7. ✓ Add buyer profile validation (issue #7)
-8. ✓ Improve delete confirmation UX (issue #8)
-
-### Phase 3: Medium (Stability)
-**Duration**: 3-5 days
-
-9. ✓ Add error handling for commits (issue #9)
-10. ✓ Type-safe JSON conversions (issue #10)
-11. ✓ Query limits on tools (issue #11)
-12. ✓ Request ID correlation (issue #12)
-13. ✓ Data timestamps in responses (issue #13)
-14. ✓ Frontend request rate limiting (issue #14)
-15. ✓ Add duplicate activity safeguards (issue #15)
-16. ✓ Error boundaries in React (issue #16)
-17. ✓ Improve error messages (issue #17)
-
-### Phase 4: Security
-**Duration**: 2-3 days
-
-21. ✓ JWT refresh handling (issue #21)
-22. ✓ CSRF protection (issue #22)
-23. ✓ Backend rate limiting (issue #23)
-27. ✓ Sanitize DB credentials in logs (issue #27)
-
-### Phase 5: Future (Post-MVP)
-29. ✓ Integration tests
-30. ✓ Monitoring & alerting
-24. ✓ Semantic search
-25. ✓ Communication page
-28. ✓ Redis caching
-
----
-
-## Files to Review First
-
-1. `/Users/matthewfaust/CloAgent/Clo-Agent/ai-service/app/tools.py` (line 19, 624–677)
-2. `/Users/matthewfaust/CloAgent/Clo-Agent/ai-service/app/config.py` (line 10)
-3. `/Users/matthewfaust/CloAgent/Clo-Agent/backend/internal/handlers/messages.go` (lines 65–170)
-4. `/Users/matthewfaust/CloAgent/Clo-Agent/backend/internal/handlers/conversations.go` (line 72)
-5. `/Users/matthewfaust/CloAgent/Clo-Agent/backend/internal/handlers/ai_profile.go` (lines 54–102)
-
----
-
-## References
-
-- CLAUDE.md — Project overview and architecture
-- Docker Compose config — Service definitions
-- Database migrations — Schema history
+*Concerns audit: 2026-03-24*

@@ -64,7 +64,7 @@ func SMSConfigure(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 		if cfg.TwilioEncryptionKey != "" {
 			keyBytes, kerr := hex.DecodeString(cfg.TwilioEncryptionKey)
 			if kerr == nil && len(keyBytes) == 32 {
-				encrypted, eerr := encryptToken(body.AuthToken, keyBytes)
+				encrypted, eerr := encryptTwilioToken(body.AuthToken, keyBytes)
 				if eerr == nil {
 					tokenToStore = encrypted
 				} else {

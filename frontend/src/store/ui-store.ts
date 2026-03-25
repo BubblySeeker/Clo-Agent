@@ -16,6 +16,11 @@ export interface ChatMessage {
     preview: Record<string, unknown>;
     status: "confirmed" | "cancelled" | "failed";
   };
+  autoExecutedActions?: Array<{
+    tool: string;
+    result: Record<string, unknown>;
+    status: "success" | "error" | "undone";
+  }>;
 }
 
 interface UIState {
@@ -31,6 +36,23 @@ interface UIState {
   setChatMessages: (msgs: ChatMessage[]) => void;
   appendChatMessage: (msg: ChatMessage) => void;
   updateLastMessage: (patch: Partial<ChatMessage>) => void;
+
+  // Score panel slide-over
+  scorePanelOpen: boolean;
+  scorePanelContactId: string | null;
+  scorePanelContactName: string | null;
+  openScorePanel: (contactId: string, contactName: string) => void;
+  closeScorePanel: () => void;
+
+  // Citation viewer
+  citationViewerOpen: boolean;
+  citationDocId: string | null;
+  citationChunkId: string | null;
+  citationPageNumber: number | null;
+  citationFilename: string | null;
+  openCitationViewer: (docId: string, chunkId: string, pageNumber?: number | null) => void;
+  openCitationByFilename: (filename: string, pageNumber?: number | null) => void;
+  closeCitationViewer: () => void;
 }
 
 export const useUIStore = create<UIState>()((set) => ({
@@ -53,4 +75,24 @@ export const useUIStore = create<UIState>()((set) => ({
       msgs[msgs.length - 1] = { ...msgs[msgs.length - 1], ...patch };
       return { chatMessages: msgs };
     }),
+
+  scorePanelOpen: false,
+  scorePanelContactId: null,
+  scorePanelContactName: null,
+  openScorePanel: (contactId, contactName) =>
+    set({ scorePanelOpen: true, scorePanelContactId: contactId, scorePanelContactName: contactName }),
+  closeScorePanel: () =>
+    set({ scorePanelOpen: false, scorePanelContactId: null, scorePanelContactName: null }),
+
+  citationViewerOpen: false,
+  citationDocId: null,
+  citationChunkId: null,
+  citationPageNumber: null,
+  citationFilename: null,
+  openCitationViewer: (docId, chunkId, pageNumber) =>
+    set({ citationViewerOpen: true, citationDocId: docId, citationChunkId: chunkId, citationPageNumber: pageNumber ?? null, citationFilename: null }),
+  openCitationByFilename: (filename, pageNumber) =>
+    set({ citationViewerOpen: true, citationDocId: null, citationChunkId: null, citationPageNumber: pageNumber ?? null, citationFilename: filename }),
+  closeCitationViewer: () =>
+    set({ citationViewerOpen: false, citationDocId: null, citationChunkId: null, citationPageNumber: null, citationFilename: null }),
 }));

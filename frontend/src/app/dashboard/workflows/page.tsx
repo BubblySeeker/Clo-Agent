@@ -227,7 +227,7 @@ export default function WorkflowsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [fromTemplate, setFromTemplate] = useState<typeof TEMPLATES[number] | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["workflows"],
     queryFn: async () => {
       const token = await getToken();
@@ -269,6 +269,17 @@ export default function WorkflowsPage() {
     setFromTemplate(template);
     setShowCreate(true);
   };
+
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full min-h-[400px] gap-4 p-6 text-center">
+        <p className="text-gray-600 font-medium">Failed to load workflows</p>
+        <button onClick={() => refetch()} className="px-4 py-2 rounded-xl text-white text-sm font-semibold" style={{ backgroundColor: "#0EA5E9" }}>
+          Try again
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6">

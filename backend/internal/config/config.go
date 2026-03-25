@@ -47,10 +47,11 @@ type Config struct {
 	AIServiceSecret    string
 	GoogleClientID     string
 	GoogleClientSecret string
-	GoogleRedirectURI    string
-	FrontendURL          string
-	WebhookBaseURL       string
-	TwilioEncryptionKey  string
+	GoogleRedirectURI   string
+	FrontendURL         string
+	WebhookBaseURL      string
+	TwilioEncryptionKey string
+	EncryptionKey       string
 }
 
 // Load reads configuration from environment variables (and a .env file if present)
@@ -72,6 +73,7 @@ func Load() (*Config, error) {
 		FrontendURL:         os.Getenv("FRONTEND_URL"),
 		WebhookBaseURL:      os.Getenv("WEBHOOK_BASE_URL"),
 		TwilioEncryptionKey: os.Getenv("TWILIO_ENCRYPTION_KEY"),
+		EncryptionKey:       os.Getenv("ENCRYPTION_KEY"),
 	}
 
 	if cfg.AIServiceURL == "" {
@@ -103,6 +105,10 @@ func Load() (*Config, error) {
 
 	if cfg.ClerkSecretKey == "" {
 		return nil, fmt.Errorf("CLERK_SECRET_KEY environment variable is required")
+	}
+
+	if cfg.AIServiceSecret == "" {
+		return nil, fmt.Errorf("AI_SERVICE_SECRET environment variable is required")
 	}
 
 	return cfg, nil

@@ -8,10 +8,45 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
 
 	"crm-api/internal/config"
 	"crm-api/internal/middleware"
 )
+
+// UndoToolAction proxies an undo request to the AI service, reverting the last auto-executed action.
+func UndoToolAction(cfg *config.Config) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		agentID := middleware.AgentUUIDFromContext(r.Context())
+		id := chi.URLParam(r, "id") // conversation ID
+
+		payload, _ := json.Marshal(map[string]string{
+			"agent_id": agentID,
+		})
+
+		req, err := http.NewRequestWithContext(r.Context(), http.MethodPost,
+			cfg.AIServiceURL+"/ai/undo/"+id, bytes.NewBuffer(payload))
+		if err != nil {
+			respondErrorWithCode(w, http.StatusInternalServerError, "proxy request build failed", ErrCodeInternal)
+			return
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-AI-Service-Secret", cfg.AIServiceSecret)
+		req.Header.Set("X-Request-ID", chimiddleware.GetReqID(r.Context()))
+
+		client := &http.Client{Timeout: 30 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			respondErrorWithCode(w, http.StatusBadGateway, "AI service unavailable", ErrCodeInternal)
+			return
+		}
+		defer resp.Body.Close()
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(resp.StatusCode)
+		io.Copy(w, resp.Body) //nolint:errcheck
+	}
+}
 
 // ConfirmToolAction proxies a tool confirmation to the AI service.
 func ConfirmToolAction(cfg *config.Config) http.HandlerFunc {
@@ -23,7 +58,7 @@ func ConfirmToolAction(cfg *config.Config) http.HandlerFunc {
 			PendingID string `json:"pending_id"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.PendingID == "" {
-			respondError(w, http.StatusBadRequest, "pending_id is required")
+			respondErrorWithCode(w, http.StatusBadRequest, "pending_id is required", ErrCodeBadRequest)
 			return
 		}
 
@@ -35,16 +70,17 @@ func ConfirmToolAction(cfg *config.Config) http.HandlerFunc {
 		req, err := http.NewRequestWithContext(r.Context(), http.MethodPost,
 			cfg.AIServiceURL+"/ai/confirm", bytes.NewBuffer(payload))
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "proxy request build failed")
+			respondErrorWithCode(w, http.StatusInternalServerError, "proxy request build failed", ErrCodeInternal)
 			return
 		}
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-AI-Service-Secret", cfg.AIServiceSecret)
+		req.Header.Set("X-Request-ID", chimiddleware.GetReqID(r.Context()))
 
 		client := &http.Client{Timeout: 30 * time.Second}
 		resp, err := client.Do(req)
 		if err != nil {
-			respondError(w, http.StatusBadGateway, "AI service unavailable")
+			respondErrorWithCode(w, http.StatusBadGateway, "AI service unavailable", ErrCodeInternal)
 			return
 		}
 		defer resp.Body.Close()

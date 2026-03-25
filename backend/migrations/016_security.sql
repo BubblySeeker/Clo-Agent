@@ -1,0 +1,33 @@
+-- Migration 016: Security hardening
+-- Force RLS on all agent-scoped tables (belt and suspenders with non-superuser role)
+
+ALTER TABLE contacts FORCE ROW LEVEL SECURITY;
+ALTER TABLE deals FORCE ROW LEVEL SECURITY;
+ALTER TABLE activities FORCE ROW LEVEL SECURITY;
+ALTER TABLE conversations FORCE ROW LEVEL SECURITY;
+ALTER TABLE messages FORCE ROW LEVEL SECURITY;
+ALTER TABLE ai_profiles FORCE ROW LEVEL SECURITY;
+ALTER TABLE buyer_profiles FORCE ROW LEVEL SECURITY;
+ALTER TABLE embeddings FORCE ROW LEVEL SECURITY;
+ALTER TABLE pending_actions FORCE ROW LEVEL SECURITY;
+ALTER TABLE workflows FORCE ROW LEVEL SECURITY;
+ALTER TABLE workflow_runs FORCE ROW LEVEL SECURITY;
+ALTER TABLE properties FORCE ROW LEVEL SECURITY;
+ALTER TABLE documents FORCE ROW LEVEL SECURITY;
+ALTER TABLE document_chunks FORCE ROW LEVEL SECURITY;
+ALTER TABLE document_folders FORCE ROW LEVEL SECURITY;
+ALTER TABLE contact_folders FORCE ROW LEVEL SECURITY;
+
+-- Gmail tokens table (if exists)
+DO $$ BEGIN
+  IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'gmail_tokens') THEN
+    EXECUTE 'ALTER TABLE gmail_tokens FORCE ROW LEVEL SECURITY';
+  END IF;
+END $$;
+
+-- Emails table (if exists)
+DO $$ BEGIN
+  IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'emails') THEN
+    EXECUTE 'ALTER TABLE emails FORCE ROW LEVEL SECURITY';
+  END IF;
+END $$;

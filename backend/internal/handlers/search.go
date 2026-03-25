@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"time"
 
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
+
 	"crm-api/internal/config"
 	"crm-api/internal/middleware"
 )
@@ -21,11 +23,15 @@ func SemanticSearch(cfg *config.Config) http.HandlerFunc {
 			Limit int    `json:"limit"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respondError(w, http.StatusBadRequest, "invalid request body")
+			respondErrorWithCode(w, http.StatusBadRequest, "invalid request body", ErrCodeBadRequest)
 			return
 		}
 		if body.Query == "" {
-			respondError(w, http.StatusBadRequest, "query is required")
+			respondErrorWithCode(w, http.StatusBadRequest, "query is required", ErrCodeBadRequest)
+			return
+		}
+		if err := validateMaxLen("query", body.Query, 500); err != nil {
+			respondErrorWithCode(w, http.StatusBadRequest, err.Error(), ErrCodeBadRequest)
 			return
 		}
 		if body.Limit <= 0 {
@@ -41,16 +47,17 @@ func SemanticSearch(cfg *config.Config) http.HandlerFunc {
 		req, err := http.NewRequestWithContext(r.Context(), http.MethodPost,
 			cfg.AIServiceURL+"/ai/search", bytes.NewBuffer(payload))
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "proxy request build failed")
+			respondErrorWithCode(w, http.StatusInternalServerError, "proxy request build failed", ErrCodeInternal)
 			return
 		}
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-AI-Service-Secret", cfg.AIServiceSecret)
+		req.Header.Set("X-Request-ID", chimiddleware.GetReqID(r.Context()))
 
 		client := &http.Client{Timeout: 30 * time.Second}
 		resp, err := client.Do(req)
 		if err != nil {
-			respondError(w, http.StatusBadGateway, "AI service unavailable")
+			respondErrorWithCode(w, http.StatusBadGateway, "AI service unavailable", ErrCodeInternal)
 			return
 		}
 		defer resp.Body.Close()

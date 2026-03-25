@@ -1,8 +1,9 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getDashboardSummary, getDashboardLayout, saveDashboardLayout } from "@/lib/api/dashboard";
+import { getDemoDataStatus, seedDemoData, clearDemoData } from "@/lib/api/demo-data";
 import {
   TrendingUp, TrendingDown, Users, AlertCircle, CheckCircle,
   Phone, Mail, FileText, Home, MessageSquare, Sparkles,
@@ -861,10 +862,34 @@ export default function DashboardPage() {
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
-  const { data, isLoading } = useQuery({
+  const queryClient = useQueryClient();
+
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["dashboard-summary"],
     queryFn: async () => { const token = await getToken(); return getDashboardSummary(token!); },
   });
+
+  // Demo data toggle
+  const { data: demoStatus } = useQuery({
+    queryKey: ["demo-data-status"],
+    queryFn: async () => { const token = await getToken(); return getDemoDataStatus(token!); },
+  });
+  const [demoLoading, setDemoLoading] = useState(false);
+  const toggleDemoData = async () => {
+    setDemoLoading(true);
+    try {
+      const token = await getToken();
+      if (!token) return;
+      if (demoStatus?.active) {
+        await clearDemoData(token);
+      } else {
+        await seedDemoData(token);
+      }
+      queryClient.invalidateQueries();
+    } finally {
+      setDemoLoading(false);
+    }
+  };
 
   const { data: layoutData } = useQuery({
     queryKey: ["dashboard-layout"],
@@ -960,6 +985,17 @@ export default function DashboardPage() {
   // The active dragged item's overlay (skip kpi-cards since it has its own overlay)
   const activeWidget = activeId ? WIDGET_REGISTRY.find((w) => w.id === activeId) : null;
 
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full min-h-[400px] gap-4 p-6 text-center">
+        <p className="text-gray-600 font-medium">Failed to load dashboard data</p>
+        <button onClick={() => refetch()} className="px-4 py-2 rounded-xl text-white text-sm font-semibold" style={{ backgroundColor: "#0EA5E9" }}>
+          Try again
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6">
       <div className="max-w-[1440px] mx-auto flex flex-col gap-5">
@@ -979,6 +1015,29 @@ export default function DashboardPage() {
               </>
             ) : (
               <>
+                <button
+                  onClick={toggleDemoData}
+                  disabled={demoLoading}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-semibold transition-colors ${
+                    demoStatus?.active
+                      ? "border-amber-200 bg-amber-50 text-amber-700"
+                      : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                  } ${demoLoading ? "opacity-50 cursor-wait" : ""}`}
+                >
+                  <Sparkles size={14} />
+                  <span>Demo Data</span>
+                  <span
+                    className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                      demoStatus?.active ? "bg-amber-500" : "bg-gray-300"
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${
+                        demoStatus?.active ? "translate-x-[18px]" : "translate-x-[3px]"
+                      }`}
+                    />
+                  </span>
+                </button>
                 <button onClick={() => setEditMode(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">
                   <Settings2 size={14} /> Customize
                 </button>

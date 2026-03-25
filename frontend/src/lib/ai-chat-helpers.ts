@@ -27,6 +27,9 @@ export const toolLabel: Record<string, string> = {
   create_task: "Creating task",
   complete_task: "Completing task",
   reschedule_task: "Rescheduling task",
+  search_documents: "Searching documents",
+  list_documents: "Listing documents",
+  semantic_search: "Searching CRM data",
   search_properties: "Searching properties",
   get_property: "Loading property",
   match_buyer_to_properties: "Matching buyer to properties",
@@ -41,6 +44,10 @@ export const toolLabel: Record<string, string> = {
   get_call_transcript: "Loading transcript",
   search_call_transcripts: "Searching transcripts",
   initiate_call: "Initiating call",
+  search_emails: "Searching emails",
+  get_email_thread: "Loading email thread",
+  draft_email: "Drafting email",
+  send_email: "Sending email",
 };
 
 export const confirmLabel: Record<string, string> = {
@@ -61,6 +68,7 @@ export const confirmLabel: Record<string, string> = {
   delete_property: "Delete Property",
   send_sms: "Send Text Message",
   initiate_call: "Initiate Phone Call",
+  send_email: "Send Email",
 };
 
 export function formatPreview(tool: string, preview: Record<string, unknown>): string {
@@ -112,6 +120,8 @@ export function formatPreview(tool: string, preview: Record<string, unknown>): s
       return `Send SMS to ${preview.to}: "${truncateStr(String(preview.body || ""), 60)}"`;
     case "initiate_call":
       return `Call ${preview.to}`;
+    case "send_email":
+      return `Send email to ${preview.to}${preview.subject ? `: "${preview.subject}"` : ""}`;
     default:
       return Object.entries(preview).map(([k, v]) => `${k.replace(/_/g, " ")}: ${v}`).join(", ");
   }
@@ -119,4 +129,88 @@ export function formatPreview(tool: string, preview: Record<string, unknown>): s
 
 function truncateStr(s: string, max: number): string {
   return s.length <= max ? s : s.slice(0, max - 3) + "...";
+}
+
+// ---------------------------------------------------------------------------
+// Citation parsing for RAG document references
+// ---------------------------------------------------------------------------
+
+export interface TextSegment {
+  type: "text";
+  content: string;
+}
+
+export interface CitationSegment {
+  type: "citation";
+  filename: string;
+  pageNumber: number | null;
+  chunkId: string | null;
+  documentId: string | null;
+}
+
+export type MessageSegment = TextSegment | CitationSegment;
+
+/**
+ * Parse an assistant message for document citations.
+ * Citations look like: [Doc: filename.pdf, Page 3][[chunk:uuid-here]]
+ * The [[chunk:...]] part is a hidden reference stripped from display.
+ */
+export function parseMessageWithCitations(content: string): MessageSegment[] {
+  const segments: MessageSegment[] = [];
+  // Match: [Doc: filename, Page N][[chunk:uuid]] — page and chunk are optional
+  // Page can be a single number (3), range (17-32), or comma-separated (1, 3, 5)
+  const regex = /\[Doc:\s*([^,\]]+?)(?:,\s*Pages?\s*([\d,\s-]+))?\]\s*(?:\[\[chunk:([a-f0-9-]+)(?:::([a-f0-9-]+))?\]\])?/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(content)) !== null) {
+    // Add text before this citation
+    if (match.index > lastIndex) {
+      segments.push({ type: "text", content: content.slice(lastIndex, match.index) });
+    }
+
+    // Extract the first page number from ranges like "17-32" or "1, 3, 5"
+    let pageNumber: number | null = null;
+    if (match[2]) {
+      const firstNum = match[2].match(/\d+/);
+      if (firstNum) pageNumber = parseInt(firstNum[0], 10);
+    }
+
+    let filename = match[1].trim();
+
+    // Handle page-only citations like [Doc: Page 2-3] where AI omitted the filename
+    const pageOnlyMatch = filename.match(/^Pages?\s*([\d,\s-]+)$/i);
+    if (pageOnlyMatch) {
+      // "filename" is actually a page reference — extract page number and clear filename
+      const firstNum = pageOnlyMatch[1].match(/\d+/);
+      if (firstNum) pageNumber = parseInt(firstNum[0], 10);
+      filename = "";
+    }
+
+    segments.push({
+      type: "citation",
+      filename,
+      pageNumber,
+      chunkId: match[3] || null,
+      documentId: match[4] || null,
+    });
+
+    lastIndex = regex.lastIndex;
+  }
+
+  // Add remaining text
+  if (lastIndex < content.length) {
+    // Strip any stray [[chunk:...]] that might appear without a [Doc:] prefix
+    const remaining = content.slice(lastIndex).replace(/\[\[chunk:[a-f0-9-]+(?:::[a-f0-9-]+)?\]\]/g, "");
+    if (remaining) {
+      segments.push({ type: "text", content: remaining });
+    }
+  }
+
+  // If no citations found, return the whole content as one text segment
+  if (segments.length === 0) {
+    segments.push({ type: "text", content });
+  }
+
+  return segments;
 }

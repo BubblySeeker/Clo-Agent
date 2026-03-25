@@ -94,7 +94,7 @@ func GetDashboardSummary(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -345,7 +345,7 @@ func GetDashboardLayout(pool *pgxpool.Pool) http.HandlerFunc {
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -369,13 +369,13 @@ func SaveDashboardLayout(pool *pgxpool.Pool) http.HandlerFunc {
 			Layout json.RawMessage `json:"layout"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respondError(w, http.StatusBadRequest, "invalid request body")
+			respondErrorWithCode(w, http.StatusBadRequest, "invalid request body", ErrCodeBadRequest)
 			return
 		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "database error")
+			respondErrorWithCode(w, http.StatusInternalServerError, "database error", ErrCodeDatabase)
 			return
 		}
 		defer tx.Rollback(r.Context())
@@ -385,7 +385,7 @@ func SaveDashboardLayout(pool *pgxpool.Pool) http.HandlerFunc {
 			body.Layout, agentID,
 		)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "failed to save layout")
+			respondErrorWithCode(w, http.StatusInternalServerError, "failed to save layout", ErrCodeDatabase)
 			return
 		}
 

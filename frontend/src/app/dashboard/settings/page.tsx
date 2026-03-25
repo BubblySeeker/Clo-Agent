@@ -8,7 +8,8 @@ import { apiRequest } from "@/lib/api/client";
 import { getSettings, updateSettings, type AgentSettings } from "@/lib/api/settings";
 import { getGmailStatus, initGmailAuth, disconnectGmail, syncGmail } from "@/lib/api/gmail";
 import { getSMSStatus, configureSMS, disconnectSMS, syncSMS, type SMSStatus as SMSStatusType } from "@/lib/api/sms";
-import { Camera, Info, RefreshCw, CheckCircle, XCircle } from "lucide-react";
+import { Camera, Info, RefreshCw, CheckCircle, XCircle, Link2 } from "lucide-react";
+import { getPortalSettings, updatePortalSettings, listPortalInvites, revokePortalInvite, type PortalSettings as PortalSettingsType, type PortalToken } from "@/lib/api/portal";
 
 const settingsSections = [
   { id: "profile", label: "Profile" },
@@ -16,6 +17,7 @@ const settingsSections = [
   { id: "integrations", label: "Integrations" },
   { id: "pipeline", label: "Pipeline Stages" },
   { id: "notifications", label: "Notifications" },
+  { id: "portal", label: "Client Portal" },
   { id: "team", label: "Team", comingSoon: true },
 ];
 
@@ -286,6 +288,193 @@ function ConnectedAccountsTab({ user }: { user: UserType }) {
             Connect Google
           </button>
           {connectError && <p className="text-xs text-red-500 mt-1.5">{connectError}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Portal Settings Section ─────────────────────────────────────────────────
+
+function PortalSettingsSection() {
+  const { getToken } = useAuth();
+  const queryClient = useQueryClient();
+
+  const { data: portalSettings, isLoading } = useQuery({
+    queryKey: ["portal-settings"],
+    queryFn: async () => {
+      const token = await getToken();
+      if (!token) return null;
+      return getPortalSettings(token);
+    },
+  });
+
+  const { data: invitesData } = useQuery({
+    queryKey: ["portal-invites"],
+    queryFn: async () => {
+      const token = await getToken();
+      if (!token) return { invites: [] as PortalToken[] };
+      return listPortalInvites(token);
+    },
+  });
+
+  const [showDealValue, setShowDealValue] = useState(false);
+  const [showActivities, setShowActivities] = useState(true);
+  const [showProperties, setShowProperties] = useState(true);
+  const [welcomeMessage, setWelcomeMessage] = useState("");
+  const [agentPhone, setAgentPhone] = useState("");
+  const [agentEmail, setAgentEmail] = useState("");
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "success">("idle");
+
+  useEffect(() => {
+    if (portalSettings) {
+      setShowDealValue(portalSettings.show_deal_value);
+      setShowActivities(portalSettings.show_activities);
+      setShowProperties(portalSettings.show_properties);
+      setWelcomeMessage(portalSettings.welcome_message || "");
+      setAgentPhone(portalSettings.agent_phone || "");
+      setAgentEmail(portalSettings.agent_email || "");
+    }
+  }, [portalSettings]);
+
+  async function handleSave() {
+    setSaveStatus("saving");
+    const token = await getToken();
+    if (token) {
+      await updatePortalSettings(token, {
+        show_deal_value: showDealValue,
+        show_activities: showActivities,
+        show_properties: showProperties,
+        welcome_message: welcomeMessage || null,
+        agent_phone: agentPhone || null,
+        agent_email: agentEmail || null,
+      });
+      queryClient.invalidateQueries({ queryKey: ["portal-settings"] });
+    }
+    setSaveStatus("success");
+    setTimeout(() => setSaveStatus("idle"), 2500);
+  }
+
+  async function handleRevoke(tokenId: string) {
+    const token = await getToken();
+    if (token) {
+      await revokePortalInvite(token, tokenId);
+      queryClient.invalidateQueries({ queryKey: ["portal-invites"] });
+    }
+  }
+
+  const invites = invitesData?.invites ?? [];
+
+  if (isLoading) {
+    return (
+      <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+        <div className="animate-pulse space-y-4">
+          <div className="h-5 w-32 bg-gray-100 rounded" />
+          <div className="h-20 bg-gray-50 rounded-xl" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+        <h3 className="font-bold mb-1" style={{ color: "#1E3A5F" }}>Client Portal Settings</h3>
+        <p className="text-sm text-gray-500 mb-5">Control what clients see when they access their portal.</p>
+
+        <div className="flex flex-col gap-4">
+          {/* Toggles */}
+          <div className="flex flex-col gap-1">
+            {([
+              { key: "deal_value", label: "Show deal values to clients", value: showDealValue, set: setShowDealValue },
+              { key: "activities", label: "Show activity timeline", value: showActivities, set: setShowActivities },
+              { key: "properties", label: "Show linked properties", value: showProperties, set: setShowProperties },
+            ] as const).map((toggle) => (
+              <div key={toggle.key} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
+                <span className="text-sm text-gray-700">{toggle.label}</span>
+                <button
+                  onClick={() => toggle.set(!toggle.value)}
+                  className={`relative w-10 h-5 rounded-full transition-colors ${toggle.value ? "bg-[#0EA5E9]" : "bg-gray-200"}`}
+                >
+                  <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${toggle.value ? "translate-x-5" : "translate-x-0.5"}`} />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {/* Welcome Message */}
+          <div>
+            <label className="text-xs font-semibold text-gray-500 block mb-1">Welcome Message</label>
+            <textarea
+              value={welcomeMessage}
+              onChange={(e) => setWelcomeMessage(e.target.value)}
+              placeholder="Welcome! Here's an overview of your real estate journey..."
+              rows={3}
+              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0EA5E9] bg-gray-50 focus:bg-white transition-colors resize-none"
+            />
+          </div>
+
+          {/* Agent Contact Info */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-semibold text-gray-500 block mb-1">Agent Phone (shown on portal)</label>
+              <input
+                value={agentPhone}
+                onChange={(e) => setAgentPhone(e.target.value)}
+                placeholder="(555) 123-4567"
+                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0EA5E9] bg-gray-50 focus:bg-white transition-colors"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-500 block mb-1">Agent Email (shown on portal)</label>
+              <input
+                value={agentEmail}
+                onChange={(e) => setAgentEmail(e.target.value)}
+                placeholder="agent@example.com"
+                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#0EA5E9] bg-gray-50 focus:bg-white transition-colors"
+              />
+            </div>
+          </div>
+
+          {saveStatus === "success" && <p className="text-sm text-green-600 font-medium">Portal settings saved.</p>}
+          <div>
+            <button
+              onClick={handleSave}
+              disabled={saveStatus === "saving"}
+              className="px-5 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-60 transition-opacity"
+              style={{ backgroundColor: "#0EA5E9" }}
+            >
+              {saveStatus === "saving" ? "Saving..." : "Save Settings"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Active Portal Links */}
+      {invites.length > 0 && (
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+          <h3 className="font-bold mb-4" style={{ color: "#1E3A5F" }}>Active Portal Links</h3>
+          <div className="flex flex-col gap-2">
+            {invites.map((inv) => (
+              <div key={inv.id} className="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-gray-100">
+                <div className="flex items-center gap-3">
+                  <Link2 size={14} className="text-cyan-500" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">{inv.contact_name}</p>
+                    <p className="text-xs text-gray-400">
+                      Expires {new Date(inv.expires_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleRevoke(inv.id)}
+                  className="text-xs font-semibold text-red-500 hover:text-red-600 transition-colors"
+                >
+                  Revoke
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -852,6 +1041,11 @@ function SettingsContent() {
                 ))}
               </div>
             </div>
+          )}
+
+          {/* Portal */}
+          {activeSection === "portal" && (
+            <PortalSettingsSection />
           )}
 
           {/* Notifications */}

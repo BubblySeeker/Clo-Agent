@@ -4,6 +4,7 @@ export interface Activity {
   id: string;
   contact_id: string | null;
   deal_id: string | null;
+  property_id: string | null;
   agent_id: string;
   type: "call" | "email" | "note" | "showing" | "task";
   body: string | null;
@@ -12,6 +13,7 @@ export interface Activity {
   priority: string | null;
   completed_at: string | null;
   contact_name?: string;
+  property_address?: string;
 }
 
 export interface ActivitiesResponse {
@@ -53,6 +55,7 @@ export interface CreateGeneralActivityBody {
   type: "call" | "email" | "note" | "showing" | "task";
   body?: string;
   deal_id?: string;
+  property_id?: string;
   contact_id?: string;
   due_date?: string;
   priority?: string;

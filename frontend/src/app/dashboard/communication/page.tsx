@@ -5,10 +5,17 @@ import { useAuth } from "@clerk/nextjs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { listAllActivities, createActivity, type Activity } from "@/lib/api/activities";
 import { listContacts } from "@/lib/api/contacts";
-import { getGmailStatus, syncGmail, listEmails, getEmail, sendEmail, markEmailRead, type Email } from "@/lib/api/gmail";
+import { getGmailStatus, syncGmail, listEmails, getEmail, sendEmail, forwardEmail, markEmailRead, type Email } from "@/lib/api/gmail";
 import { getSMSStatus, syncSMS, listSMSMessages, sendSMS, type SMSMessage } from "@/lib/api/sms";
 import { listCallLogs, initiateCall, getCallTranscript, confirmTranscriptAction, dismissTranscriptAction, updateCallOutcome, type CallLog, type CallTranscript, type AIAction } from "@/lib/api/calls";
-import { Phone, Mail, Search, Plus, X, User, ChevronDown, ChevronUp, ChevronRight, RefreshCw, Send, Reply, Star, Paperclip, MessageSquare, PhoneCall, Play, Loader2, Bot, FileText, CheckCircle, XCircle } from "lucide-react";
+import {
+  Phone, Mail, Search, Plus, X, User, ChevronDown, ChevronUp, ChevronRight, RefreshCw,
+  Send, Reply, Star, Paperclip, MessageSquare, PhoneCall, Play, Loader2, Bot, FileText,
+  CheckCircle, XCircle, UserPlus, Check, CornerUpRight, ArrowUpDown, ExternalLink, Users
+} from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { listLeadSuggestions, acceptLeadSuggestion, dismissLeadSuggestion, type LeadSuggestion } from "@/lib/api/lead-suggestions";
+import Link from "next/link";
 
 const typeColors: Record<string, { bg: string; color: string }> = {
   call: { bg: "#EFF6FF", color: "#0EA5E9" },

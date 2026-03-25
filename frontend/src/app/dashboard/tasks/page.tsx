@@ -11,9 +11,11 @@ import {
   Activity,
 } from "@/lib/api/activities";
 import { listContacts } from "@/lib/api/contacts";
+import { listProperties } from "@/lib/api/properties";
 import Link from "next/link";
 import {
   Plus,
+  Building2,
   AlertCircle,
   CheckCircle,
   Clock,
@@ -100,10 +102,11 @@ export default function TasksPage() {
   const [showDetails, setShowDetails] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newContactId, setNewContactId] = useState("");
+  const [newPropertyId, setNewPropertyId] = useState("");
   const [newPriority, setNewPriority] = useState<"high" | "medium" | "low">("medium");
   const [newDueDate, setNewDueDate] = useState("");
 
-  const { data: tasksData } = useQuery({
+  const { data: tasksData, isError: tasksError, refetch: refetchTasks } = useQuery({
     queryKey: ["tasks", filter],
     queryFn: async () => {
       const token = await getToken();
@@ -119,7 +122,16 @@ export default function TasksPage() {
     },
   });
 
+  const { data: propertiesData } = useQuery({
+    queryKey: ["properties-list"],
+    queryFn: async () => {
+      const token = await getToken();
+      return listProperties(token!, { limit: 100 });
+    },
+  });
+
   const contacts = contactsData?.contacts ?? [];
+  const properties = propertiesData?.properties ?? [];
   const tasks = tasksData?.tasks ?? [];
 
   // Stat counts — derived from "all" tasks (fetch separately if filtered)
@@ -188,6 +200,7 @@ export default function TasksPage() {
         type: "task",
         body: newTitle,
         contact_id: newContactId || undefined,
+        property_id: newPropertyId || undefined,
         due_date: newDueDate || undefined,
         priority: newPriority,
       });
@@ -198,10 +211,22 @@ export default function TasksPage() {
       setShowDetails(false);
       setNewTitle("");
       setNewContactId("");
+      setNewPropertyId("");
       setNewPriority("medium");
       setNewDueDate("");
     },
   });
+
+  if (tasksError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full min-h-[400px] gap-4 p-6 text-center">
+        <p className="text-gray-600 font-medium">Failed to load tasks</p>
+        <button onClick={() => refetchTasks()} className="px-4 py-2 rounded-xl text-white text-sm font-semibold" style={{ backgroundColor: "#0EA5E9" }}>
+          Try again
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6">
@@ -535,6 +560,30 @@ export default function TasksPage() {
                             </option>
                           )
                         )}
+                      </select>
+                      <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                    </div>
+                  </div>
+
+                  {/* Property */}
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">
+                      Property{" "}
+                      <span className="normal-case text-gray-400 font-normal">(optional)</span>
+                    </label>
+                    <div className="relative">
+                      <Building2 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <select
+                        value={newPropertyId}
+                        onChange={(e) => setNewPropertyId(e.target.value)}
+                        className="w-full pl-9 pr-4 py-2 rounded-xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-[#0EA5E9] appearance-none"
+                      >
+                        <option value="">No property</option>
+                        {properties.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.address}{p.city ? `, ${p.city}` : ""}
+                          </option>
+                        ))}
                       </select>
                       <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                     </div>

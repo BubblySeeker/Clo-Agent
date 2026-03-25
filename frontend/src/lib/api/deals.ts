@@ -17,11 +17,13 @@ export interface Deal {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  stage_entered_at: string | null;
   contact_name: string;
   stage_name: string;
   stage_color: string;
   property_id: string | null;
   property_address: string;
+  last_activity_at: string | null;
 }
 
 export interface DealsResponse {
