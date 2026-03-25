@@ -3,8 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: v1.0 milestone complete
-stopped_at: Completed quick/260325-d4c-PLAN.md
-last_updated: "2026-03-25T13:31:24.362Z"
+stopped_at: Completed quick/260325-dad-PLAN.md
+last_updated: "2026-03-25T13:37:42.311Z"
+last_activity: "2026-03-25 - Completed quick task 260325-d4c: Add AUTO_EXECUTE_TOOLS set and agent loop third branch"
 progress:
   total_phases: 0
   completed_phases: 0
@@ -62,6 +63,7 @@ Recent decisions affecting current work:
 - [Phase 01-core-resolution-protocol]: Contact resolution protocol placed before IMPORTANT GUIDELINES for maximum Haiku attention (early placement is critical for instruction following)
 - [Phase 02-context-awareness-and-hardening]: Rule 8 added as standalone (not merged into Rule 6) — keeps pronoun resolution atomic and separately testable
 - [Phase 02-context-awareness-and-hardening]: Full 20-message window used for pronoun lookback — no arbitrary limit, 'earlier in this conversation' instructs Haiku naturally
+- [Phase quick-260325-dad]: SELECT-before-UPDATE pattern for previous-value capture; column list built from inp.keys() to only fetch fields being updated
 
 ### Pending Todos
 
@@ -81,6 +83,6 @@ None yet.
 ## Session Continuity
 
 Last activity: 2026-03-25 - Completed quick task 260325-d4c: Add AUTO_EXECUTE_TOOLS set and agent loop third branch
-Last session: 2026-03-25T13:31:24.358Z
-Stopped at: Completed quick/260325-d4c-PLAN.md
+Last session: 2026-03-25T13:37:38.405Z
+Stopped at: Completed quick/260325-dad-PLAN.md
 Resume file: None
