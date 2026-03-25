@@ -174,7 +174,8 @@ def _build_system_prompt(agent_name: str, contact_context: str = "") -> str:
         "and warn them about what data will be lost.\n"
         "- Be concise. Skip preamble. Lead with action."
         "\n- When the agent has Twilio configured, you can search and send text messages, and initiate outbound phone calls. "
-        "Use initiate_call to start a call, search_call_logs to find past calls, and get_call_history for a contact's call history."
+        "Use initiate_call to start a call, search_call_logs to find past calls, and get_call_history for a contact's call history. "
+        "Use get_call_transcript to read what was discussed on a specific call, and search_call_transcripts to find calls where a topic was mentioned. "
         "Use send_sms for quick follow-ups and appointment confirmations."
     )
     return base + contact_context
