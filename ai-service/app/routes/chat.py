@@ -30,6 +30,10 @@ class ConfirmRequest(BaseModel):
     agent_id: str
 
 
+class UndoRequest(BaseModel):
+    agent_id: str
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -68,3 +72,21 @@ async def confirm_action(req: ConfirmRequest):
     if "error" in result:
         raise HTTPException(status_code=404, detail=result["error"])
     return {"status": "executed", "result": result}
+
+
+@router.post("/undo/{conversation_id}", dependencies=[Depends(verify_secret)])
+async def undo_action(conversation_id: str, req: UndoRequest):
+    """Pop the last auto-executed action and revert it."""
+    from app.undo import pop_undo, execute_undo
+    entry = pop_undo(conversation_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Nothing to undo")
+    result = await execute_undo(entry, req.agent_id)
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+    return {
+        "status": "undone",
+        "tool_name": entry["tool_name"],
+        "entity_type": entry["entity_type"],
+        "result": result,
+    }

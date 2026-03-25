@@ -378,6 +378,23 @@ async def run_agent(
                 result = await _dispatch_write_tool(tool_name, tool_input, agent_id)
                 status = "error" if "error" in result else "success"
                 yield sse({"type": "auto_executed", "name": tool_name, "result": result, "status": status})
+                # Push undo entry when the action succeeded and previous values are available
+                if status == "success" and "previous" in result:
+                    from app.undo import push_undo
+                    _entity_map = {
+                        "update_contact":       ("contact",       result.get("contact_id")),
+                        "update_deal":           ("deal",          result.get("deal_id")),
+                        "update_buyer_profile":  ("buyer_profile", result.get("contact_id")),
+                        "update_property":       ("property",      result.get("property_id")),
+                    }
+                    if tool_name in _entity_map:
+                        etype, eid = _entity_map[tool_name]
+                        push_undo(conversation_id, {
+                            "tool_name": tool_name,
+                            "previous_values": result["previous"],
+                            "entity_id": str(eid),
+                            "entity_type": etype,
+                        })
                 tool_results.append({
                     "type": "tool_result",
                     "tool_use_id": tb.id,
