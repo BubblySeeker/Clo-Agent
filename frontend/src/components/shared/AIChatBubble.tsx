@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { usePathname } from "next/navigation";
-import { Bot, Send, Minimize2, Check, XCircle, Loader2 } from "lucide-react";
+import { Bot, Send, Minimize2, Check, XCircle, Loader2, Zap } from "lucide-react";
 import {
   streamMessage,
   createConversation,
@@ -137,6 +137,25 @@ export default function AIChatBubble() {
               pending_id: event.pending_id,
             },
           });
+        } else if (event.type === "auto_executed") {
+          setActiveToolName(null);
+          const current = useUIStore.getState().chatMessages;
+          if (current.length > 0) {
+            const last = current[current.length - 1];
+            useUIStore.getState().setChatMessages([
+              ...current.slice(0, -1),
+              { ...last, autoExecutedTools: [...(last.autoExecutedTools ?? []), event.name] },
+            ]);
+          }
+        } else if (event.type === "error") {
+          const current = useUIStore.getState().chatMessages;
+          if (current.length > 0) {
+            const last = current[current.length - 1];
+            useUIStore.getState().setChatMessages([
+              ...current.slice(0, -1),
+              { ...last, content: last.content || event.message },
+            ]);
+          }
         }
       },
       () => {
@@ -268,6 +287,17 @@ export default function AIChatBubble() {
 
         {chatMessages.map((msg) => (
           <div key={msg.id} className={`flex flex-col gap-1 ${msg.role === "user" ? "items-end" : "items-start"}`}>
+            {/* Auto-executed badges */}
+            {msg.role === "assistant" && msg.autoExecutedTools && msg.autoExecutedTools.length > 0 && (
+              <div className="flex flex-wrap gap-1 mb-1">
+                {msg.autoExecutedTools.map((t, i) => (
+                  <span key={i} className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200">
+                    <Zap size={9} /> {toolLabel[t] ?? t}
+                  </span>
+                ))}
+              </div>
+            )}
+
             {/* Tool call indicator */}
             {msg.role === "assistant" && msg.isStreaming && activeToolName && (
               <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">

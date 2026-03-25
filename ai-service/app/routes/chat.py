@@ -4,7 +4,7 @@ Chat routes for the AI service.
 POST /ai/messages  — stream a response to a user message
 POST /ai/confirm   — execute a pending write tool action after user confirmation
 """
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -14,10 +14,6 @@ from app.tools import execute_write_tool
 
 router = APIRouter(prefix="/ai")
 
-
-# ---------------------------------------------------------------------------
-# Request / response models
-# ---------------------------------------------------------------------------
 
 class SendMessageRequest(BaseModel):
     conversation_id: str
@@ -30,22 +26,9 @@ class ConfirmRequest(BaseModel):
     agent_id: str
 
 
-# ---------------------------------------------------------------------------
-# Endpoints
-# ---------------------------------------------------------------------------
-
 @router.post("/messages", dependencies=[Depends(verify_secret)])
 async def send_message(req: SendMessageRequest):
-    """
-    Stream an AI response via Server-Sent Events.
-
-    SSE event shapes:
-      {"type": "text",         "content": "..."}
-      {"type": "tool_call",    "name": "...", "status": "running"}
-      {"type": "tool_result",  "name": "...", "result": {...}}
-      {"type": "confirmation", "tool": "...", "preview": {...}, "pending_id": "..."}
-      [DONE]
-    """
+    """Stream an AI response via Server-Sent Events."""
     async def stream():
         async for chunk in run_agent(req.conversation_id, req.agent_id, req.content):
             yield chunk

@@ -12,6 +12,7 @@ export function getAIProfile(token: string, contactId: string): Promise<AIProfil
   return apiRequest(`/contacts/${contactId}/ai-profile`, token);
 }
 
+// TODO: Re-implement AI profile regeneration
 export function regenerateAIProfile(token: string, contactId: string): Promise<AIProfile> {
   return apiRequest(`/contacts/${contactId}/ai-profile/regenerate`, token, {
     method: "POST",

@@ -16,6 +16,7 @@ export interface ChatMessage {
     preview: Record<string, unknown>;
     status: "confirmed" | "cancelled" | "failed";
   };
+  autoExecutedTools?: string[];
 }
 
 interface UIState {

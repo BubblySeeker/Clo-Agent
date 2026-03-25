@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/chi/v5"
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"crm-api/internal/config"
@@ -63,6 +63,7 @@ func GetMessages(pool *pgxpool.Pool) http.HandlerFunc {
 
 // SendMessage saves the user message to the DB, then proxies to the AI service
 // and streams the SSE response back to the frontend client.
+// TODO: Re-implement AI proxy logic
 func SendMessage(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		agentID := middleware.AgentUUIDFromContext(r.Context())
@@ -114,14 +115,6 @@ func SendMessage(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 		}
 
 		tx.Commit(r.Context())
-
-		// If AI service is not configured, fall back to placeholder.
-		if cfg.AIServiceURL == "" || cfg.AIServiceSecret == "" {
-			respondJSON(w, http.StatusOK, map[string]string{
-				"error": "AI service not configured",
-			})
-			return
-		}
 
 		// Build proxy request to AI service.
 		payload, _ := json.Marshal(map[string]string{

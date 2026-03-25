@@ -12,7 +12,7 @@ import {
   confirmToolAction,
   type SSEEvent,
 } from "@/lib/api/conversations";
-import { Plus, Search, Send, Trash2, Sparkles, User, Loader2, Check, XCircle } from "lucide-react";
+import { Plus, Search, Send, Trash2, Sparkles, User, Loader2, Check, XCircle, Zap } from "lucide-react";
 import { type ChatMessage } from "@/store/ui-store";
 import { toolLabel, confirmLabel, formatPreview } from "@/lib/ai-chat-helpers";
 import MessageContent from "@/components/shared/MessageContent";
@@ -182,6 +182,31 @@ export default function ChatPage() {
                     preview: event.preview,
                     pending_id: event.pending_id,
                   },
+                };
+              }
+              return msgs;
+            });
+          } else if (event.type === "auto_executed") {
+            setActiveToolName(null);
+            setChatMessages((prev) => {
+              const msgs = [...prev];
+              const last = msgs[msgs.length - 1];
+              if (last && last.id === assistantMsgId) {
+                msgs[msgs.length - 1] = {
+                  ...last,
+                  autoExecutedTools: [...(last.autoExecutedTools ?? []), event.name],
+                };
+              }
+              return msgs;
+            });
+          } else if (event.type === "error") {
+            setChatMessages((prev) => {
+              const msgs = [...prev];
+              const last = msgs[msgs.length - 1];
+              if (last && last.id === assistantMsgId) {
+                msgs[msgs.length - 1] = {
+                  ...last,
+                  content: last.content || event.message,
                 };
               }
               return msgs;
@@ -448,6 +473,17 @@ export default function ChatPage() {
                   </div>
 
                   <div className={`flex flex-col gap-1.5 max-w-[72%] ${msg.role === "user" ? "items-end" : "items-start"}`}>
+                    {/* Auto-executed badges */}
+                    {msg.role === "assistant" && msg.autoExecutedTools && msg.autoExecutedTools.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mb-1">
+                        {msg.autoExecutedTools.map((t, i) => (
+                          <span key={i} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200">
+                            <Zap size={10} /> {toolLabel[t] ?? t}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
                     {/* Tool call indicator */}
                     {msg.role === "assistant" && msg.isStreaming && activeToolName && (
                       <div className="flex items-center gap-1.5 text-xs text-gray-500">

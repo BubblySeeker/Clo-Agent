@@ -722,40 +722,10 @@ func DocumentCounts(pool *pgxpool.Pool) http.HandlerFunc {
 }
 
 // ProxyExtractProperty forwards a property extraction request to the AI service.
+// TODO: Re-implement AI property extraction logic
 func ProxyExtractProperty(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		agentID := middleware.AgentUUIDFromContext(r.Context())
-		docID := chi.URLParam(r, "id")
-
-		payload, _ := json.Marshal(map[string]string{
-			"document_id": docID,
-			"agent_id":    agentID,
-		})
-
-		ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
-		defer cancel()
-
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-			cfg.AIServiceURL+"/ai/documents/extract-property", bytes.NewBuffer(payload))
-		if err != nil {
-			respondErrorWithCode(w, http.StatusInternalServerError, "failed to build request", ErrCodeDatabase)
-			return
-		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("X-AI-Service-Secret", cfg.AIServiceSecret)
-
-		client := &http.Client{Timeout: 60 * time.Second}
-		resp, err := client.Do(req)
-		if err != nil {
-			respondErrorWithCode(w, http.StatusBadGateway, "AI service unavailable", ErrCodeInternal)
-			return
-		}
-		defer resp.Body.Close()
-
-		body, _ := io.ReadAll(resp.Body)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(resp.StatusCode)
-		w.Write(body) //nolint:errcheck
+		respondErrorWithCode(w, http.StatusNotImplemented, "AI service not yet implemented", ErrCodeInternal)
 	}
 }
 

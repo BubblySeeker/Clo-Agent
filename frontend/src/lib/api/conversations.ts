@@ -1,7 +1,5 @@
 import { apiRequest } from "./client";
 
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
-
 export interface Conversation {
   id: string;
   contact_id: string | null;
@@ -23,7 +21,9 @@ export type SSEEvent =
   | { type: "text"; content: string }
   | { type: "tool_call"; name: string; status: "running" }
   | { type: "tool_result"; name: string; result: unknown }
-  | { type: "confirmation"; tool: string; preview: Record<string, unknown>; pending_id: string };
+  | { type: "confirmation"; tool: string; preview: Record<string, unknown>; pending_id: string }
+  | { type: "auto_executed"; name: string; result: unknown }
+  | { type: "error"; message: string };
 
 export function listConversations(token: string): Promise<Conversation[]> {
   return apiRequest("/ai/conversations", token);
@@ -55,10 +55,8 @@ export function confirmToolAction(
   });
 }
 
-/**
- * Stream a message via SSE. Calls onEvent for each parsed event, onDone when finished.
- * Returns a cleanup function (aborts the fetch).
- */
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+
 export function streamMessage(
   token: string,
   conversationId: string,
@@ -71,22 +69,29 @@ export function streamMessage(
 
   (async () => {
     try {
-      const res = await fetch(`${BASE}/api/ai/conversations/${conversationId}/messages`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ content }),
-        signal: controller.signal,
-      });
+      const res = await fetch(
+        `${BASE}/api/ai/conversations/${conversationId}/messages`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ content }),
+          signal: controller.signal,
+        }
+      );
 
       if (!res.ok) {
         const text = await res.text().catch(() => res.statusText);
         throw new Error(text || res.statusText);
       }
 
-      const reader = res.body!.getReader();
+      const reader = res.body?.getReader();
+      if (!reader) {
+        throw new Error("No response body");
+      }
+
       const decoder = new TextDecoder();
       let buffer = "";
 
@@ -96,27 +101,40 @@ export function streamMessage(
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
+        // Keep the last (possibly incomplete) line in the buffer
         buffer = lines.pop() ?? "";
 
         for (const line of lines) {
           if (!line.startsWith("data: ")) continue;
-          const raw = line.slice(6).trim();
-          if (raw === "[DONE]") {
-            onDone();
-            return;
-          }
+          const payload = line.slice(6).trim();
+          if (!payload || payload === "[DONE]") continue;
+
           try {
-            onEvent(JSON.parse(raw) as SSEEvent);
+            const event = JSON.parse(payload) as SSEEvent;
+            onEvent(event);
           } catch {
-            // ignore malformed chunks
+            // skip malformed JSON lines
           }
         }
       }
+
+      // Process any remaining buffer
+      if (buffer.startsWith("data: ")) {
+        const payload = buffer.slice(6).trim();
+        if (payload && payload !== "[DONE]") {
+          try {
+            const event = JSON.parse(payload) as SSEEvent;
+            onEvent(event);
+          } catch {
+            // skip
+          }
+        }
+      }
+
       onDone();
     } catch (err) {
-      if ((err as Error).name !== "AbortError") {
-        onError(err as Error);
-      }
+      if (controller.signal.aborted) return;
+      onError(err instanceof Error ? err : new Error(String(err)));
     }
   })();
 
