@@ -2,6 +2,22 @@
 
 ## Infrastructure
 
+### Batch score recompute for bulk operations
+
+**What:** Add an async/batch path for recomputing lead scores when many contacts are modified at once (e.g., CSV import, bulk tag assignment).
+
+**Why:** The current `computeLeadScore` runs inline within each handler's RLS transaction — 3 queries + 1 update per contact. This is fine for single-contact mutations but would fire N sequential recalculations during a bulk import of 500 contacts, blocking the request.
+
+**Pros:** Prevents request timeouts during bulk operations. Enables future features like scheduled overnight score refresh.
+
+**Cons:** Requires either a background worker or a "dirty flag + compute on read" pattern, both adding complexity.
+
+**Context:** Lead scoring uses inline computation (decided in v1 for simplicity at pre-product scale). When bulk contact operations are built, add either: (a) a `score_stale BOOLEAN` flag on contacts, computed on next read, or (b) a background worker that processes a queue of contact IDs needing recompute. The `computeLeadScore` function is already isolated — the change is in how/when it's called, not in the scoring logic itself.
+
+**Effort:** S (human team) → S (with CC+gstack)
+**Priority:** P3
+**Depends on:** Lead scoring system, bulk contact operations (neither exists yet)
+
 ### Structured error codes in Go backend
 
 **What:** Replace generic "query error" / "database error" messages in all Go handlers with structured error codes (e.g., `ERR_NOT_FOUND`, `ERR_DB_TIMEOUT`, `ERR_VALIDATION`).
@@ -88,6 +104,22 @@
 **Priority:** P3
 **Depends on:** None
 
+
+### Bulk action from lead score view
+
+**What:** Add a "Select all Hot leads" / "Select all Cold leads" bulk action on the contacts page when sorted by score, enabling batch operations like "Send follow-up email to all warm leads" or "Archive all cold leads."
+
+**Why:** Agents with 100+ contacts need to act on score tiers in bulk. Individually clicking through 15 warm leads to send follow-ups defeats the purpose of scoring them in the first place.
+
+**Pros:** Transforms lead scoring from passive information into an active workflow tool. High leverage for agents with large contact books.
+
+**Cons:** Requires backend batch endpoints (bulk update, bulk email) that don't exist yet. UI complexity for multi-select state management.
+
+**Context:** The lead scoring system adds score tiers (Hot/Warm/Cool/Cold) to contacts. This TODO adds tier-based bulk selection on the contacts list page. Implementation: checkbox column + "Select all in tier" dropdown + bulk action bar (email, archive, assign tag). Needs new `POST /api/contacts/bulk-action` endpoint. Reference: Gmail's "Select all conversations that match this search" pattern.
+
+**Effort:** M (human team) → S (with CC+gstack)
+**Priority:** P2
+**Depends on:** Lead scoring system (in progress)
 
 ## Completed
 
