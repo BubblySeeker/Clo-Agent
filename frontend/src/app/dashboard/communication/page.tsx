@@ -7,7 +7,7 @@ import { listAllActivities, createActivity, type Activity } from "@/lib/api/acti
 import { listContacts } from "@/lib/api/contacts";
 import { getGmailStatus, syncGmail, listEmails, getEmail, sendEmail, markEmailRead, type Email } from "@/lib/api/gmail";
 import { getSMSStatus, syncSMS, listSMSMessages, sendSMS, type SMSMessage } from "@/lib/api/sms";
-import { listCallLogs, initiateCall, syncCallLogs, getCallTranscript, confirmTranscriptAction, dismissTranscriptAction, updateCallOutcome, type CallLog, type CallTranscript, type AIAction } from "@/lib/api/calls";
+import { listCallLogs, initiateCall, getCallTranscript, confirmTranscriptAction, dismissTranscriptAction, updateCallOutcome, type CallLog, type CallTranscript, type AIAction } from "@/lib/api/calls";
 import { Phone, Mail, Search, Plus, X, User, ChevronDown, ChevronUp, ChevronRight, RefreshCw, Send, Reply, Star, Paperclip, MessageSquare, PhoneCall, Play, Loader2, Bot, FileText, CheckCircle, XCircle } from "lucide-react";
 
 const typeColors: Record<string, { bg: string; color: string }> = {
@@ -630,7 +630,7 @@ export default function CommunicationPage() {
       if (!token) return { calls: [], total: 0 };
       return listCallLogs(token, { limit: 100 });
     },
-    enabled: smsConfigured,
+    enabled: true,
     refetchInterval: (query) => {
       const calls = (query.state.data as { calls: CallLog[] } | undefined)?.calls;
       const hasActiveCalls = calls?.some(
