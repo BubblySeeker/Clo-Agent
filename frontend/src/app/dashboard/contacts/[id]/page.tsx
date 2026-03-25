@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getContact, updateContact, deleteContact } from "@/lib/api/contacts";
+import { getContact, updateContact, deleteContact, getLeadScoreExplanation } from "@/lib/api/contacts";
 import type { UpdateContactBody } from "@/lib/api/contacts";
 import { getSettings } from "@/lib/api/settings";
 import { ScoreBadge } from "@/app/dashboard/components/score-badge";
@@ -302,6 +302,15 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
       const token = await getToken();
       return listContactFolders(token!);
     },
+  });
+
+  const { data: scoreExplanation, isLoading: explanationLoading } = useQuery({
+    queryKey: ["lead-score-explanation", id],
+    queryFn: async () => {
+      const token = await getToken();
+      return getLeadScoreExplanation(token!, id);
+    },
+    enabled: scoreExpanded && showScores && (contact?.lead_score ?? 0) > 0,
   });
 
   // --- Mutations ---
@@ -929,6 +938,15 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
                             </div>
                           );
                         })}
+                        {explanationLoading && (
+                          <div className="mt-2 space-y-1">
+                            <div className="h-2.5 bg-gray-200 rounded animate-pulse w-full" />
+                            <div className="h-2.5 bg-gray-200 rounded animate-pulse w-4/5" />
+                          </div>
+                        )}
+                        {scoreExplanation && (
+                          <p className="mt-2 text-xs text-gray-500 italic leading-relaxed">{scoreExplanation}</p>
+                        )}
                       </div>
                     )}
                   </div>

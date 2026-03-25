@@ -4,6 +4,7 @@ interface ScoreBadgeProps {
   score: number;
   previousScore?: number | null;
   size?: "default" | "compact";
+  onClick?: (e: React.MouseEvent) => void;
 }
 
 interface TierColors {
@@ -29,6 +30,7 @@ export function ScoreBadge({
   score,
   previousScore,
   size = "default",
+  onClick,
 }: ScoreBadgeProps) {
   const tier = getTier(score);
 
@@ -42,7 +44,11 @@ export function ScoreBadge({
   const isDecrease = showArrow && score < previousScore!;
 
   return (
-    <span className="inline-flex items-center gap-0.5">
+    <span
+      className={`inline-flex items-center gap-0.5${onClick ? " cursor-pointer" : ""}`}
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+    >
       <span
         className="rounded-full flex items-center justify-center border-2 font-bold leading-none"
         style={{

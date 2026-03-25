@@ -158,7 +158,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "create_contact",
-        "description": "Create a new contact. Requires user confirmation before executing.",
+        "description": "IMPORTANT: Only use this to create a brand-new contact that does NOT already exist. If you found the contact via search, use update_contact instead. Create a new contact. Requires user confirmation before executing.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -173,7 +173,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "update_contact",
-        "description": "Update contact information. Requires user confirmation before executing.",
+        "description": "Use this to add or change any field on an EXISTING contact. This includes adding email, phone, or any other field to a contact found via search. Update contact information. Requires user confirmation before executing.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -189,7 +189,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "log_activity",
-        "description": "Log a call, email, note, showing, or task for a contact. Requires user confirmation before executing.",
+        "description": "Use this to record something that already happened — a call, meeting, note, showing, or email interaction. Log a call, email, note, showing, or task for a contact. Requires user confirmation before executing.",
         "input_schema": {
             "type": "object",
             "properties": {

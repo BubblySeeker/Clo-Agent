@@ -143,6 +143,7 @@ func run() error {
 		r.Get("/api/contacts/{id}", handlers.GetContact(pool))
 		r.Patch("/api/contacts/{id}", handlers.UpdateContact(pool))
 		r.Delete("/api/contacts/{id}", handlers.DeleteContact(pool))
+		r.Get("/api/contacts/{id}/lead-score-explanation", handlers.GetLeadScoreExplanation(pool))
 
 		// Buyer Profiles
 		r.Get("/api/contacts/{id}/buyer-profile", handlers.GetBuyerProfile(pool))
