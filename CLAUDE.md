@@ -34,7 +34,7 @@ The Go backend is the single entry point for the frontend. AI requests are proxi
 | Dashboard (metrics, charts, activity feed) | **DONE** | Widgets render with real data; customization mode with layout save/load via API |
 | AI Chat Bubble (floating, global) | **DONE** | SSE streaming, tool call indicators, confirmation cards, contact-scoped |
 | AI Chat Full Page (`/dashboard/chat`) | **DONE** | Conversation list, delete, rename, streaming |
-| AI Tools (27 total: 14 read, 13 write) | **DONE** | All execute against real DB |
+| AI Tools (30 total: 16 read, 14 write) | **DONE** | All execute against real DB |
 | AI Profile Generation | **DONE** | Backend endpoint + frontend tab on contact detail |
 | Analytics | **DONE** | KPI cards, pipeline/activities/contacts charts, stage detail table |
 | Tasks Page | **DONE** | Full-stack with DB columns (due_date, priority, completed_at), API endpoints, and AI tools |
@@ -49,6 +49,7 @@ The Go backend is the single entry point for the frontend. AI requests are proxi
 | Communication Page | **DONE** | Unified call/email/SMS inbox grouped by contact, log call/email modal, SMS compose |
 | +New Quick Action | **DONE** | Dropdown in top bar: New Contact, New Deal, Log Activity, New Task |
 | SMS Integration (Twilio) | **DONE** | Configure, send, receive, sync, contact matching, AI tools, webhook |
+| Voice Calls (Twilio) | **DONE** | Initiate outbound calls, call logs, sync history, status webhook, AI tools |
 
 ## Database Schema
 
@@ -66,6 +67,7 @@ The Go backend is the single entry point for the frontend. AI requests are proxi
 | `008_embeddings_unique.sql` | Unique index on `embeddings(source_type, source_id)` for upsert |
 | `009_workflows.sql` | `workflows` and `workflow_runs` tables with RLS for automation engine |
 | `014_sms.sql` | `twilio_config` and `sms_messages` tables with RLS for SMS integration |
+| `015_calls.sql` | `call_logs` table with RLS for Twilio voice call history |
 
 | Table | Purpose | Key columns |
 |-------|---------|-------------|
@@ -84,6 +86,7 @@ The Go backend is the single entry point for the frontend. AI requests are proxi
 | `workflow_runs` | Execution history | workflow_id, agent_id, status, current_step, step_results (JSONB) |
 | `twilio_config` | Twilio SMS credentials (1:1 with agent) | agent_id (UNIQUE), account_sid, auth_token, phone_number, last_synced_at |
 | `sms_messages` | SMS message history | agent_id, twilio_sid, contact_id (FK, nullable), from_number, to_number, body, status, direction, sent_at |
+| `call_logs` | Twilio voice call history | agent_id, twilio_sid, contact_id (FK, nullable), from_number, to_number, direction, status, duration, started_at, ended_at |
 
 **RLS**: All agent-scoped tables have row-level security. Every query runs `SET LOCAL app.current_agent_id = '<uuid>'` in a transaction. RLS policies auto-filter to the authenticated agent.
 
@@ -186,15 +189,24 @@ POST   /api/sms/sync                     — pull recent messages from Twilio AP
 POST   /api/sms/webhook                  — Twilio inbound webhook (PUBLIC, validates X-Twilio-Signature)
 ```
 
+### Calls / Twilio Voice
+```
+POST   /api/calls/initiate              — initiate outbound call via Twilio {to, contact_id?}
+GET    /api/calls                        — list call logs (?contact_id, ?direction, ?page, ?limit)
+GET    /api/calls/{id}                   — get single call log
+POST   /api/calls/sync                   — pull recent call history from Twilio API
+POST   /api/calls/webhook                — Twilio call status callback (PUBLIC)
+```
+
 ### Error & Pagination
 - Errors: `{"error": "message"}` with status 400/401/403/404/500
 - Pagination: `?page=1&limit=25`, response includes `"total"` count
 
 ## AI Agent Tools
 
-27 tools total. All execute directly against the database (not through Go backend), except `send_sms` which proxies through Go → Twilio.
+30 tools total. All execute directly against the database (not through Go backend), except `send_sms` and `initiate_call` which proxy through Go → Twilio.
 
-### Read Tools (14 — execute immediately)
+### Read Tools (16 — execute immediately)
 | Tool | Inputs | Returns |
 |------|--------|---------|
 | `get_dashboard_summary` | none | total_contacts, active_deals, pipeline_value, recent_activities_7d, closed_this_month |
@@ -211,8 +223,10 @@ POST   /api/sms/webhook                  — Twilio inbound webhook (PUBLIC, val
 | `semantic_search` | query, limit? | vector similarity search across contacts and activities |
 | `search_sms` | query?, contact_id?, limit? | SMS messages matching body text or phone number |
 | `get_sms_conversation` | contact_id or phone_number, limit? | chronological SMS thread with contact/number |
+| `search_call_logs` | contact_id?, direction?, limit? | call history with optional filters |
+| `get_call_history` | contact_id, limit? | call history for a specific contact |
 
-### Write Tools (13 — require user confirmation)
+### Write Tools (14 — require user confirmation)
 | Tool | Required Inputs | Notes |
 |------|----------------|-------|
 | `create_contact` | first_name, last_name | optional: email, phone, source |
@@ -228,6 +242,7 @@ POST   /api/sms/webhook                  — Twilio inbound webhook (PUBLIC, val
 | `complete_task` | task_id | sets completed_at to NOW() |
 | `reschedule_task` | task_id, new_due_date | updates due_date |
 | `send_sms` | to, body | optional: contact_id; proxies through Go backend → Twilio API |
+| `initiate_call` | to | optional: contact_id; proxies through Go backend → Twilio Calls API |
 
 ### Pending Actions
 Write tools persist a pending action row in `pending_actions` table. When a write tool is called, it queues a confirmation and sends a `confirmation` SSE event to the frontend. User clicks Confirm → `POST /ai/confirm` → action executes.
@@ -279,6 +294,7 @@ Workflows are event-driven automations: trigger → steps → done. Supported tr
 │   │   │   ├── api/settings.ts                   # Settings API functions
 │   │   │   ├── api/workflows.ts                  # Workflow CRUD API functions
 │   │   │   ├── api/sms.ts                        # SMS/Twilio API functions
+│   │   │   ├── api/calls.ts                      # Twilio voice call API functions
 │   │   │   ├── ai-chat-helpers.ts                # Shared tool labels, confirm labels, formatPreview
 │   │   │   └── utils.ts
 │   │   ├── store/ui-store.ts                     # Zustand (sidebar, chat state)
@@ -291,7 +307,7 @@ Workflows are event-driven automations: trigger → steps → done. Supported tr
 │   │   ├── config/config.go                      # Env var loading
 │   │   ├── database/postgres.go                  # Connection pool
 │   │   ├── database/rls.go                       # BeginWithRLS helper
-│   │   ├── handlers/                             # 15 handler files (contacts, deals, workflows, sms, etc.)
+│   │   ├── handlers/                             # 16 handler files (contacts, deals, workflows, sms, calls, etc.)
 │   │   └── middleware/                            # auth.go, cors.go, user_sync.go
 │   ├── migrations/                               # 001-009 SQL files
 │   └── go.mod
