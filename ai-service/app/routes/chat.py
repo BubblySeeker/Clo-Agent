@@ -47,7 +47,14 @@ async def send_message(req: SendMessageRequest):
 @router.post("/confirm", dependencies=[Depends(verify_secret)])
 async def confirm_action(req: ConfirmRequest):
     """Execute a pending write tool action after user confirmation."""
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info("Confirm request: pending_id=%s agent_id=%s", req.pending_id, req.agent_id)
     result = await execute_write_tool(req.pending_id, req.agent_id)
+    logger.info("Confirm result: %s", result)
     if "error" in result:
-        raise HTTPException(status_code=404, detail=result["error"])
+        error_type = result.get("error_type", "")
+        if error_type == "expired":
+            raise HTTPException(status_code=410, detail=result["error"])
+        raise HTTPException(status_code=400, detail=result["error"])
     return {"status": "executed", "result": result}

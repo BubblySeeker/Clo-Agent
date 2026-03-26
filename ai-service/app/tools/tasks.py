@@ -22,6 +22,31 @@ def _q(fn):
 
 DEFINITIONS = [
     {
+        "name": "list_tasks",
+        "description": (
+            "List tasks with flexible filtering by status, contact, and priority. "
+            "Use this for 'show my tasks', 'what's due today', 'upcoming tasks for John', etc."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "enum": ["pending", "overdue", "today", "upcoming", "completed"],
+                    "description": "Filter: pending (not done), overdue (past due), today, upcoming (future), completed",
+                },
+                "contact_id": {"type": "string", "description": "Filter to tasks for this contact UUID"},
+                "priority": {
+                    "type": "string",
+                    "enum": ["high", "medium", "low"],
+                    "description": "Filter by priority level",
+                },
+                "limit": {"type": "integer", "description": "Max results (default 20)"},
+            },
+            "required": [],
+        },
+    },
+    {
         "name": "get_overdue_tasks",
         "description": (
             "Get all tasks that are past their due date and not yet completed. "
@@ -85,13 +110,57 @@ DEFINITIONS = [
 # Tool classification
 # ---------------------------------------------------------------------------
 
-READ = {"get_overdue_tasks"}
+READ = {"list_tasks", "get_overdue_tasks"}
 AUTO_EXECUTE = {"complete_task", "reschedule_task"}
 WRITE = {"create_task"}
 
 # ---------------------------------------------------------------------------
 # Read handlers
 # ---------------------------------------------------------------------------
+
+def _list_tasks(agent_id: str, inp: dict):
+    status = inp.get("status")
+    contact_id = inp.get("contact_id")
+    priority = inp.get("priority")
+    limit = inp.get("limit", 20)
+
+    def go(cur):
+        clauses = ["a.agent_id = %s", "a.type = 'task'"]
+        params: list = [agent_id]
+
+        if status == "overdue":
+            clauses.append("a.due_date < CURRENT_DATE AND a.completed_at IS NULL")
+        elif status == "today":
+            clauses.append("a.due_date = CURRENT_DATE AND a.completed_at IS NULL")
+        elif status == "upcoming":
+            clauses.append("a.due_date > CURRENT_DATE AND a.completed_at IS NULL")
+        elif status == "completed":
+            clauses.append("a.completed_at IS NOT NULL")
+        elif status == "pending":
+            clauses.append("a.completed_at IS NULL")
+
+        if contact_id:
+            clauses.append("a.contact_id = %s")
+            params.append(contact_id)
+
+        if priority:
+            clauses.append("a.priority = %s")
+            params.append(priority)
+
+        params.append(limit)
+        cur.execute(f"""
+            SELECT a.id, a.body, a.due_date, a.priority, a.completed_at, a.created_at,
+                   c.first_name || ' ' || c.last_name AS contact_name
+            FROM activities a
+            LEFT JOIN contacts c ON c.id = a.contact_id
+            WHERE {' AND '.join(clauses)}
+            ORDER BY a.due_date ASC NULLS LAST
+            LIMIT %s
+        """, params)
+        return [dict(r) for r in cur.fetchall()]
+
+    return _q(go)
+
 
 def _get_overdue_tasks(agent_id: str, inp: dict):
     limit = inp.get("limit", 20)
@@ -168,6 +237,7 @@ def _create_task(agent_id: str, inp: dict):
 # ---------------------------------------------------------------------------
 
 _READ_DISPATCH = {
+    "list_tasks": _list_tasks,
     "get_overdue_tasks": _get_overdue_tasks,
 }
 

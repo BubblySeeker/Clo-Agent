@@ -110,6 +110,18 @@ DEFINITIONS: list[dict] = [
         },
     },
     {
+        "name": "get_gmail_status",
+        "description": (
+            "Check if Gmail is connected for this agent. "
+            "Returns connection status, Gmail address, and last sync time."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    {
         "name": "send_email",
         "description": (
             "Send an email via connected Gmail. Requires confirmation."
@@ -137,11 +149,52 @@ DEFINITIONS: list[dict] = [
             "required": ["to", "subject", "body"],
         },
     },
+    {
+        "name": "forward_email",
+        "description": (
+            "Forward an email to another address. Optionally prepend a comment. "
+            "Requires confirmation."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "email_id": {
+                    "type": "string",
+                    "description": "ID of the email to forward",
+                },
+                "to": {
+                    "type": "string",
+                    "description": "Recipient email address to forward to",
+                },
+                "comment": {
+                    "type": "string",
+                    "description": "Optional text to prepend above the forwarded email",
+                },
+            },
+            "required": ["email_id", "to"],
+        },
+    },
+    {
+        "name": "mark_email_read",
+        "description": (
+            "Mark an email as read. Syncs read status with Gmail."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "email_id": {
+                    "type": "string",
+                    "description": "ID of the email to mark as read",
+                },
+            },
+            "required": ["email_id"],
+        },
+    },
 ]
 
-READ: set[str] = {"search_emails", "get_email_thread", "draft_email"}
-AUTO_EXECUTE: set[str] = set()
-WRITE: set[str] = {"send_email"}
+READ: set[str] = {"search_emails", "get_email_thread", "draft_email", "get_gmail_status"}
+AUTO_EXECUTE: set[str] = {"mark_email_read"}
+WRITE: set[str] = {"send_email", "forward_email"}
 
 
 # ---------------------------------------------------------------------------
@@ -182,6 +235,20 @@ async def get_recent_emails_for_contact(contact_id: str, agent_id: str, limit: i
 # ---------------------------------------------------------------------------
 # Internal executors
 # ---------------------------------------------------------------------------
+
+def _get_gmail_status(agent_id: str, _inp: dict) -> dict:
+    def _run(cur):
+        cur.execute(
+            "SELECT gmail_address, last_synced_at FROM gmail_tokens WHERE agent_id = %s",
+            (agent_id,),
+        )
+        row = cur.fetchone()
+        if row:
+            return {"connected": True, "gmail_address": row["gmail_address"], "last_synced_at": row["last_synced_at"]}
+        return {"connected": False}
+
+    return _q(_run)
+
 
 def _search_emails(agent_id: str, inp: dict) -> dict:
     query = inp.get("query", "")
@@ -318,6 +385,72 @@ async def _draft_email(agent_id: str, inp: dict) -> dict:
         return {"error": f"Failed to generate draft: {exc}"}
 
 
+async def _forward_email(agent_id: str, inp: dict) -> dict:
+    url = f"{BACKEND_URL}/api/gmail/forward"
+    headers = {
+        "X-AI-Service-Secret": AI_SERVICE_SECRET,
+        "X-Agent-ID": agent_id,
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "email_id": inp["email_id"],
+        "to": inp["to"],
+    }
+    if inp.get("comment"):
+        payload["comment"] = inp["comment"]
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(url, json=payload, headers=headers)
+
+        if resp.status_code in (200, 201):
+            return resp.json()
+
+        try:
+            detail = resp.json().get("error", resp.text)
+        except Exception:
+            detail = resp.text
+        return {"error": f"Forward failed ({resp.status_code}): {detail}"}
+
+    except httpx.ConnectError:
+        return {"error": "Go backend not reachable."}
+    except httpx.TimeoutException:
+        return {"error": "Timed out — try again."}
+    except Exception as exc:
+        logger.error("forward_email proxy failed: %s", exc)
+        return {"error": f"Forward failed: {exc}"}
+
+
+async def _mark_email_read(agent_id: str, inp: dict) -> dict:
+    email_id = inp["email_id"]
+    url = f"{BACKEND_URL}/api/gmail/emails/{email_id}/read"
+    headers = {
+        "X-AI-Service-Secret": AI_SERVICE_SECRET,
+        "X-Agent-ID": agent_id,
+        "Content-Type": "application/json",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.patch(url, headers=headers)
+
+        if resp.status_code in (200, 204):
+            return {"status": "marked_read", "email_id": email_id}
+
+        try:
+            detail = resp.json().get("error", resp.text)
+        except Exception:
+            detail = resp.text
+        return {"error": f"Mark read failed ({resp.status_code}): {detail}"}
+
+    except httpx.ConnectError:
+        return {"error": "Go backend not reachable."}
+    except httpx.TimeoutException:
+        return {"error": "Timed out — try again."}
+    except Exception as exc:
+        logger.error("mark_email_read proxy failed: %s", exc)
+        return {"error": f"Mark read failed: {exc}"}
+
+
 async def _send_email(agent_id: str, inp: dict) -> dict:
     url = f"{BACKEND_URL}/api/gmail/send"
     headers = {
@@ -363,10 +496,16 @@ _READ_DISPATCH: dict = {
     "search_emails": lambda aid, inp: run_query(lambda: _search_emails(aid, inp)),
     "get_email_thread": lambda aid, inp: run_query(lambda: _get_email_thread(aid, inp["thread_id"], inp.get("limit", 20))),
     "draft_email": lambda aid, inp: _draft_email(aid, inp),
+    "get_gmail_status": lambda aid, inp: run_query(lambda: _get_gmail_status(aid, inp)),
+}
+
+_AUTO_DISPATCH: dict = {
+    "mark_email_read": lambda aid, inp: _mark_email_read(aid, inp),
 }
 
 _WRITE_DISPATCH: dict = {
     "send_email": lambda aid, inp: _send_email(aid, inp),
+    "forward_email": lambda aid, inp: _forward_email(aid, inp),
 }
 
 
@@ -374,6 +513,13 @@ async def execute(tool_name: str, tool_input: dict, agent_id: str) -> dict:
     handler = _READ_DISPATCH.get(tool_name)
     if not handler:
         raise ValueError(f"Unknown email read tool: {tool_name}")
+    return await handler(agent_id, tool_input)
+
+
+async def execute_auto(tool_name: str, tool_input: dict, agent_id: str) -> dict:
+    handler = _AUTO_DISPATCH.get(tool_name)
+    if not handler:
+        raise ValueError(f"Unknown email auto tool: {tool_name}")
     return await handler(agent_id, tool_input)
 
 

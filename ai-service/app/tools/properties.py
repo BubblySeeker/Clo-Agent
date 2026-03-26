@@ -1,9 +1,15 @@
 """
 Property tools: search, view, create, update, delete listings and match buyers.
 """
+import logging
+
+import httpx
 import psycopg2.extras
 
+from app.config import BACKEND_URL, AI_SERVICE_SECRET
 from app.database import get_conn, run_query
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -136,13 +142,28 @@ DEFINITIONS = [
             "required": ["property_id"],
         },
     },
+    {
+        "name": "match_property_to_buyers",
+        "description": (
+            "Find buyer profiles that match a property's features (reverse match). "
+            "Given a property, returns contacts whose buyer preferences align with the listing. "
+            "The opposite of match_buyer_to_properties — starts from property, finds matching buyers."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "property_id": {"type": "string", "description": "UUID of the property to match against"},
+            },
+            "required": ["property_id"],
+        },
+    },
 ]
 
 # ---------------------------------------------------------------------------
 # Tool classification
 # ---------------------------------------------------------------------------
 
-READ = {"search_properties", "get_property", "match_buyer_to_properties"}
+READ = {"search_properties", "get_property", "match_buyer_to_properties", "match_property_to_buyers"}
 AUTO_EXECUTE: set[str] = set()
 WRITE = {"create_property", "update_property", "delete_property"}
 
@@ -307,6 +328,35 @@ def _match_buyer_to_properties(agent_id: str, inp: dict):
     return _q(go)
 
 
+async def _match_property_to_buyers(agent_id: str, inp: dict) -> dict:
+    property_id = inp["property_id"]
+    url = f"{BACKEND_URL}/api/properties/{property_id}/matches"
+    headers = {
+        "X-AI-Service-Secret": AI_SERVICE_SECRET,
+        "X-Agent-ID": agent_id,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(url, headers=headers)
+
+        if resp.status_code == 200:
+            return resp.json()
+
+        try:
+            detail = resp.json().get("error", resp.text)
+        except Exception:
+            detail = resp.text
+        return {"error": f"Property matching failed ({resp.status_code}): {detail}"}
+
+    except httpx.ConnectError:
+        return {"error": "Go backend not reachable."}
+    except httpx.TimeoutException:
+        return {"error": "Timed out — try again."}
+    except Exception as exc:
+        logger.error("match_property_to_buyers proxy failed: %s", exc)
+        return {"error": f"Property matching failed: {exc}"}
+
+
 # ---------------------------------------------------------------------------
 # Write handlers
 # ---------------------------------------------------------------------------
@@ -385,6 +435,11 @@ _READ_DISPATCH = {
     "match_buyer_to_properties": _match_buyer_to_properties,
 }
 
+# Async read handlers (httpx proxy calls)
+_ASYNC_READ_DISPATCH: dict = {
+    "match_property_to_buyers": lambda aid, inp: _match_property_to_buyers(aid, inp),
+}
+
 _WRITE_DISPATCH = {
     "create_property": _create_property,
     "update_property": _update_property,
@@ -394,6 +449,11 @@ _WRITE_DISPATCH = {
 
 async def execute(tool_name: str, tool_input: dict, agent_id: str) -> dict:
     """Execute a read tool."""
+    # Check async handlers first (httpx proxy calls)
+    async_handler = _ASYNC_READ_DISPATCH.get(tool_name)
+    if async_handler:
+        return await async_handler(agent_id, tool_input)
+
     handler = _READ_DISPATCH.get(tool_name)
     if not handler:
         raise ValueError(f"Unknown property read tool: {tool_name}")

@@ -1,9 +1,15 @@
 """
 Contact tools: search, view, create, update, delete contacts and buyer profiles.
 """
+import logging
+
+import httpx
 import psycopg2.extras
 
+from app.config import BACKEND_URL, AI_SERVICE_SECRET
 from app.database import get_conn, run_query
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -101,8 +107,10 @@ DEFINITIONS = [
     {
         "name": "create_contact",
         "description": (
-            "Create a new contact and auto-create a Lead deal in the pipeline. "
-            "Requires first_name and last_name at minimum."
+            "Create a NEW contact (not in CRM yet) and auto-create a Lead deal. "
+            "Requires first_name and last_name at minimum. "
+            "WARNING: Do NOT use this to update existing contacts — use update_contact instead. "
+            "If a contact with the same name already exists, this will return the existing contact."
         ),
         "input_schema": {
             "type": "object",
@@ -195,14 +203,44 @@ DEFINITIONS = [
             "required": ["contact_id"],
         },
     },
+    {
+        "name": "get_ai_profile",
+        "description": (
+            "Get the AI-generated summary profile for a contact. "
+            "Includes personality insights, communication preferences, and engagement history summary. "
+            "If no profile exists, suggests using regenerate_ai_profile to create one."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "contact_id": {"type": "string", "description": "UUID of the contact"},
+            },
+            "required": ["contact_id"],
+        },
+    },
+    {
+        "name": "regenerate_ai_profile",
+        "description": (
+            "Trigger AI profile regeneration for a contact. "
+            "Analyzes the contact's activities, emails, deals, and buyer profile to create an updated summary. "
+            "Use when a profile is missing or outdated."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "contact_id": {"type": "string", "description": "UUID of the contact"},
+            },
+            "required": ["contact_id"],
+        },
+    },
 ]
 
 # ---------------------------------------------------------------------------
 # Tool classification
 # ---------------------------------------------------------------------------
 
-READ = {"search_contacts", "get_contact_details", "get_contact_activities", "get_buyer_profile"}
-AUTO_EXECUTE: set[str] = set()
+READ = {"search_contacts", "get_contact_details", "get_contact_activities", "get_buyer_profile", "get_ai_profile"}
+AUTO_EXECUTE: set[str] = {"regenerate_ai_profile"}
 WRITE = {"create_contact", "update_contact", "delete_contact", "create_buyer_profile", "update_buyer_profile"}
 
 # ---------------------------------------------------------------------------
@@ -315,12 +353,99 @@ def _get_buyer_profile(agent_id: str, inp: dict):
     return _q(go)
 
 
+def _get_ai_profile(agent_id: str, inp: dict):
+    contact_id = inp["contact_id"]
+
+    def go(cur):
+        cur.execute(
+            "SELECT id FROM contacts WHERE id = %s AND agent_id = %s",
+            (contact_id, agent_id),
+        )
+        if not cur.fetchone():
+            return {"error": "Contact not found"}
+
+        cur.execute("SELECT * FROM ai_profiles WHERE contact_id = %s", (contact_id,))
+        profile = cur.fetchone()
+        if not profile:
+            return {"message": "No AI profile exists for this contact. Use regenerate_ai_profile to create one."}
+        return dict(profile)
+
+    return _q(go)
+
+
+async def _regenerate_ai_profile(agent_id: str, inp: dict) -> dict:
+    contact_id = inp["contact_id"]
+    url = f"{BACKEND_URL}/api/contacts/{contact_id}/ai-profile/regenerate"
+    headers = {
+        "X-AI-Service-Secret": AI_SERVICE_SECRET,
+        "X-Agent-ID": agent_id,
+        "Content-Type": "application/json",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(url, headers=headers)
+
+        if resp.status_code in (200, 201):
+            return resp.json()
+
+        try:
+            detail = resp.json().get("error", resp.text)
+        except Exception:
+            detail = resp.text
+        return {"error": f"Profile regeneration failed ({resp.status_code}): {detail}"}
+
+    except httpx.ConnectError:
+        return {"error": "Go backend not reachable."}
+    except httpx.TimeoutException:
+        return {"error": "Profile regeneration timed out — try again."}
+    except Exception as exc:
+        logger.error("regenerate_ai_profile proxy failed: %s", exc)
+        return {"error": f"Profile regeneration failed: {exc}"}
+
+
 # ---------------------------------------------------------------------------
 # Write handlers
 # ---------------------------------------------------------------------------
 
 def _create_contact(agent_id: str, inp: dict):
     def go(cur):
+        # Dedup check: reject if a contact with same first+last name already exists
+        cur.execute(
+            """SELECT id, first_name, last_name, email, phone, source
+               FROM contacts
+               WHERE agent_id = %s
+                 AND LOWER(first_name) = LOWER(%s)
+                 AND LOWER(last_name) = LOWER(%s)
+               LIMIT 1""",
+            (agent_id, inp["first_name"], inp["last_name"]),
+        )
+        existing = cur.fetchone()
+        if existing:
+            # Auto-convert to update: merge any new fields into the existing contact
+            updates = {}
+            for field in ("email", "phone", "source"):
+                new_val = inp.get(field)
+                if new_val and new_val != existing.get(field):
+                    updates[field] = new_val
+
+            if updates:
+                set_clause = ", ".join(f"{k} = %s" for k in updates)
+                vals = list(updates.values()) + [existing["id"], agent_id]
+                cur.execute(
+                    f"UPDATE contacts SET {set_clause}, updated_at = NOW() "
+                    f"WHERE id = %s AND agent_id = %s RETURNING id, first_name, last_name, email, phone, source",
+                    vals,
+                )
+                updated = dict(cur.fetchone())
+                updated["merged"] = True
+                updated["updated_fields"] = list(updates.keys())
+                return updated
+
+            # Nothing new to add — just return the existing contact
+            result = dict(existing)
+            result["already_exists"] = True
+            return result
+
         cur.execute("""
             INSERT INTO contacts (agent_id, first_name, last_name, email, phone, source)
             VALUES (%s, %s, %s, %s, %s, %s)
@@ -464,6 +589,11 @@ _READ_DISPATCH = {
     "get_contact_details": _get_contact_details,
     "get_contact_activities": _get_contact_activities,
     "get_buyer_profile": _get_buyer_profile,
+    "get_ai_profile": _get_ai_profile,
+}
+
+_AUTO_DISPATCH: dict = {
+    "regenerate_ai_profile": lambda aid, inp: _regenerate_ai_profile(aid, inp),
 }
 
 _WRITE_DISPATCH = {
@@ -481,6 +611,14 @@ async def execute(tool_name: str, tool_input: dict, agent_id: str) -> dict:
     if not handler:
         raise ValueError(f"Unknown contact read tool: {tool_name}")
     return await run_query(lambda: handler(agent_id, tool_input))
+
+
+async def execute_auto(tool_name: str, tool_input: dict, agent_id: str) -> dict:
+    """Execute an auto-execute tool."""
+    handler = _AUTO_DISPATCH.get(tool_name)
+    if not handler:
+        raise ValueError(f"Unknown contact auto tool: {tool_name}")
+    return await handler(agent_id, tool_input)
 
 
 async def execute_write(tool_name: str, tool_input: dict, agent_id: str) -> dict:

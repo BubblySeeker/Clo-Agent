@@ -1,5 +1,5 @@
 """
-Document tools: search and list uploaded documents.
+Document tools: search, list, update, and delete uploaded documents.
 """
 import logging
 
@@ -68,6 +68,35 @@ DEFINITIONS = [
             "required": [],
         },
     },
+    {
+        "name": "update_document",
+        "description": (
+            "Update a document's filename, folder, or associated contact."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "document_id": {"type": "string", "description": "UUID of the document"},
+                "filename": {"type": "string", "description": "New filename"},
+                "folder_id": {"type": "string", "description": "UUID of the folder to move to"},
+                "contact_id": {"type": "string", "description": "UUID of the contact to associate with"},
+            },
+            "required": ["document_id"],
+        },
+    },
+    {
+        "name": "delete_document",
+        "description": (
+            "Permanently delete a document and all its chunks. Cannot be undone."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "document_id": {"type": "string", "description": "UUID of the document to delete"},
+            },
+            "required": ["document_id"],
+        },
+    },
 ]
 
 # ---------------------------------------------------------------------------
@@ -75,8 +104,8 @@ DEFINITIONS = [
 # ---------------------------------------------------------------------------
 
 READ = {"search_documents", "list_documents"}
-AUTO_EXECUTE: set[str] = set()
-WRITE: set[str] = set()
+AUTO_EXECUTE = {"update_document"}
+WRITE = {"delete_document"}
 
 # ---------------------------------------------------------------------------
 # Read handlers
@@ -153,6 +182,68 @@ def _list_documents(agent_id: str, inp: dict):
 
 
 # ---------------------------------------------------------------------------
+# Field sets for dynamic updates
+# ---------------------------------------------------------------------------
+
+_DOCUMENT_FIELDS = {"filename", "folder_id", "contact_id"}
+
+# ---------------------------------------------------------------------------
+# Auto-execute handlers
+# ---------------------------------------------------------------------------
+
+def _update_document(agent_id: str, inp: dict):
+    inp = dict(inp)
+    document_id = inp.pop("document_id")
+
+    def go(cur):
+        clean = {k: v for k, v in inp.items() if k in _DOCUMENT_FIELDS}
+        if not clean:
+            return {"error": "No valid fields to update"}
+        set_clause = ", ".join(f"{k} = %s" for k in clean)
+        vals = list(clean.values()) + [document_id, agent_id]
+        cur.execute(
+            f"UPDATE documents SET {set_clause} "
+            f"WHERE id = %s AND agent_id = %s RETURNING id",
+            vals,
+        )
+        row = cur.fetchone()
+        if not row:
+            return {"error": "Document not found"}
+        return {"updated": True, "document_id": document_id}
+
+    return _q(go)
+
+
+# ---------------------------------------------------------------------------
+# Write handlers
+# ---------------------------------------------------------------------------
+
+def _delete_document(agent_id: str, inp: dict):
+    document_id = inp["document_id"]
+
+    def go(cur):
+        # Verify ownership and get filename for confirmation preview
+        cur.execute(
+            "SELECT filename FROM documents WHERE id = %s AND agent_id = %s",
+            (document_id, agent_id),
+        )
+        doc = cur.fetchone()
+        if not doc:
+            return {"error": "Document not found"}
+
+        filename = doc["filename"]
+
+        # CASCADE handles document_chunks
+        cur.execute(
+            "DELETE FROM documents WHERE id = %s AND agent_id = %s",
+            (document_id, agent_id),
+        )
+        return {"deleted": True, "filename": filename}
+
+    return _q(go)
+
+
+# ---------------------------------------------------------------------------
 # Dispatchers (dict-based, no if/elif chains)
 # ---------------------------------------------------------------------------
 
@@ -161,10 +252,34 @@ _READ_DISPATCH = {
     "list_documents": _list_documents,
 }
 
+_AUTO_DISPATCH = {
+    "update_document": _update_document,
+}
+
+_WRITE_DISPATCH = {
+    "delete_document": _delete_document,
+}
+
 
 async def execute(tool_name: str, tool_input: dict, agent_id: str) -> dict:
     """Execute a read tool."""
     handler = _READ_DISPATCH.get(tool_name)
     if not handler:
         raise ValueError(f"Unknown document read tool: {tool_name}")
+    return await run_query(lambda: handler(agent_id, tool_input))
+
+
+async def execute_auto(tool_name: str, tool_input: dict, agent_id: str) -> dict:
+    """Execute an auto-execute tool."""
+    handler = _AUTO_DISPATCH.get(tool_name)
+    if not handler:
+        raise ValueError(f"Unknown document auto-execute tool: {tool_name}")
+    return await run_query(lambda: handler(agent_id, tool_input))
+
+
+async def execute_write(tool_name: str, tool_input: dict, agent_id: str) -> dict:
+    """Execute a confirmed write tool."""
+    handler = _WRITE_DISPATCH.get(tool_name)
+    if not handler:
+        raise ValueError(f"Unknown document write tool: {tool_name}")
     return await run_query(lambda: handler(agent_id, tool_input))

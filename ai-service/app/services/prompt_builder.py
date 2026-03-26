@@ -64,6 +64,10 @@ def build_system_prompt(
         "search_contacts.\n"
         "9. PRONOUNS: Resolve 'him'/'her'/'them' from conversation context before "
         "calling tools.\n"
+        "10. DEDUP: NEVER call create_contact if you already have a contact_id from "
+        "this conversation, from <resolved_entities>, or from a prior search. "
+        "To add or change fields on an existing contact, use update_contact. "
+        "create_contact is ONLY for brand-new people not yet in the CRM.\n"
         "</contact_resolution>"
     )
 

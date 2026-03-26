@@ -26,8 +26,13 @@ from app.tools import activities as _activities
 from app.tools import tasks as _tasks
 from app.tools import properties as _properties
 from app.tools import documents as _documents
+from app.tools import folders as _folders
+from app.tools import leads as _leads
 from app.tools import search as _search
+from app.tools import automations as _automations
 from app.tools import workflows as _workflows
+from app.tools import portal as _portal
+from app.tools import analytics as _analytics
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +43,8 @@ logger = logging.getLogger(__name__)
 _DOMAIN_MODULES = [
     _contacts, _deals, _emails,
     _activities, _tasks, _properties,
-    _documents, _search, _workflows,
+    _documents, _folders, _leads, _search, _automations, _workflows, _portal,
+    _analytics,
 ]
 
 TOOL_DEFINITIONS: list[dict] = []
@@ -108,7 +114,7 @@ async def execute_write_tool(pending_id: str, agent_id: str) -> dict:
 
     action = await run_query(_fetch_and_delete)
     if not action:
-        return {"error": "Pending action not found, expired, or already executed"}
+        return {"error": "Pending action not found, expired, or already executed", "error_type": "expired"}
 
     tool_name = action["tool"]
     inp = action["input"] if isinstance(action["input"], dict) else json.loads(action["input"])
