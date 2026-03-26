@@ -30,7 +30,7 @@ type LeadSuggestion struct {
 	// Joined from emails table
 	Subject   *string `json:"subject"`
 	Snippet   *string `json:"snippet"`
-	GmailDate *string `json:"gmail_date"`
+	EmailDate *string `json:"email_date"`
 }
 
 // ListLeadSuggestions returns pending lead suggestions for the agent.
@@ -59,7 +59,7 @@ func ListLeadSuggestions(pool *pgxpool.Pool) http.HandlerFunc {
 			`SELECT ls.id, ls.agent_id, ls.email_id, ls.from_address, ls.from_name,
 			        ls.suggested_first_name, ls.suggested_last_name, ls.suggested_phone,
 			        ls.suggested_intent, ls.confidence, ls.status, ls.created_at,
-			        e.subject, e.snippet, e.gmail_date::text
+			        e.subject, e.snippet, e.email_date::text
 			 FROM lead_suggestions ls
 			 JOIN emails e ON e.id = ls.email_id
 			 WHERE ls.status = $1
@@ -81,7 +81,7 @@ func ListLeadSuggestions(pool *pgxpool.Pool) http.HandlerFunc {
 				&s.ID, &s.AgentID, &s.EmailID, &s.FromAddress, &s.FromName,
 				&s.SuggestedFirstName, &s.SuggestedLastName, &s.SuggestedPhone,
 				&s.SuggestedIntent, &s.Confidence, &s.Status, &s.CreatedAt,
-				&s.Subject, &s.Snippet, &s.GmailDate,
+				&s.Subject, &s.Snippet, &s.EmailDate,
 			)
 			if err != nil {
 				slog.Warn("scan lead suggestion failed", "error", err)

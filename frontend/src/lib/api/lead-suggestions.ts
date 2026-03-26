@@ -16,7 +16,7 @@ export interface LeadSuggestion {
   // Joined from emails table
   subject: string | null;
   snippet: string | null;
-  gmail_date: string | null;
+  email_date: string | null;
 }
 
 export interface LeadSuggestionsResponse {

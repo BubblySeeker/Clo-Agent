@@ -363,7 +363,7 @@ export default function CommunicationPage() {
       if (e.contact_id && contact) { groupKey = e.contact_id; groupName = `${contact.first_name} ${contact.last_name}`; }
       else if (e.contact_name) { groupKey = e.contact_id || `email-${otherEmail.toLowerCase()}`; groupName = e.contact_name; }
       else { groupKey = `email-${otherEmail.toLowerCase()}`; groupName = otherName; }
-      items.push({ id: `gmail-${e.id}`, type: isOut ? "gmail_out" : "gmail_in", contact_id: e.contact_id, contact_name: groupName, body: e.snippet || "No content", subject: e.subject || undefined, date: e.gmail_date || e.created_at, from_address: e.from_address ?? undefined, from_name: e.from_name ?? undefined, to_addresses: e.to_addresses, email_data: e, groupKey, groupName });
+      items.push({ id: `gmail-${e.id}`, type: isOut ? "gmail_out" : "gmail_in", contact_id: e.contact_id, contact_name: groupName, body: e.snippet || "No content", subject: e.subject || undefined, date: e.email_date || e.created_at, from_address: e.from_address ?? undefined, from_name: e.from_name ?? undefined, to_addresses: e.to_addresses, email_data: e, groupKey, groupName });
     }
     return items;
   }, [activitiesData, emailsData, contactMap]);
@@ -493,7 +493,7 @@ export default function CommunicationPage() {
       const e = currentItem.email_data;
       const to = e.is_outbound ? (e.to_addresses?.[0] ?? "") : (e.from_address ?? "");
       const subject = e.subject ? (e.subject.startsWith("Re: ") ? e.subject : `Re: ${e.subject}`) : "";
-      return sendEmail(token, { to, cc: replyCc || undefined, subject, body: replyBody, contact_id: e.contact_id || undefined, reply_to_message_id: e.gmail_message_id });
+      return sendEmail(token, { to, cc: replyCc || undefined, subject, body: replyBody, contact_id: e.contact_id || undefined, reply_to_message_id: e.provider_message_id });
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["gmail-emails"] }); setShowReply(false); setReplyBody(""); },
   });

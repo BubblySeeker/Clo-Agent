@@ -1265,10 +1265,13 @@ async def execute_write_tool(pending_id: str, agent_id: str) -> dict:
     elif tool_name == "delete_property":
         result = await run_query(lambda: _delete_property(agent_id, inp))
     elif tool_name == "send_email":
-        # Proxy to Go backend — this is an HTTP call, not a DB query.
-        # Flow: AI Service → Go Backend → Gmail API (two-hop proxy,
-        # avoids duplicating OAuth/token-refresh logic in Python).
-        result = await _proxy_to_backend("POST", "/api/gmail/send", agent_id, inp)
+        # Proxy to Go backend — route to correct provider.
+        # Flow: AI Service → Go Backend → Gmail/Outlook API
+        provider = get_email_provider(agent_id)
+        if provider == "outlook":
+            result = await _proxy_to_backend("POST", "/api/outlook/send", agent_id, inp)
+        else:
+            result = await _proxy_to_backend("POST", "/api/gmail/send", agent_id, inp)
     elif tool_name == "save_workflow":
         result = await run_query(lambda: _save_workflow(agent_id, inp))
     elif tool_name == "update_workflow":
@@ -1879,13 +1882,13 @@ def _search_emails(agent_id: str, inp: dict) -> list:
         params.append(limit)
         sql = f"""
             SELECT e.id, e.thread_id, e.subject, e.snippet, e.from_name, e.from_address,
-                   e.to_addresses, e.is_read, e.is_outbound, e.labels, e.gmail_date,
+                   e.to_addresses, e.is_read, e.is_outbound, e.labels, e.email_date,
                    e.contact_id,
                    CASE WHEN c.id IS NOT NULL THEN c.first_name || ' ' || c.last_name ELSE NULL END AS contact_name
             FROM emails e
             LEFT JOIN contacts c ON c.id = e.contact_id
             WHERE {' AND '.join(where_clauses)}
-            ORDER BY e.gmail_date DESC LIMIT %s
+            ORDER BY e.email_date DESC LIMIT %s
         """
         cur.execute(sql, params)
         results = [dict(r) for r in cur.fetchall()]
@@ -1898,10 +1901,10 @@ def _get_email_thread(agent_id: str, thread_id: str, limit: int) -> list:
         cur.execute(
             """SELECT id, subject, snippet, from_name, from_address,
                       to_addresses, cc_addresses, body_text, is_read,
-                      is_outbound, gmail_date
+                      is_outbound, email_date
                FROM emails
                WHERE agent_id = %s AND thread_id = %s
-               ORDER BY gmail_date ASC LIMIT %s""",
+               ORDER BY email_date ASC LIMIT %s""",
             (agent_id, thread_id, limit),
         )
         return [dict(r) for r in cur.fetchall()]
@@ -1997,15 +2000,44 @@ def check_gmail_status(agent_id: str) -> dict:
         return {"connected": False}
 
 
+def check_outlook_status(agent_id: str) -> dict:
+    """Check if Outlook is connected for this agent."""
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            "SELECT outlook_email, last_synced_at FROM outlook_tokens WHERE agent_id = %s",
+            (agent_id,),
+        )
+        row = cur.fetchone()
+        if row:
+            return {
+                "connected": True,
+                "outlook_email": row["outlook_email"],
+                "last_synced_at": row["last_synced_at"],
+            }
+        return {"connected": False}
+
+
+def get_email_provider(agent_id: str) -> str:
+    """Return the preferred email provider for sending. Gmail preferred if both connected."""
+    gmail = check_gmail_status(agent_id)
+    if gmail.get("connected"):
+        return "gmail"
+    outlook = check_outlook_status(agent_id)
+    if outlook.get("connected"):
+        return "outlook"
+    return "none"
+
+
 def get_recent_emails_for_contact(contact_id: str, agent_id: str, limit: int = 5) -> list:
     """Get recent emails for a contact. Used by agent.py for contact-scoped context."""
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute(
-            """SELECT subject, snippet, from_name, is_outbound, gmail_date
+            """SELECT subject, snippet, from_name, is_outbound, email_date
                FROM emails
                WHERE contact_id = %s AND agent_id = %s
-               ORDER BY gmail_date DESC LIMIT %s""",
+               ORDER BY email_date DESC LIMIT %s""",
             (contact_id, agent_id, limit),
         )
         return [dict(r) for r in cur.fetchall()]

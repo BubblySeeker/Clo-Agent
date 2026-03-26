@@ -2016,7 +2016,7 @@ export default function ContactDetailPage({ params }: { params: { id: string } }
                             {email.is_outbound ? "Sent" : "Received"}
                           </span>
                           <span className="text-xs text-gray-400">
-                            {email.gmail_date ? new Date(email.gmail_date).toLocaleDateString("en-US", {
+                            {email.email_date ? new Date(email.email_date).toLocaleDateString("en-US", {
                               month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
                             }) : ""}
                           </span>

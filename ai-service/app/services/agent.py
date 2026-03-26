@@ -23,7 +23,7 @@ from app.database import get_conn, run_query
 from app.tools import (
     TOOL_DEFINITIONS, READ_TOOLS, WRITE_TOOLS,
     execute_read_tool, queue_write_tool, execute_write_tool_immediate,
-    check_gmail_status, get_recent_emails_for_contact,
+    check_gmail_status, check_outlook_status, get_recent_emails_for_contact,
 )
 
 logger = logging.getLogger(__name__)
@@ -126,7 +126,7 @@ def _load_contact_context(contact_id: str, agent_id: str) -> str:
             lines.append("Recent Emails:")
             for e in emails:
                 direction = "Sent" if e.get("is_outbound") else "Received"
-                date_str = e["gmail_date"].strftime("%b %d") if e.get("gmail_date") else "?"
+                date_str = e["email_date"].strftime("%b %d") if e.get("email_date") else "?"
                 lines.append(f"  - [{direction}] {e.get('subject', '(no subject)')} ({date_str})")
 
         return "\n".join(lines)
@@ -335,6 +335,19 @@ def _gmail_block(gmail_status: dict) -> str:
         return "Gmail: Not connected. If the user asks about emails, tell them to connect Gmail in Settings first."
 
 
+
+
+def _outlook_block(outlook_status: dict) -> str:
+    """Outlook connection status block."""
+    if outlook_status.get("connected"):
+        synced = outlook_status.get("last_synced_at")
+        sync_info = f", last synced {synced.strftime('%b %d %H:%M')}" if synced else ""
+        return (
+            f"Outlook: Connected ({outlook_status.get('outlook_email', 'unknown')}{sync_info}). "
+            "Outlook emails are included in search results alongside Gmail emails."
+        )
+    return ""
+
 def _workflow_creation_block() -> str:
     """Prompt for AI-assisted workflow creation."""
     return (
@@ -436,6 +449,7 @@ def build_system_prompt(
     agent_name: str,
     contact_context: str = "",
     gmail_status: dict | None = None,
+    outlook_status: dict | None = None,
     workflows: list | None = None,
 ) -> str:
     """Compose system prompt from blocks based on mode.
@@ -470,6 +484,11 @@ def build_system_prompt(
 
     if gmail_status:
         blocks.append(_gmail_block(gmail_status))
+
+    if outlook_status:
+        block = _outlook_block(outlook_status)
+        if block:
+            blocks.append(block)
 
     if contact_context:
         blocks.append(contact_context.lstrip("\n"))
@@ -543,10 +562,11 @@ async def run_agent(
             lambda: _load_contact_context(conversation_row["contact_id"], agent_id)
         )
 
-    # Check Gmail connection status for email tool awareness
+    # Check email connection status for tool awareness
     gmail_status = await run_query(lambda: check_gmail_status(agent_id))
+    outlook_status = await run_query(lambda: check_outlook_status(agent_id))
 
-    system = build_system_prompt(prompt_mode, agent_name, contact_context, gmail_status)
+    system = build_system_prompt(prompt_mode, agent_name, contact_context, gmail_status, outlook_status)
 
     # For workflow creation, inject the agent's contacts so AI can resolve names to emails
     if prompt_mode == "workflow_creation":

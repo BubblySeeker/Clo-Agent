@@ -48,27 +48,20 @@ func StartEmailSyncLoop(ctx context.Context, pool *pgxpool.Pool, cfg *config.Con
 func runSyncCycle(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config) {
 	slog.Info("email sync loop: starting cycle")
 
-	// Query all agents with Gmail tokens
-	// gmail_tokens has a system SELECT policy (from migration 017) that allows reading without RLS context
-	rows, err := pool.Query(ctx,
-		`SELECT agent_id, last_synced_at FROM gmail_tokens`,
-	)
-	if err != nil {
-		slog.Error("email sync loop: failed to list agents", "error", err)
-		return
-	}
-	defer rows.Close()
-
 	type agentInfo struct {
 		ID         string
 		LastSynced *time.Time
 	}
 	var agents []agentInfo
 
+	rows, err := pool.Query(ctx, `SELECT agent_id, last_synced_at FROM gmail_tokens`)
+	if err != nil {
+		slog.Error("email sync loop: failed to list gmail agents", "error", err)
+		return
+	}
 	for rows.Next() {
 		var a agentInfo
 		if err := rows.Scan(&a.ID, &a.LastSynced); err != nil {
-			slog.Warn("email sync loop: failed to scan agent", "error", err)
 			continue
 		}
 		agents = append(agents, a)
@@ -89,9 +82,9 @@ func runSyncCycle(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config) {
 		default:
 		}
 
-		syncAgent(ctx, pool, cfg, agent.ID)
+		syncGmailAgent(ctx, pool, cfg, agent.ID)
 
-		// Small delay between agents to be nice to Gmail API
+		// Small delay between agents to be nice to APIs
 		select {
 		case <-time.After(2 * time.Second):
 		case <-ctx.Done():
@@ -102,8 +95,8 @@ func runSyncCycle(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config) {
 	slog.Info("email sync loop: cycle complete")
 }
 
-// syncAgent syncs a single agent's Gmail and triggers AI processing.
-func syncAgent(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config, agentID string) {
+// syncGmailAgent syncs a single agent's Gmail and triggers AI processing.
+func syncGmailAgent(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config, agentID string) {
 	result, err := handlers.SyncAgentGmail(ctx, pool, cfg, agentID)
 	if err != nil {
 		slog.Error("email sync loop: sync failed", "agent_id", agentID, "error", err)
