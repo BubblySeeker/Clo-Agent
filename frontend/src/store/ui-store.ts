@@ -16,6 +16,11 @@ export interface ChatMessage {
     preview: Record<string, unknown>;
     status: "confirmed" | "cancelled" | "failed";
   };
+  autoExecutedActions?: Array<{
+    tool: string;
+    result: Record<string, unknown>;
+    status: "success" | "error" | "undone";
+  }>;
 }
 
 interface UIState {
@@ -31,6 +36,13 @@ interface UIState {
   setChatMessages: (msgs: ChatMessage[]) => void;
   appendChatMessage: (msg: ChatMessage) => void;
   updateLastMessage: (patch: Partial<ChatMessage>) => void;
+
+  // Score panel slide-over
+  scorePanelOpen: boolean;
+  scorePanelContactId: string | null;
+  scorePanelContactName: string | null;
+  openScorePanel: (contactId: string, contactName: string) => void;
+  closeScorePanel: () => void;
 
   // Citation viewer
   citationViewerOpen: boolean;
@@ -63,6 +75,14 @@ export const useUIStore = create<UIState>()((set) => ({
       msgs[msgs.length - 1] = { ...msgs[msgs.length - 1], ...patch };
       return { chatMessages: msgs };
     }),
+
+  scorePanelOpen: false,
+  scorePanelContactId: null,
+  scorePanelContactName: null,
+  openScorePanel: (contactId, contactName) =>
+    set({ scorePanelOpen: true, scorePanelContactId: contactId, scorePanelContactName: contactName }),
+  closeScorePanel: () =>
+    set({ scorePanelOpen: false, scorePanelContactId: null, scorePanelContactName: null }),
 
   citationViewerOpen: false,
   citationDocId: null,

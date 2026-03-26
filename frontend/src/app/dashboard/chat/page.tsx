@@ -8,11 +8,11 @@ import {
   createConversation,
   getMessages,
   deleteConversation,
-  streamMessage,
   confirmToolAction,
-  type SSEEvent,
+  undoAutoAction,
 } from "@/lib/api/conversations";
-import { Plus, Search, Send, Trash2, Sparkles, User, Loader2, Check, XCircle } from "lucide-react";
+import { useAIStream } from "@/hooks/useAIStream";
+import { Plus, Search, Send, Trash2, Sparkles, User, Loader2, Check, XCircle, Undo2 } from "lucide-react";
 import { type ChatMessage } from "@/store/ui-store";
 import { toolLabel, confirmLabel, formatPreview } from "@/lib/ai-chat-helpers";
 import MessageContent from "@/components/shared/MessageContent";
@@ -32,10 +32,8 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [hoveredConv, setHoveredConv] = useState<string | null>(null);
   const [localMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [activeToolName, setActiveToolName] = useState<string | null>(null);
+  const { isStreaming, activeToolName, startStream, cleanup: cleanupStream } = useAIStream();
   const bottomRef = useRef<HTMLDivElement>(null);
-  const cleanupRef = useRef<(() => void) | null>(null);
   const handleSendActiveRef = useRef(false);
 
   const { data: conversations = [], error: convsError } = useQuery({
@@ -137,60 +135,56 @@ export default function ChatPage() {
         { id: assistantMsgId, role: "assistant", content: "", isStreaming: true, toolCalls: [] },
       ]);
 
-      setIsStreaming(true);
-      let accumulated = "";
-
-      cleanupRef.current = streamMessage(
-        token,
-        convId,
-        msg,
-        (event: SSEEvent) => {
-          if (event.type === "text") {
-            accumulated += event.content;
-            setChatMessages((prev) => {
-              const msgs = [...prev];
-              const last = msgs[msgs.length - 1];
-              if (last && last.id === assistantMsgId) {
-                msgs[msgs.length - 1] = { ...last, content: accumulated, isStreaming: true };
-              }
-              return msgs;
-            });
-          } else if (event.type === "tool_call") {
-            setActiveToolName(event.name);
-            setChatMessages((prev) => {
-              const msgs = [...prev];
-              const last = msgs[msgs.length - 1];
-              if (last && last.id === assistantMsgId) {
-                msgs[msgs.length - 1] = {
-                  ...last,
-                  toolCalls: [...(last.toolCalls ?? []), event.name],
-                };
-              }
-              return msgs;
-            });
-          } else if (event.type === "tool_result") {
-            setActiveToolName(null);
-          } else if (event.type === "confirmation") {
-            setChatMessages((prev) => {
-              const msgs = [...prev];
-              const last = msgs[msgs.length - 1];
-              if (last && last.id === assistantMsgId) {
-                msgs[msgs.length - 1] = {
-                  ...last,
-                  confirmationData: {
-                    tool: event.tool,
-                    preview: event.preview,
-                    pending_id: event.pending_id,
-                  },
-                };
-              }
-              return msgs;
-            });
-          }
+      startStream(token, convId, msg, {
+        onTextUpdate: (text) => {
+          setChatMessages((prev) => {
+            const msgs = [...prev];
+            const last = msgs[msgs.length - 1];
+            if (last && last.id === assistantMsgId) {
+              msgs[msgs.length - 1] = { ...last, content: text, isStreaming: true };
+            }
+            return msgs;
+          });
         },
-        () => {
-          setIsStreaming(false);
-          setActiveToolName(null);
+        onToolCall: (name) => {
+          setChatMessages((prev) => {
+            const msgs = [...prev];
+            const last = msgs[msgs.length - 1];
+            if (last && last.id === assistantMsgId) {
+              msgs[msgs.length - 1] = {
+                ...last,
+                toolCalls: [...(last.toolCalls ?? []), name],
+              };
+            }
+            return msgs;
+          });
+        },
+        onToolResult: () => {},
+        onConfirmation: (data) => {
+          setChatMessages((prev) => {
+            const msgs = [...prev];
+            const last = msgs[msgs.length - 1];
+            if (last && last.id === assistantMsgId) {
+              msgs[msgs.length - 1] = { ...last, confirmationData: data };
+            }
+            return msgs;
+          });
+        },
+        onAutoExecuted: (data) => {
+          setChatMessages((prev) => {
+            const msgs = [...prev];
+            const last = msgs[msgs.length - 1];
+            if (last && last.id === assistantMsgId) {
+              const existing = last.autoExecutedActions ?? [];
+              msgs[msgs.length - 1] = {
+                ...last,
+                autoExecutedActions: [...existing, { tool: data.name, result: data.result, status: data.status }],
+              };
+            }
+            return msgs;
+          });
+        },
+        onDone: () => {
           handleSendActiveRef.current = false;
           queryClient.invalidateQueries({ queryKey: ["conversations"] });
           queryClient.invalidateQueries({ queryKey: ["messages", convId] });
@@ -207,10 +201,8 @@ export default function ChatPage() {
             return msgs;
           });
         },
-        (err) => {
+        onError: (err) => {
           console.error("Stream error:", err);
-          setIsStreaming(false);
-          setActiveToolName(null);
           handleSendActiveRef.current = false;
           setChatMessages((prev) => {
             const msgs = [...prev];
@@ -224,10 +216,10 @@ export default function ChatPage() {
             }
             return msgs;
           });
-        }
-      );
+        },
+      });
     },
-    [input, activeConvId, isStreaming, getToken, createConvMutation]
+    [input, activeConvId, isStreaming, getToken, createConvMutation, startStream]
   );
 
   const handleConfirm = async (pendingId: string, assistantMsgId: string) => {
@@ -282,6 +274,24 @@ export default function ChatPage() {
     );
   };
 
+  const handleUndo = async (targetMsgId: string, actionIndex: number) => {
+    const token = await getToken();
+    if (!token || !activeConvId) return;
+    try {
+      await undoAutoAction(token, activeConvId);
+      setChatMessages((prev) =>
+        prev.map((m) => {
+          if (m.id !== targetMsgId || !m.autoExecutedActions) return m;
+          const updated = [...m.autoExecutedActions];
+          updated[actionIndex] = { ...updated[actionIndex], status: "undone" };
+          return { ...m, autoExecutedActions: updated };
+        })
+      );
+    } catch {
+      // silently fail — undo is best-effort
+    }
+  };
+
   const activeConv = conversations.find((c) => c.id === activeConvId);
 
   return (
@@ -325,11 +335,8 @@ export default function ChatPage() {
                 onMouseEnter={() => setHoveredConv(conv.id)}
                 onMouseLeave={() => setHoveredConv(null)}
                 onClick={() => {
-                  if (isStreaming && cleanupRef.current) {
-                    cleanupRef.current();
-                    cleanupRef.current = null;
-                    setIsStreaming(false);
-                    setActiveToolName(null);
+                  if (isStreaming) {
+                    cleanupStream();
                   }
                   setActiveConvId(conv.id);
                   setChatMessages([]);
@@ -540,6 +547,46 @@ export default function ChatPage() {
                         </p>
                       </div>
                     )}
+
+                    {/* Auto-executed action cards — with Undo button */}
+                    {msg.autoExecutedActions?.map((action, idx) => (
+                      <div key={idx} className={`rounded-xl p-3 w-full text-xs border ${
+                        action.status === "success"
+                          ? "bg-green-50 border-green-200"
+                          : action.status === "undone"
+                          ? "bg-gray-50 border-gray-200"
+                          : "bg-red-50 border-red-200"
+                      }`}>
+                        <div className="flex items-center justify-between gap-1.5 mb-1">
+                          <div className="flex items-center gap-1.5">
+                            {action.status === "success" ? (
+                              <Check size={12} className="text-green-600" />
+                            ) : action.status === "undone" ? (
+                              <Undo2 size={12} className="text-gray-500" />
+                            ) : (
+                              <XCircle size={12} className="text-red-500" />
+                            )}
+                            <span className={`font-semibold ${
+                              action.status === "success" ? "text-green-700" : action.status === "undone" ? "text-gray-700" : "text-red-700"
+                            }`}>
+                              {confirmLabel[action.tool] ?? action.tool}
+                              {action.status === "success" ? " — Auto-applied" : action.status === "undone" ? " — Undone" : " — Failed"}
+                            </span>
+                          </div>
+                          {action.status === "success" && (
+                            <button
+                              onClick={() => handleUndo(msg.id, idx)}
+                              className="flex items-center gap-1 px-2 py-0.5 bg-white border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-100 text-xs"
+                            >
+                              <Undo2 size={10} /> Undo
+                            </button>
+                          )}
+                        </div>
+                        <p className="text-gray-600">
+                          {formatPreview(action.tool, action.result)}
+                        </p>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>

@@ -160,6 +160,20 @@ class TestToolDefinitions:
         assert "address" in schema["properties"]
         assert "address" in schema["required"]
 
+    def test_get_lead_score_exists_in_definitions(self):
+        assert any(t["name"] == "get_lead_score" for t in self.definitions), (
+            "get_lead_score tool not found in definitions"
+        )
+
+    def test_get_lead_score_is_read_tool(self):
+        assert "get_lead_score" in self.read_tools, "get_lead_score should be classified as a read tool"
+
+    def test_get_lead_score_requires_contact_id(self):
+        tool = next(t for t in self.definitions if t["name"] == "get_lead_score")
+        schema = tool["input_schema"]
+        assert "contact_id" in schema["properties"]
+        assert "contact_id" in schema["required"]
+
 
 class TestWorkflowToolsInDefinitions:
     """Validate that workflow management tools exist in TOOL_DEFINITIONS and WRITE_TOOLS."""
