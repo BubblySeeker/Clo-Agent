@@ -71,6 +71,17 @@ def _load_history(conversation_id: str, agent_id: str) -> tuple[list, dict | Non
         return messages, dict(agent) if agent else None, dict(conversation) if conversation else None
 
 
+def _load_contacts_for_workflow(agent_id: str) -> list[dict]:
+    """Load agent's contacts (name + email) for workflow creation context."""
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            "SELECT first_name, last_name, email FROM contacts WHERE agent_id = %s AND email IS NOT NULL ORDER BY first_name LIMIT 50",
+            (agent_id,),
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+
 def _load_contact_context(contact_id: str, agent_id: str) -> str:
     """Build a contact context string for the system prompt."""
     with get_conn() as conn:
@@ -328,30 +339,54 @@ def _workflow_creation_block() -> str:
     """Prompt for AI-assisted workflow creation."""
     return (
         "## Workflow Creation Mode\n\n"
-        "The user wants to create or edit an automated workflow. Guide them through it:\n\n"
-        "1. **Understand the goal**: Ask what they want automated and when it should run.\n"
-        "2. **Determine the trigger**: Ask what should kick off the workflow:\n"
-        "   - `manual` — user runs it on demand\n"
-        "   - `scheduled` — runs on a time schedule (daily, weekly, etc.)\n"
-        "   - `contact_created` — when a new contact is added\n"
-        "   - `deal_stage_changed` — when a deal moves stages\n"
-        "   - `activity_logged` — when an activity is logged\n"
-        "   - `email_sent` — after an email is sent\n"
-        "3. **Write the instruction**: Compose a clear, actionable instruction "
-        "describing what the workflow should do step by step. Write it as if "
-        "you're telling another assistant what to do.\n"
-        "4. **Set approval mode**: Ask if actions should require review before "
-        "executing (`review`) or run automatically (`auto_approve`).\n"
-        "5. **Schedule** (if applicable): If trigger_type is 'scheduled', ask about "
-        "frequency (daily/weekly/biweekly/monthly), day, time, and timezone.\n"
-        "6. **Create it**: Call `save_workflow` with all the details. The user will "
-        "confirm via the standard confirmation card.\n\n"
-        "**Tips:**\n"
-        "- Keep instructions under 5000 characters\n"
-        "- Be specific: 'Send a welcome email to the new contact with their name' "
-        "is better than 'email them'\n"
-        "- If the user describes something they just did, suggest using "
-        "`save_conversation_as_workflow` to turn it into a repeatable workflow\n"
+        "The user is in the visual workflow builder. Follow this 2-step process:\n\n"
+        "### Step 1: Understand & Plan\n"
+        "Briefly describe what you'll build (2-3 sentences). Don't ask questions — "
+        "infer reasonable defaults.\n\n"
+        "### Step 2: Create It\n"
+        "Call `save_workflow` with structured `steps` array. Each step is a separate node.\n\n"
+        "### Trigger Types:\n"
+        "- `manual` — run on demand\n"
+        "- `scheduled` — time-based (needs schedule_config)\n"
+        "- `contact_created` — new contact added\n"
+        "- `deal_stage_changed` — deal moves stages. trigger_config: {\"stage\": \"Stage Name\"}\n"
+        "- `activity_logged` — activity recorded\n"
+        "- `email_sent` — email received. trigger_config: {\"from_contact\": \"Name\"}\n\n"
+        "### Step Types (for the `steps` array):\n"
+        "- `ai_decision` — config: {\"instruction\": \"what to analyze/decide\"}\n"
+        "- `send_email` — config: {\"to\": \"email@real.com\", \"subject\": \"...\", \"body\": \"...\"}\n"
+        "- `create_task` — config: {\"title\": \"...\", \"due_date\": \"...\"}\n"
+        "- `log_activity` — config: {\"type\": \"note|call|meeting\", \"note\": \"...\"}\n"
+        "- `update_deal` — config: {\"stage\": \"New Stage\"}\n"
+        "- `create_contact` — config: {\"first_name\": \"\", \"last_name\": \"\", \"email\": \"\"}\n"
+        "- `send_sms` — config: {\"to\": \"phone\", \"message\": \"...\"}\n"
+        "- `update_contact` — config: {\"field\": \"value\"}\n"
+        "- `notify_agent` — config: {\"message\": \"...\"}\n"
+        "- `add_tag` — config: {\"tag\": \"tag-name\"}\n"
+        "- `delay` — config: {\"minutes\": 60}\n"
+        "- `condition` — config: {\"field\": \"...\", \"operator\": \">\", \"value\": \"...\"}\n\n"
+        "### CRITICAL Rules:\n"
+        "- ALWAYS provide the `steps` array with individual step objects. NEVER put everything into instruction.\n"
+        "- `instruction` should be a 1-2 sentence human-readable summary only.\n"
+        "- Each step must be a SINGLE atomic action — don't combine multiple actions into one step.\n"
+        "- When user mentions a contact name, look it up in the Contacts list below and use their REAL email. NEVER make up emails like example.com.\n"
+        "- If the workflow involves analysis/reasoning before acting, use an `ai_decision` step FIRST, then the action steps.\n"
+        "- Default approval_mode to 'review'.\n"
+        "- To edit, use `update_workflow` with workflow_id.\n\n"
+        "### Example — 'When Matt emails me about a property over 500k, summarize and email Sarah':\n"
+        "```json\n"
+        "{\n"
+        "  \"name\": \"Forward Matt's 500k+ property emails to Sarah\",\n"
+        "  \"instruction\": \"When Matt emails about properties over 500k, summarize and forward to Sarah\",\n"
+        "  \"trigger_type\": \"email_sent\",\n"
+        "  \"trigger_config\": {\"from_contact\": \"Matt\"},\n"
+        "  \"steps\": [\n"
+        "    {\"type\": \"ai_decision\", \"config\": {\"instruction\": \"Check if the email mentions a property over $500k. If yes, summarize the property details including address, price, and key features.\"}},\n"
+        "    {\"type\": \"send_email\", \"config\": {\"to\": \"sarah@realemail.com\", \"subject\": \"Property Alert from Matt - $500k+\", \"body\": \"Summary of Matt's email with property details\"}}\n"
+        "  ],\n"
+        "  \"approval_mode\": \"review\"\n"
+        "}\n"
+        "```\n"
     )
 
 
@@ -512,6 +547,18 @@ async def run_agent(
     gmail_status = await run_query(lambda: check_gmail_status(agent_id))
 
     system = build_system_prompt(prompt_mode, agent_name, contact_context, gmail_status)
+
+    # For workflow creation, inject the agent's contacts so AI can resolve names to emails
+    if prompt_mode == "workflow_creation":
+        contacts_list = await run_query(lambda: _load_contacts_for_workflow(agent_id))
+        if contacts_list:
+            contacts_block = "\n\n## Your Contacts\nWhen the user references a contact by name, match to this list and use their REAL email. Never make up emails.\n"
+            for c in contacts_list:
+                name = f"{c.get('first_name', '')} {c.get('last_name', '')}".strip()
+                email = c.get("email", "")
+                if name and email:
+                    contacts_block += f"- {name}: {email}\n"
+            system += contacts_block
 
     # Add document awareness if agent has uploaded documents
     doc_count = await run_query(lambda: _count_agent_documents(agent_id))

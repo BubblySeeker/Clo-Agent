@@ -198,3 +198,67 @@ async def execute_workflow(
         await run_query(lambda: _update_run_status(run_id, "failed", error_details))
         yield sse({"type": "error", "message": f"Workflow failed: {str(e)}"})
         yield "data: [DONE]\n\n"
+
+
+# ---------------------------------------------------------------------------
+# Event-based trigger support (migrated from old workflow_engine.py)
+# ---------------------------------------------------------------------------
+
+def find_matching_workflows(trigger_type: str, agent_id: str) -> list[dict]:
+    """Find all enabled workflows that match a given trigger type."""
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            """SELECT id, name, trigger_type, trigger_config, instruction, approval_mode
+               FROM workflows
+               WHERE agent_id = %s AND trigger_type = %s AND enabled = true""",
+            (agent_id, trigger_type),
+        )
+        return [dict(row) for row in cur.fetchall()]
+
+
+async def trigger_workflows(
+    trigger_type: str,
+    agent_id: str,
+    trigger_data: dict | None = None,
+) -> list[str]:
+    """Find and execute all matching workflows for a trigger event.
+
+    Returns list of run IDs. Each matched workflow is executed via the
+    AI-native executor (fire-and-forget — SSE events are consumed and discarded).
+
+    Called from tools.py after write-tool execution and from the /ai/workflows/trigger
+    endpoint.
+    """
+    workflows = await run_query(
+        lambda: find_matching_workflows(trigger_type, agent_id)
+    )
+    run_ids = []
+    for wf in workflows:
+        instruction = wf.get("instruction") or f"Execute workflow: {wf['name']}"
+        try:
+            run_id = None
+            async for event in execute_workflow(
+                workflow_id=str(wf["id"]),
+                agent_id=agent_id,
+                instruction=instruction,
+                approval_mode=wf.get("approval_mode", "auto"),
+                trigger_data=trigger_data,
+                is_dry_run=False,
+                workflow_name=wf.get("name"),
+            ):
+                # Extract run_id from the first SSE event
+                if run_id is None and "workflow_run_started" in event:
+                    try:
+                        import re
+                        match = re.search(r'"run_id":\s*"([^"]+)"', event)
+                        if match:
+                            run_id = match.group(1)
+                    except Exception:
+                        pass
+            if run_id:
+                run_ids.append(run_id)
+            logger.info("Triggered workflow '%s' via AI executor", wf["name"])
+        except Exception as e:
+            logger.error("Failed to trigger workflow '%s': %s", wf["name"], e)
+    return run_ids

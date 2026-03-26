@@ -89,6 +89,44 @@
 **Depends on:** None
 
 
+## Workflows
+
+### Error recovery state machine
+
+**What:** Add a state machine for workflow execution error recovery — automatic retries with backoff, dead-letter handling for persistently failing workflows, and a UI to view/retry failed runs.
+
+**Why:** Currently workflow failures are logged but not recoverable. A failed workflow run stays in `failed` status with no way to retry or diagnose beyond reading logs. Real-world triggers (contact created, deal stage changed) can fail transiently (API timeouts, rate limits) and should be retried automatically.
+
+**Context:** The AI-native executor (`workflow_executor.py`) already does a single timeout retry. This extends that to a proper state machine: `running → failed → retrying → completed|dead_letter`. Needs a `retry_count` column on `workflow_runs` and a background poller or scheduler integration. Deferred from the AI-native workflows plan (Issue 6).
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** AI-native workflows (completed)
+
+### Robust job scheduler / APScheduler
+
+**What:** Replace the in-process workflow scheduler with APScheduler (or similar) for reliable scheduled workflow execution with persistence across restarts.
+
+**Why:** The current scheduler runs in-process — if the AI service restarts, all scheduled workflow timers are lost. APScheduler with a PostgreSQL job store would survive restarts and support cron-style schedules, interval triggers, and missed-fire handling.
+
+**Context:** The scheduler in `ai-service/app/services/scheduler.py` uses `asyncio` tasks. APScheduler's `AsyncIOScheduler` with `SQLAlchemyJobStore` (or raw psycopg2 store) is a drop-in replacement. Needs careful integration with the existing startup/shutdown lifecycle in `main.py`.
+
+**Effort:** M
+**Priority:** P3
+**Depends on:** AI-native workflows (completed)
+
+### Prompt eval suite for workflow AI quality
+
+**What:** Build an evaluation suite that measures how well the AI agent executes workflow instructions — correctness, tool selection accuracy, and instruction adherence.
+
+**Why:** Workflow execution quality depends on prompt engineering for Haiku 4.5. Without evals, prompt changes are guesswork. An eval suite lets us measure regression when changing prompts, model versions, or tool definitions.
+
+**Context:** Create a set of test workflow instructions with expected tool call sequences and outcomes. Run them against the executor in dry-run mode and score: Did it use the right tools? Did it find the right contacts? Did it complete all steps? Store results for comparison across prompt iterations. Could use `pytest` with custom fixtures or a standalone eval script.
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** AI-native workflows (completed)
+
 ## Completed
 
 ### React error boundaries for dashboard

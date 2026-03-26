@@ -503,8 +503,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </main>
       </div>
 
-      {/* Floating AI chat bubble */}
-      <AIChatBubble />
+      {/* Floating AI chat bubble — hidden on workflows page (has its own AI panel) */}
+      {!pathname?.startsWith("/dashboard/workflows") && <AIChatBubble />}
 
       {/* Citation source viewer (slides in from right) */}
       <CitationViewer />

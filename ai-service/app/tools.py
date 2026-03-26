@@ -547,8 +547,30 @@ TOOL_DEFINITIONS = [
                     "type": "object",
                     "description": "Schedule configuration for trigger_type='scheduled'. Format: {\"frequency\": \"daily\"|\"weekly\"|\"biweekly\"|\"monthly\", \"day\": \"monday\", \"time\": \"08:00\", \"timezone\": \"America/New_York\"}",
                 },
+                "steps": {
+                    "type": "array",
+                    "description": "Ordered list of action steps for the workflow. ALWAYS provide this. Each step is an atomic action node.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "type": {
+                                "type": "string",
+                                "enum": ["send_email", "create_task", "log_activity", "update_deal", "create_contact", "ai_decision", "send_sms", "update_contact", "notify_agent", "add_tag", "delay", "condition"],
+                            },
+                            "config": {
+                                "type": "object",
+                                "description": "Step-specific config. For send_email: {to, subject, body}. For ai_decision: {instruction}. For delay: {minutes}. For condition: {field, operator, value}. For create_task: {title, due_date}. For notify_agent: {message}. For add_tag: {tag}.",
+                            },
+                        },
+                        "required": ["type", "config"],
+                    },
+                },
+                "trigger_config": {
+                    "type": "object",
+                    "description": "Trigger-specific config. For email_sent: {from_contact: 'Name'}. For deal_stage_changed: {stage: 'Stage Name'}.",
+                },
             },
-            "required": ["name", "instruction", "trigger_type"],
+            "required": ["name", "instruction", "trigger_type", "steps"],
         },
     },
     {
@@ -567,6 +589,7 @@ TOOL_DEFINITIONS = [
                 "trigger_config": {"type": "object", "description": "New trigger config"},
                 "approval_mode": {"type": "string", "enum": ["review", "auto_approve"]},
                 "schedule_config": {"type": "object", "description": "New schedule config"},
+                "steps": {"type": "array", "description": "New ordered list of action steps", "items": {"type": "object", "properties": {"type": {"type": "string"}, "config": {"type": "object"}}, "required": ["type", "config"]}},
                 "enabled": {"type": "boolean", "description": "Enable or disable the workflow"},
             },
             "required": ["workflow_id"],
@@ -949,6 +972,7 @@ def _save_workflow(agent_id: str, inp: dict) -> dict:
     trigger_config = inp.get("trigger_config")
     approval_mode = inp.get("approval_mode", "review")
     schedule_config = inp.get("schedule_config")
+    steps = inp.get("steps", [])
 
     # If trigger_type is scheduled, schedule_config is required
     if trigger_type == "scheduled" and not schedule_config:
@@ -959,13 +983,14 @@ def _save_workflow(agent_id: str, inp: dict) -> dict:
         cur.execute(
             """INSERT INTO workflows
                (id, agent_id, name, instruction, trigger_type, trigger_config,
-                approval_mode, schedule_config, enabled, created_at, updated_at)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, true, NOW(), NOW())""",
+                approval_mode, schedule_config, steps, enabled, created_at, updated_at)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, true, NOW(), NOW())""",
             (
                 wf_id, agent_id, name, instruction, trigger_type,
-                json.dumps(trigger_config) if trigger_config else None,
+                json.dumps(trigger_config) if trigger_config else '{}',
                 approval_mode,
                 json.dumps(schedule_config) if schedule_config else None,
+                json.dumps(steps) if steps else '[]',
             ),
         )
     return {"id": wf_id, "name": name, "message": f"Workflow '{name}' created successfully"}
@@ -994,7 +1019,7 @@ def _update_workflow(agent_id: str, inp: dict) -> dict:
             if field in inp:
                 updates.append(f"{field} = %s")
                 params.append(inp[field])
-        for json_field in ("trigger_config", "schedule_config"):
+        for json_field in ("trigger_config", "schedule_config", "steps"):
             if json_field in inp:
                 updates.append(f"{json_field} = %s")
                 params.append(json.dumps(inp[json_field]) if inp[json_field] else None)
@@ -1088,8 +1113,8 @@ async def _trigger_workflows_async(
     trigger_type: str, agent_id: str, trigger_data: dict
 ) -> None:
     try:
-        from app.services.workflow_engine import trigger_workflows
-        await run_query(lambda: trigger_workflows(trigger_type, agent_id, trigger_data))
+        from app.services.workflow_executor import trigger_workflows
+        await trigger_workflows(trigger_type, agent_id, trigger_data)
     except Exception as e:
         logger.warning("Workflow trigger failed for %s: %s", trigger_type, e)
 
@@ -1244,6 +1269,12 @@ async def execute_write_tool(pending_id: str, agent_id: str) -> dict:
         # Flow: AI Service → Go Backend → Gmail API (two-hop proxy,
         # avoids duplicating OAuth/token-refresh logic in Python).
         result = await _proxy_to_backend("POST", "/api/gmail/send", agent_id, inp)
+    elif tool_name == "save_workflow":
+        result = await run_query(lambda: _save_workflow(agent_id, inp))
+    elif tool_name == "update_workflow":
+        result = await run_query(lambda: _update_workflow(agent_id, inp))
+    elif tool_name == "save_conversation_as_workflow":
+        result = await run_query(lambda: _save_conversation_as_workflow(agent_id, inp))
     else:
         return {"error": f"Unknown write tool: {tool_name}"}
 

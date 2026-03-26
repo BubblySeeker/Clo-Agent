@@ -10,9 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.database import run_query
-from app.services.workflow_engine import trigger_workflows
-from app.services.workflow_executor import execute_workflow
+from app.services.workflow_executor import execute_workflow, trigger_workflows
 from app.routes import verify_secret
 
 router = APIRouter(prefix="/ai")
@@ -43,9 +41,7 @@ class ExecuteRequest(BaseModel):
 
 @router.post("/workflows/trigger", dependencies=[Depends(verify_secret)])
 async def trigger_workflow_endpoint(body: TriggerRequest):
-    run_ids = await run_query(
-        lambda: trigger_workflows(body.trigger_type, body.agent_id, body.trigger_data)
-    )
+    run_ids = await trigger_workflows(body.trigger_type, body.agent_id, body.trigger_data)
     return {"triggered": len(run_ids), "run_ids": run_ids}
 
 

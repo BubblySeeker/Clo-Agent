@@ -23,6 +23,7 @@ class SendMessageRequest(BaseModel):
     conversation_id: str
     agent_id: str
     content: str
+    prompt_mode: str = "chat"  # "chat", "workflow_creation", "workflow_execution"
 
 
 class ConfirmRequest(BaseModel):
@@ -46,8 +47,18 @@ async def send_message(req: SendMessageRequest):
       {"type": "confirmation", "tool": "...", "preview": {...}, "pending_id": "..."}
       [DONE]
     """
+    # In workflow_creation mode, auto-approve workflow CRUD tools
+    # so the AI can create/update workflows without confirmation cards
+    approval = "auto" if req.prompt_mode == "workflow_creation" else None
+
     async def stream():
-        async for chunk in run_agent(req.conversation_id, req.agent_id, req.content):
+        async for chunk in run_agent(
+            req.conversation_id,
+            req.agent_id,
+            req.content,
+            prompt_mode=req.prompt_mode,
+            approval_mode=approval,
+        ):
             yield chunk
 
     return StreamingResponse(
