@@ -191,7 +191,7 @@ export default function ActivitiesPage() {
         id: `gmail-${e.id}`, type: isOut ? "gmail_out" : "gmail_in",
         contact_id: e.contact_id, contact_name: name,
         body: e.snippet || "", subject: e.subject || undefined,
-        date: e.email_date || e.created_at,
+        date: e.gmail_date || e.created_at,
         from_address: e.from_address ?? undefined, to_addresses: e.to_addresses,
         is_outbound: isOut,
       });

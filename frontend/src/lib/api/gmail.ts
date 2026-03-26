@@ -8,8 +8,7 @@ export interface GmailStatus {
 
 export interface Email {
   id: string;
-  provider_message_id: string;
-  provider: "gmail" | "outlook";
+  gmail_message_id: string;
   thread_id: string | null;
   contact_id: string | null;
   from_address: string | null;
@@ -23,7 +22,7 @@ export interface Email {
   labels: string[];
   is_read: boolean;
   is_outbound: boolean;
-  email_date: string | null;
+  gmail_date: string | null;
   created_at: string;
   contact_name?: string;
 }
