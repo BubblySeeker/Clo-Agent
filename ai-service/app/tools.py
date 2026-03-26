@@ -2001,31 +2001,15 @@ def check_gmail_status(agent_id: str) -> dict:
 
 
 def check_outlook_status(agent_id: str) -> dict:
-    """Check if Outlook is connected for this agent."""
-    with get_conn() as conn:
-        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute(
-            "SELECT outlook_email, last_synced_at FROM outlook_tokens WHERE agent_id = %s",
-            (agent_id,),
-        )
-        row = cur.fetchone()
-        if row:
-            return {
-                "connected": True,
-                "outlook_email": row["outlook_email"],
-                "last_synced_at": row["last_synced_at"],
-            }
-        return {"connected": False}
+    """Check if Outlook is connected for this agent. (Not yet implemented)"""
+    return {"connected": False}
 
 
 def get_email_provider(agent_id: str) -> str:
-    """Return the preferred email provider for sending. Gmail preferred if both connected."""
+    """Return the preferred email provider for sending."""
     gmail = check_gmail_status(agent_id)
     if gmail.get("connected"):
         return "gmail"
-    outlook = check_outlook_status(agent_id)
-    if outlook.get("connected"):
-        return "outlook"
     return "none"
 
 

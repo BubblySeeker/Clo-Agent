@@ -37,7 +37,6 @@ import ErrorBoundary from "@/components/shared/ErrorBoundary";
 import { useUIStore } from "@/store/ui-store";
 import { listAllActivities, type Activity } from "@/lib/api/activities";
 import { getGmailStatus, syncGmail } from "@/lib/api/gmail";
-import { getOutlookStatus, syncOutlook } from "@/lib/api/outlook";
 import { listLeadSuggestions } from "@/lib/api/lead-suggestions";
 
 const navItems = [
@@ -53,7 +52,6 @@ const navItems = [
   { icon: Workflow,        label: "Workflows", href: "/dashboard/workflows" },
   { icon: Share2,           label: "Referrals", href: "/dashboard/referrals" },
   { icon: FileText,        label: "Documents", href: "/dashboard/documents" },
-  { icon: Share2,           label: "Referrals", href: "/dashboard/referrals" },
 ];
 
 function activityMeta(type: Activity["type"]): { icon: LucideIcon; bg: string; color: string; label: string } {
@@ -106,31 +104,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { getToken } = useAuth();
   const queryClient = useQueryClient();
 
-  // Silent email auto-sync every 30 seconds while on site (Gmail + Outlook)
+  // Silent Gmail auto-sync every 30 seconds while on site
   useEffect(() => {
     let cancelled = false;
     const doSync = async () => {
       try {
         const token = await getToken();
         if (!token || cancelled) return;
-        // Gmail sync
-        try {
-          const gmailStatus = await getGmailStatus(token);
-          if (gmailStatus.connected && !cancelled) {
-            await syncGmail(token);
-          }
-        } catch { /* silent */ }
-        // Outlook sync
-        try {
-          const outlookStatus = await getOutlookStatus(token);
-          if (outlookStatus.connected && !cancelled) {
-            await syncOutlook(token);
-          }
-        } catch { /* silent */ }
+        const status = await getGmailStatus(token);
+        if (!status.connected || cancelled) return;
+        await syncGmail(token);
         if (cancelled) return;
         queryClient.invalidateQueries({ queryKey: ["gmail-emails"] });
         queryClient.invalidateQueries({ queryKey: ["gmail-status"] });
-        queryClient.invalidateQueries({ queryKey: ["outlook-status"] });
       } catch {
         // Silent — fire-and-forget background sync
       }
