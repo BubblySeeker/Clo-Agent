@@ -81,14 +81,6 @@ DEFINITIONS: list[dict] = [
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
-        "name": "get_analytics",
-        "description": (
-            "Pipeline analytics: deal counts/values by stage, "
-            "30-day activity volume by type, contact source breakdown."
-        ),
-        "input_schema": {"type": "object", "properties": {}, "required": []},
-    },
-    {
         "name": "create_deal",
         "description": "Create a new pipeline deal. Defaults to \"Lead\" stage. Requires confirmation.",
         "input_schema": {
@@ -134,7 +126,7 @@ DEFINITIONS: list[dict] = [
     },
 ]
 
-READ = {"list_deals", "get_deal", "get_deal_stages", "get_analytics"}
+READ = {"list_deals", "get_deal", "get_deal_stages"}
 AUTO_EXECUTE: set[str] = set()
 WRITE = {"create_deal", "update_deal", "delete_deal"}
 
@@ -336,7 +328,6 @@ _READ_DISPATCH = {
     "list_deals": lambda inp, aid: _list_deals(aid, inp),
     "get_deal": lambda inp, aid: _get_deal(aid, inp["deal_id"]),
     "get_deal_stages": lambda inp, aid: _get_deal_stages(),
-    "get_analytics": lambda inp, aid: _get_analytics(aid),
 }
 
 _WRITE_DISPATCH = {
