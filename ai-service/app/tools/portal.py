@@ -69,6 +69,18 @@ DEFINITIONS: list[dict] = [
         },
     },
     {
+        "name": "get_portal_settings",
+        "description": (
+            "Get current portal display settings: which sections are visible, "
+            "welcome message, and agent contact info."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    {
         "name": "update_portal_settings",
         "description": (
             "Update portal display settings such as which sections are visible, "
@@ -107,7 +119,7 @@ DEFINITIONS: list[dict] = [
     },
 ]
 
-READ: set[str] = {"list_portal_invites"}
+READ: set[str] = {"list_portal_invites", "get_portal_settings"}
 AUTO_EXECUTE: set[str] = {"revoke_portal_invite"}
 WRITE: set[str] = {"create_portal_invite", "update_portal_settings"}
 
@@ -129,6 +141,23 @@ def _list_portal_invites(agent_id: str, _inp: dict) -> dict:
         )
         rows = cur.fetchall()
         return [dict(r) for r in rows]
+
+    return _q(_run)
+
+
+def _get_portal_settings(agent_id: str, _inp: dict) -> dict:
+    def _run(cur):
+        cur.execute(
+            """SELECT id, show_deal_value, show_activities, show_properties,
+                      welcome_message, agent_phone, agent_email
+               FROM portal_settings
+               WHERE agent_id = %s""",
+            (agent_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return {"message": "No portal settings configured yet. Use update_portal_settings to set them up."}
+        return dict(row)
 
     return _q(_run)
 
@@ -226,6 +255,7 @@ def _update_portal_settings(agent_id: str, inp: dict) -> dict:
 
 _READ_DISPATCH: dict = {
     "list_portal_invites": _list_portal_invites,
+    "get_portal_settings": _get_portal_settings,
 }
 
 _AUTO_DISPATCH: dict = {
