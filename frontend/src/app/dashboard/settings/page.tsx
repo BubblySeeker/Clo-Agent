@@ -557,6 +557,7 @@ function IntegrationsSection() {
     ? new Date(gmailStatus.last_synced_at).toLocaleString()
     : null;
 
+
   return (
     <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
       <h3 className="font-bold mb-5" style={{ color: "#1E3A5F" }}>Integrations</h3>

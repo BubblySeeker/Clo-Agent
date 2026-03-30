@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"crm-api/internal/config"
 )
 
 // TestHandlerFactoriesReturnHandlers verifies that handler factory functions
@@ -236,6 +238,122 @@ func TestCreatePropertyValidation(t *testing.T) {
 				t.Errorf("expected status %d, got %d; body: %s", tt.wantStatus, w.Code, w.Body.String())
 			}
 		})
+	}
+}
+
+// TestCreateWorkflowValidationWithNewFields tests CreateWorkflow with
+// instruction, approval_mode, and schedule_config fields.
+func TestCreateWorkflowValidationWithNewFields(t *testing.T) {
+	handler := CreateWorkflow(nil)
+
+	tests := []struct {
+		name       string
+		body       interface{}
+		wantStatus int
+	}{
+		{
+			name: "instruction too long",
+			body: map[string]interface{}{
+				"name":         "Test",
+				"trigger_type": "manual",
+				"instruction":  string(make([]byte, 5001)),
+			},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name: "name too long",
+			body: map[string]interface{}{
+				"name":         string(make([]byte, 201)),
+				"trigger_type": "manual",
+			},
+			wantStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bodyBytes, _ := json.Marshal(tt.body)
+			req := httptest.NewRequest(http.MethodPost, "/api/workflows", bytes.NewReader(bodyBytes))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+
+			handler.ServeHTTP(w, req)
+
+			if w.Code != tt.wantStatus {
+				t.Errorf("expected status %d, got %d; body: %s", tt.wantStatus, w.Code, w.Body.String())
+			}
+		})
+	}
+}
+
+// TestUpdateWorkflowValidation tests that UpdateWorkflow rejects bad input.
+func TestUpdateWorkflowValidation(t *testing.T) {
+	handler := UpdateWorkflow(nil)
+
+	tests := []struct {
+		name       string
+		body       interface{}
+		wantStatus int
+	}{
+		{
+			name:       "invalid JSON",
+			body:       "not json",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name: "instruction too long",
+			body: map[string]interface{}{
+				"instruction": string(make([]byte, 5001)),
+			},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name: "invalid approval_mode",
+			body: map[string]interface{}{
+				"approval_mode": "yolo",
+			},
+			wantStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var bodyBytes []byte
+			switch v := tt.body.(type) {
+			case string:
+				bodyBytes = []byte(v)
+			default:
+				bodyBytes, _ = json.Marshal(v)
+			}
+
+			req := httptest.NewRequest(http.MethodPatch, "/api/workflows/some-id", bytes.NewReader(bodyBytes))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+
+			handler.ServeHTTP(w, req)
+
+			if w.Code != tt.wantStatus {
+				t.Errorf("expected status %d, got %d; body: %s", tt.wantStatus, w.Code, w.Body.String())
+			}
+		})
+	}
+}
+
+// TestRunWorkflowFactoryExists verifies RunWorkflow and DryRunWorkflow handlers exist.
+func TestRunWorkflowFactoryExists(t *testing.T) {
+	cfg := &config.Config{}
+	handler := RunWorkflow(nil, cfg)
+	if handler == nil {
+		t.Error("RunWorkflow returned nil handler")
+	}
+}
+
+// TestDryRunWorkflowFactoryExists verifies DryRunWorkflow factory returns handler.
+func TestDryRunWorkflowFactoryExists(t *testing.T) {
+	cfg := &config.Config{}
+	handler := DryRunWorkflow(nil, cfg)
+	if handler == nil {
+		t.Error("DryRunWorkflow returned nil handler")
 	}
 }
 

@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -12,6 +13,7 @@ import (
 
 	"crm-api/internal/database"
 	"crm-api/internal/middleware"
+	"crm-api/internal/scoring"
 )
 
 type Activity struct {
@@ -189,6 +191,13 @@ func CreateGeneralActivity(pool *pgxpool.Pool) http.HandlerFunc {
 			return
 		}
 
+		// Recompute lead score only when activity is linked to a contact
+		if body.ContactID != nil {
+			if err := scoring.ComputeLeadScore(r.Context(), tx, *body.ContactID); err != nil {
+				log.Printf("scoring: ComputeLeadScore failed for contact %s: %v", *body.ContactID, err)
+			}
+		}
+
 		tx.Commit(r.Context())
 		respondJSON(w, http.StatusCreated, a)
 	}
@@ -242,6 +251,11 @@ func CreateActivity(pool *pgxpool.Pool) http.HandlerFunc {
 		if err != nil {
 			respondErrorWithCode(w, http.StatusInternalServerError, "create failed", ErrCodeDatabase)
 			return
+		}
+
+		// Recompute lead score for the contact
+		if err := scoring.ComputeLeadScore(r.Context(), tx, contactID); err != nil {
+			log.Printf("scoring: ComputeLeadScore failed for contact %s: %v", contactID, err)
 		}
 
 		tx.Commit(r.Context())

@@ -70,7 +70,8 @@ func SendMessage(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 		convID := chi.URLParam(r, "id")
 
 		var body struct {
-			Content string `json:"content"`
+			Content    string `json:"content"`
+			PromptMode string `json:"prompt_mode,omitempty"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Content == "" {
 			respondErrorWithCode(w, http.StatusBadRequest, "content is required", ErrCodeBadRequest)
@@ -117,10 +118,15 @@ func SendMessage(pool *pgxpool.Pool, cfg *config.Config) http.HandlerFunc {
 		tx.Commit(r.Context())
 
 		// Build proxy request to AI service.
+		promptMode := body.PromptMode
+		if promptMode == "" {
+			promptMode = "chat"
+		}
 		payload, _ := json.Marshal(map[string]string{
 			"conversation_id": convID,
 			"agent_id":        agentID,
 			"content":         body.Content,
+			"prompt_mode":     promptMode,
 		})
 		req, err := http.NewRequestWithContext(r.Context(), http.MethodPost,
 			cfg.AIServiceURL+"/ai/messages", bytes.NewBuffer(payload))

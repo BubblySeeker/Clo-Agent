@@ -24,6 +24,7 @@ import {
   StickyNote,
   Plus,
   FileText,
+  Share2,
   UserPlus,
   type LucideIcon,
 } from "lucide-react";
@@ -49,6 +50,7 @@ const navItems = [
   { icon: CheckSquare,     label: "Tasks",     href: "/dashboard/tasks" },
   { icon: BarChart2,       label: "Reports",   href: "/dashboard/analytics" },
   { icon: Workflow,        label: "Workflows", href: "/dashboard/workflows" },
+  { icon: Share2,           label: "Referrals", href: "/dashboard/referrals" },
   { icon: FileText,        label: "Documents", href: "/dashboard/documents" },
 ];
 
@@ -503,8 +505,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </main>
       </div>
 
-      {/* Floating AI chat bubble */}
-      <AIChatBubble />
+      {/* Floating AI chat bubble — hidden on workflows page (has its own AI panel) */}
+      {!pathname?.startsWith("/dashboard/workflows") && <AIChatBubble />}
 
       {/* Citation source viewer (slides in from right) */}
       <CitationViewer />

@@ -14,28 +14,34 @@ import (
 )
 
 type Workflow struct {
-	ID            string          `json:"id"`
-	AgentID       string          `json:"agent_id"`
-	Name          string          `json:"name"`
-	Description   *string         `json:"description"`
-	TriggerType   string          `json:"trigger_type"`
-	TriggerConfig json.RawMessage `json:"trigger_config"`
-	Steps         json.RawMessage `json:"steps"`
-	Enabled       bool            `json:"enabled"`
-	CreatedAt     time.Time       `json:"created_at"`
-	UpdatedAt     time.Time       `json:"updated_at"`
+	ID             string          `json:"id"`
+	AgentID        string          `json:"agent_id"`
+	Name           string          `json:"name"`
+	Description    *string         `json:"description"`
+	TriggerType    string          `json:"trigger_type"`
+	TriggerConfig  json.RawMessage `json:"trigger_config"`
+	Steps          json.RawMessage `json:"steps"`
+	Instruction    *string         `json:"instruction"`
+	ApprovalMode   string          `json:"approval_mode"`
+	ScheduleConfig json.RawMessage `json:"schedule_config"`
+	Enabled        bool            `json:"enabled"`
+	CreatedAt      time.Time       `json:"created_at"`
+	UpdatedAt      time.Time       `json:"updated_at"`
 }
 
 type WorkflowRun struct {
-	ID          string          `json:"id"`
-	WorkflowID  string          `json:"workflow_id"`
-	AgentID     string          `json:"agent_id"`
-	TriggerData json.RawMessage `json:"trigger_data"`
-	Status      string          `json:"status"`
-	CurrentStep int             `json:"current_step"`
-	StepResults json.RawMessage `json:"step_results"`
-	StartedAt   time.Time       `json:"started_at"`
-	CompletedAt *time.Time      `json:"completed_at"`
+	ID                  string          `json:"id"`
+	WorkflowID          string          `json:"workflow_id"`
+	AgentID             string          `json:"agent_id"`
+	TriggerData         json.RawMessage `json:"trigger_data"`
+	Status              string          `json:"status"`
+	CurrentStep         int             `json:"current_step"`
+	StepResults         json.RawMessage `json:"step_results"`
+	IsDryRun            bool            `json:"is_dry_run"`
+	InstructionSnapshot *string         `json:"instruction_snapshot"`
+	ErrorDetails        json.RawMessage `json:"error_details"`
+	StartedAt           time.Time       `json:"started_at"`
+	CompletedAt         *time.Time      `json:"completed_at"`
 }
 
 func ListWorkflows(pool *pgxpool.Pool) http.HandlerFunc {
@@ -50,7 +56,8 @@ func ListWorkflows(pool *pgxpool.Pool) http.HandlerFunc {
 		defer tx.Rollback(r.Context())
 
 		rows, err := tx.Query(r.Context(),
-			`SELECT id, agent_id, name, description, trigger_type, trigger_config, steps, enabled, created_at, updated_at
+			`SELECT id, agent_id, name, description, trigger_type, trigger_config, steps,
+			        instruction, approval_mode, schedule_config, enabled, created_at, updated_at
 			 FROM workflows ORDER BY created_at DESC`)
 		if err != nil {
 			respondErrorWithCode(w, http.StatusInternalServerError, "query error", ErrCodeDatabase)
@@ -62,7 +69,8 @@ func ListWorkflows(pool *pgxpool.Pool) http.HandlerFunc {
 		for rows.Next() {
 			var wf Workflow
 			if err := rows.Scan(&wf.ID, &wf.AgentID, &wf.Name, &wf.Description, &wf.TriggerType,
-				&wf.TriggerConfig, &wf.Steps, &wf.Enabled, &wf.CreatedAt, &wf.UpdatedAt); err != nil {
+				&wf.TriggerConfig, &wf.Steps, &wf.Instruction, &wf.ApprovalMode, &wf.ScheduleConfig,
+				&wf.Enabled, &wf.CreatedAt, &wf.UpdatedAt); err != nil {
 				respondErrorWithCode(w, http.StatusInternalServerError, "scan error", ErrCodeDatabase)
 				return
 			}
@@ -91,10 +99,12 @@ func GetWorkflow(pool *pgxpool.Pool) http.HandlerFunc {
 
 		var wf Workflow
 		err = tx.QueryRow(r.Context(),
-			`SELECT id, agent_id, name, description, trigger_type, trigger_config, steps, enabled, created_at, updated_at
+			`SELECT id, agent_id, name, description, trigger_type, trigger_config, steps,
+			        instruction, approval_mode, schedule_config, enabled, created_at, updated_at
 			 FROM workflows WHERE id = $1`, id).Scan(
 			&wf.ID, &wf.AgentID, &wf.Name, &wf.Description, &wf.TriggerType,
-			&wf.TriggerConfig, &wf.Steps, &wf.Enabled, &wf.CreatedAt, &wf.UpdatedAt)
+			&wf.TriggerConfig, &wf.Steps, &wf.Instruction, &wf.ApprovalMode, &wf.ScheduleConfig,
+			&wf.Enabled, &wf.CreatedAt, &wf.UpdatedAt)
 		if err != nil {
 			respondErrorWithCode(w, http.StatusNotFound, "workflow not found", ErrCodeNotFound)
 			return
@@ -110,11 +120,14 @@ func CreateWorkflow(pool *pgxpool.Pool) http.HandlerFunc {
 		agentID := middleware.AgentUUIDFromContext(r.Context())
 
 		var body struct {
-			Name          string          `json:"name"`
-			Description   *string         `json:"description"`
-			TriggerType   string          `json:"trigger_type"`
-			TriggerConfig json.RawMessage `json:"trigger_config"`
-			Steps         json.RawMessage `json:"steps"`
+			Name           string          `json:"name"`
+			Description    *string         `json:"description"`
+			TriggerType    string          `json:"trigger_type"`
+			TriggerConfig  json.RawMessage `json:"trigger_config"`
+			Steps          json.RawMessage `json:"steps"`
+			Instruction    *string         `json:"instruction"`
+			ApprovalMode   *string         `json:"approval_mode"`
+			ScheduleConfig json.RawMessage `json:"schedule_config"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			respondErrorWithCode(w, http.StatusBadRequest, "invalid JSON", ErrCodeBadRequest)
@@ -128,11 +141,21 @@ func CreateWorkflow(pool *pgxpool.Pool) http.HandlerFunc {
 			respondErrorWithCode(w, http.StatusBadRequest, err.Error(), ErrCodeBadRequest)
 			return
 		}
+		if body.Instruction != nil {
+			if err := validateMaxLen("instruction", *body.Instruction, 5000); err != nil {
+				respondErrorWithCode(w, http.StatusBadRequest, err.Error(), ErrCodeBadRequest)
+				return
+			}
+		}
 		if body.TriggerConfig == nil {
 			body.TriggerConfig = json.RawMessage(`{}`)
 		}
 		if body.Steps == nil {
 			body.Steps = json.RawMessage(`[]`)
+		}
+		approvalMode := "review"
+		if body.ApprovalMode != nil && (*body.ApprovalMode == "review" || *body.ApprovalMode == "auto") {
+			approvalMode = *body.ApprovalMode
 		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
@@ -144,12 +167,15 @@ func CreateWorkflow(pool *pgxpool.Pool) http.HandlerFunc {
 
 		var wf Workflow
 		err = tx.QueryRow(r.Context(),
-			`INSERT INTO workflows (agent_id, name, description, trigger_type, trigger_config, steps)
-			 VALUES ($1, $2, $3, $4, $5, $6)
-			 RETURNING id, agent_id, name, description, trigger_type, trigger_config, steps, enabled, created_at, updated_at`,
+			`INSERT INTO workflows (agent_id, name, description, trigger_type, trigger_config, steps, instruction, approval_mode, schedule_config)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			 RETURNING id, agent_id, name, description, trigger_type, trigger_config, steps,
+			           instruction, approval_mode, schedule_config, enabled, created_at, updated_at`,
 			agentID, body.Name, body.Description, body.TriggerType, body.TriggerConfig, body.Steps,
+			body.Instruction, approvalMode, body.ScheduleConfig,
 		).Scan(&wf.ID, &wf.AgentID, &wf.Name, &wf.Description, &wf.TriggerType,
-			&wf.TriggerConfig, &wf.Steps, &wf.Enabled, &wf.CreatedAt, &wf.UpdatedAt)
+			&wf.TriggerConfig, &wf.Steps, &wf.Instruction, &wf.ApprovalMode, &wf.ScheduleConfig,
+			&wf.Enabled, &wf.CreatedAt, &wf.UpdatedAt)
 		if err != nil {
 			respondErrorWithCode(w, http.StatusInternalServerError, "create failed", ErrCodeDatabase)
 			return
@@ -176,6 +202,18 @@ func UpdateWorkflow(pool *pgxpool.Pool) http.HandlerFunc {
 				return
 			}
 		}
+		if instruction, ok := body["instruction"].(string); ok {
+			if err := validateMaxLen("instruction", instruction, 5000); err != nil {
+				respondErrorWithCode(w, http.StatusBadRequest, err.Error(), ErrCodeBadRequest)
+				return
+			}
+		}
+		if approvalMode, ok := body["approval_mode"].(string); ok {
+			if approvalMode != "review" && approvalMode != "auto" {
+				respondErrorWithCode(w, http.StatusBadRequest, "approval_mode must be 'review' or 'auto'", ErrCodeBadRequest)
+				return
+			}
+		}
 
 		tx, err := database.BeginWithRLS(r.Context(), pool, agentID)
 		if err != nil {
@@ -186,11 +224,11 @@ func UpdateWorkflow(pool *pgxpool.Pool) http.HandlerFunc {
 
 		setClauses := "updated_at = NOW()"
 		args := []interface{}{}
-		allowed := []string{"name", "description", "trigger_type", "trigger_config", "steps", "enabled"}
+		allowed := []string{"name", "description", "trigger_type", "trigger_config", "steps", "enabled", "instruction", "approval_mode", "schedule_config"}
 		for _, field := range allowed {
 			if val, ok := body[field]; ok {
 				switch field {
-				case "trigger_config", "steps":
+				case "trigger_config", "steps", "schedule_config":
 					b, _ := json.Marshal(val)
 					args = append(args, b)
 				default:
@@ -204,11 +242,13 @@ func UpdateWorkflow(pool *pgxpool.Pool) http.HandlerFunc {
 		var wf Workflow
 		err = tx.QueryRow(r.Context(),
 			fmt.Sprintf(`UPDATE workflows SET %s WHERE id = $%d
-			 RETURNING id, agent_id, name, description, trigger_type, trigger_config, steps, enabled, created_at, updated_at`,
+			 RETURNING id, agent_id, name, description, trigger_type, trigger_config, steps,
+			           instruction, approval_mode, schedule_config, enabled, created_at, updated_at`,
 				setClauses, len(args)),
 			args...,
 		).Scan(&wf.ID, &wf.AgentID, &wf.Name, &wf.Description, &wf.TriggerType,
-			&wf.TriggerConfig, &wf.Steps, &wf.Enabled, &wf.CreatedAt, &wf.UpdatedAt)
+			&wf.TriggerConfig, &wf.Steps, &wf.Instruction, &wf.ApprovalMode, &wf.ScheduleConfig,
+			&wf.Enabled, &wf.CreatedAt, &wf.UpdatedAt)
 		if err != nil {
 			respondErrorWithCode(w, http.StatusNotFound, "workflow not found", ErrCodeNotFound)
 			return
@@ -257,9 +297,11 @@ func ToggleWorkflow(pool *pgxpool.Pool) http.HandlerFunc {
 		var wf Workflow
 		err = tx.QueryRow(r.Context(),
 			`UPDATE workflows SET enabled = NOT enabled, updated_at = NOW() WHERE id = $1
-			 RETURNING id, agent_id, name, description, trigger_type, trigger_config, steps, enabled, created_at, updated_at`, id,
+			 RETURNING id, agent_id, name, description, trigger_type, trigger_config, steps,
+			           instruction, approval_mode, schedule_config, enabled, created_at, updated_at`, id,
 		).Scan(&wf.ID, &wf.AgentID, &wf.Name, &wf.Description, &wf.TriggerType,
-			&wf.TriggerConfig, &wf.Steps, &wf.Enabled, &wf.CreatedAt, &wf.UpdatedAt)
+			&wf.TriggerConfig, &wf.Steps, &wf.Instruction, &wf.ApprovalMode, &wf.ScheduleConfig,
+			&wf.Enabled, &wf.CreatedAt, &wf.UpdatedAt)
 		if err != nil {
 			respondErrorWithCode(w, http.StatusNotFound, "workflow not found", ErrCodeNotFound)
 			return
@@ -283,7 +325,8 @@ func ListWorkflowRuns(pool *pgxpool.Pool) http.HandlerFunc {
 		defer tx.Rollback(r.Context())
 
 		rows, err := tx.Query(r.Context(),
-			`SELECT id, workflow_id, agent_id, trigger_data, status, current_step, step_results, started_at, completed_at
+			`SELECT id, workflow_id, agent_id, trigger_data, status, current_step, step_results,
+			        is_dry_run, instruction_snapshot, error_details, started_at, completed_at
 			 FROM workflow_runs WHERE workflow_id = $1 ORDER BY started_at DESC LIMIT 50`, workflowID)
 		if err != nil {
 			respondErrorWithCode(w, http.StatusInternalServerError, "query error", ErrCodeDatabase)
@@ -295,7 +338,9 @@ func ListWorkflowRuns(pool *pgxpool.Pool) http.HandlerFunc {
 		for rows.Next() {
 			var run WorkflowRun
 			if err := rows.Scan(&run.ID, &run.WorkflowID, &run.AgentID, &run.TriggerData,
-				&run.Status, &run.CurrentStep, &run.StepResults, &run.StartedAt, &run.CompletedAt); err != nil {
+				&run.Status, &run.CurrentStep, &run.StepResults,
+				&run.IsDryRun, &run.InstructionSnapshot, &run.ErrorDetails,
+				&run.StartedAt, &run.CompletedAt); err != nil {
 				respondErrorWithCode(w, http.StatusInternalServerError, "scan error", ErrCodeDatabase)
 				return
 			}

@@ -3,13 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: v1.0 milestone complete
-stopped_at: Completed 02-context-awareness-and-hardening/02-01-PLAN.md
-last_updated: "2026-03-24T15:58:55.090Z"
+stopped_at: Completed quick/260325-dfy-PLAN.md
+last_updated: "2026-03-25T13:49:08.973Z"
+last_activity: "2026-03-25 - Completed quick task 260325-dg5: Add get_lead_score AI tool, tests, and Brief Me prompt update"
 progress:
-  total_phases: 2
-  completed_phases: 2
-  total_plans: 2
-  completed_plans: 2
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State
@@ -62,6 +63,7 @@ Recent decisions affecting current work:
 - [Phase 01-core-resolution-protocol]: Contact resolution protocol placed before IMPORTANT GUIDELINES for maximum Haiku attention (early placement is critical for instruction following)
 - [Phase 02-context-awareness-and-hardening]: Rule 8 added as standalone (not merged into Rule 6) — keeps pronoun resolution atomic and separately testable
 - [Phase 02-context-awareness-and-hardening]: Full 20-message window used for pronoun lookback — no arbitrary limit, 'earlier in this conversation' instructs Haiku naturally
+- [Phase quick-260325-dad]: SELECT-before-UPDATE pattern for previous-value capture; column list built from inp.keys() to only fetch fields being updated
 
 ### Pending Todos
 
@@ -72,8 +74,21 @@ None yet.
 - Token budget risk: adding ~610 tokens to a 200+ line system prompt may degrade Haiku instruction-following for rules mid-document. Mitigated by XML tags and top-of-prompt placement — validate during Phase 1 testing.
 - Parallel tool call behavior: confirm no parallel search+write calls occur after prompt changes ship.
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260325-d4c | Add AUTO_EXECUTE_TOOLS set and agent loop third branch for auto-executing safe write tools | 2026-03-25 | 23a8ee0 | [260325-d4c-add-auto-execute-tools-set-and-agent-loo](./quick/260325-d4c-add-auto-execute-tools-set-and-agent-loo/) |
+| 260325-dat | Add sort=score to ListContacts and GoingColdCount endpoint (lead scoring Step 4) | 2026-03-25 | 8516489 | [260325-dat-add-sort-score-to-listcontacts-and-going](./quick/260325-dat-add-sort-score-to-listcontacts-and-going/) |
+| 260325-dad | Add previous values to update functions for undo support | 2026-03-25 | e5e1fe9 | [260325-dad-add-previous-values-to-update-functions-](./quick/260325-dad-add-previous-values-to-update-functions-/) |
+| 260325-dg5 | Add get_lead_score AI tool, tests, and Brief Me prompt update | 2026-03-25 | d5d752a | [260325-dg5-step-5-of-lead-scoring-add-get-lead-scor](./quick/260325-dg5-step-5-of-lead-scoring-add-get-lead-scor/) |
+| 260325-dfy | Server-side undo stack for auto-executed AI actions with Go proxy and frontend UI cards | 2026-03-25 | 34f6f42 | [260325-dfy-server-side-undo-stack-for-auto-executed](./quick/260325-dfy-server-side-undo-stack-for-auto-executed/) |
+| 260325-dqz | Create ScoreBadge component with tier colors, size variants, and change arrows (lead scoring Step 7) | 2026-03-25 | 6c97ffd | [260325-dqz-create-scorebadge-component-with-tier-co](./quick/260325-dqz-create-scorebadge-component-with-tier-co/) |
+| 260325-e4t | Add ScoreBadge to contact detail page header (expandable breakdown) and pipeline deal cards (compact, gated) | 2026-03-25 | ebc7606 | [260325-e4t-step-10-add-scorebadge-to-contact-detail](./quick/260325-e4t-step-10-add-scorebadge-to-contact-detail/) |
+
 ## Session Continuity
 
-Last session: 2026-03-24T15:52:44.800Z
-Stopped at: Completed 02-context-awareness-and-hardening/02-01-PLAN.md
+Last activity: 2026-03-25 - Completed quick task 260325-e4t: Add ScoreBadge to contact detail page and pipeline deal cards
+Last session: 2026-03-25T14:15:00.000Z
+Stopped at: Completed quick/260325-e4t-PLAN.md
 Resume file: None

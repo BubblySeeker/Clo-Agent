@@ -2,22 +2,6 @@
 
 ## Infrastructure
 
-### Batch score recompute for bulk operations
-
-**What:** Add an async/batch path for recomputing lead scores when many contacts are modified at once (e.g., CSV import, bulk tag assignment).
-
-**Why:** The current `computeLeadScore` runs inline within each handler's RLS transaction — 3 queries + 1 update per contact. This is fine for single-contact mutations but would fire N sequential recalculations during a bulk import of 500 contacts, blocking the request.
-
-**Pros:** Prevents request timeouts during bulk operations. Enables future features like scheduled overnight score refresh.
-
-**Cons:** Requires either a background worker or a "dirty flag + compute on read" pattern, both adding complexity.
-
-**Context:** Lead scoring uses inline computation (decided in v1 for simplicity at pre-product scale). When bulk contact operations are built, add either: (a) a `score_stale BOOLEAN` flag on contacts, computed on next read, or (b) a background worker that processes a queue of contact IDs needing recompute. The `computeLeadScore` function is already isolated — the change is in how/when it's called, not in the scoring logic itself.
-
-**Effort:** S (human team) → S (with CC+gstack)
-**Priority:** P3
-**Depends on:** Lead scoring system, bulk contact operations (neither exists yet)
-
 ### Structured error codes in Go backend
 
 **What:** Replace generic "query error" / "database error" messages in all Go handlers with structured error codes (e.g., `ERR_NOT_FOUND`, `ERR_DB_TIMEOUT`, `ERR_VALIDATION`).
@@ -92,18 +76,6 @@
 **Priority:** P3
 **Depends on:** None (AI version depends on Claude integration)
 
-### Confidence-based quick confirm (third confirmation tier)
-
-**What:** Add a third confirmation tier between auto-execute and full confirmation — a streamlined one-tap inline confirm for medium-risk actions (e.g., `create_deal` for a contact the AI just found).
-
-**Why:** The two-tier system (auto-execute vs full confirm) is a big improvement but leaves a UX gap: actions that are probably right but not safe enough to auto-execute still get the full confirmation card with preview + two buttons. A quick confirm ("Create deal for Rohan? [Yes]") reduces friction for these medium-risk actions.
-
-**Context:** Requires a `QUICK_CONFIRM_TOOLS` set, a new SSE event type (`quick_confirm`), and a new compact UI component. The `useAIStream` hook extraction (shipping in the AI Intelligence Upgrade) makes adding a third event type straightforward. Defer until the two-tier system proves itself in production.
-
-**Effort:** M (human) → S with CC+gstack
-**Priority:** P2
-**Depends on:** AI Intelligence Upgrade (tiered confirmation + useAIStream hook)
-
 ### Keyboard shortcuts across dashboard
 
 **What:** Global keyboard shortcuts: N = new contact, P = pipeline, / = focus search, Esc = close modal, G+D = go to dashboard.
@@ -117,21 +89,43 @@
 **Depends on:** None
 
 
-### Bulk action from lead score view
+## Workflows
 
-**What:** Add a "Select all Hot leads" / "Select all Cold leads" bulk action on the contacts page when sorted by score, enabling batch operations like "Send follow-up email to all warm leads" or "Archive all cold leads."
+### Error recovery state machine
 
-**Why:** Agents with 100+ contacts need to act on score tiers in bulk. Individually clicking through 15 warm leads to send follow-ups defeats the purpose of scoring them in the first place.
+**What:** Add a state machine for workflow execution error recovery — automatic retries with backoff, dead-letter handling for persistently failing workflows, and a UI to view/retry failed runs.
 
-**Pros:** Transforms lead scoring from passive information into an active workflow tool. High leverage for agents with large contact books.
+**Why:** Currently workflow failures are logged but not recoverable. A failed workflow run stays in `failed` status with no way to retry or diagnose beyond reading logs. Real-world triggers (contact created, deal stage changed) can fail transiently (API timeouts, rate limits) and should be retried automatically.
 
-**Cons:** Requires backend batch endpoints (bulk update, bulk email) that don't exist yet. UI complexity for multi-select state management.
+**Context:** The AI-native executor (`workflow_executor.py`) already does a single timeout retry. This extends that to a proper state machine: `running → failed → retrying → completed|dead_letter`. Needs a `retry_count` column on `workflow_runs` and a background poller or scheduler integration. Deferred from the AI-native workflows plan (Issue 6).
 
-**Context:** The lead scoring system adds score tiers (Hot/Warm/Cool/Cold) to contacts. This TODO adds tier-based bulk selection on the contacts list page. Implementation: checkbox column + "Select all in tier" dropdown + bulk action bar (email, archive, assign tag). Needs new `POST /api/contacts/bulk-action` endpoint. Reference: Gmail's "Select all conversations that match this search" pattern.
-
-**Effort:** M (human team) → S (with CC+gstack)
+**Effort:** M
 **Priority:** P2
-**Depends on:** Lead scoring system (in progress)
+**Depends on:** AI-native workflows (completed)
+
+### Robust job scheduler / APScheduler
+
+**What:** Replace the in-process workflow scheduler with APScheduler (or similar) for reliable scheduled workflow execution with persistence across restarts.
+
+**Why:** The current scheduler runs in-process — if the AI service restarts, all scheduled workflow timers are lost. APScheduler with a PostgreSQL job store would survive restarts and support cron-style schedules, interval triggers, and missed-fire handling.
+
+**Context:** The scheduler in `ai-service/app/services/scheduler.py` uses `asyncio` tasks. APScheduler's `AsyncIOScheduler` with `SQLAlchemyJobStore` (or raw psycopg2 store) is a drop-in replacement. Needs careful integration with the existing startup/shutdown lifecycle in `main.py`.
+
+**Effort:** M
+**Priority:** P3
+**Depends on:** AI-native workflows (completed)
+
+### Prompt eval suite for workflow AI quality
+
+**What:** Build an evaluation suite that measures how well the AI agent executes workflow instructions — correctness, tool selection accuracy, and instruction adherence.
+
+**Why:** Workflow execution quality depends on prompt engineering for Haiku 4.5. Without evals, prompt changes are guesswork. An eval suite lets us measure regression when changing prompts, model versions, or tool definitions.
+
+**Context:** Create a set of test workflow instructions with expected tool call sequences and outcomes. Run them against the executor in dry-run mode and score: Did it use the right tools? Did it find the right contacts? Did it complete all steps? Store results for comparison across prompt iterations. Could use `pytest` with custom fixtures or a standalone eval script.
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** AI-native workflows (completed)
 
 ## Completed
 

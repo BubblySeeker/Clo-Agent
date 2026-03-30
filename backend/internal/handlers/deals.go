@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 
 	"crm-api/internal/database"
 	"crm-api/internal/middleware"
+	"crm-api/internal/scoring"
 )
 
 type Deal struct {
@@ -263,6 +265,11 @@ func UpdateDeal(pool *pgxpool.Pool) http.HandlerFunc {
 			return
 		}
 
+		// Recompute lead score for the deal's contact after stage change
+		if err := scoring.ComputeLeadScore(r.Context(), tx, d.ContactID); err != nil {
+			log.Printf("scoring: ComputeLeadScore failed for contact %s: %v", d.ContactID, err)
+		}
+
 		tx.Commit(r.Context())
 		respondJSON(w, http.StatusOK, d)
 	}
@@ -280,10 +287,23 @@ func DeleteDeal(pool *pgxpool.Pool) http.HandlerFunc {
 		}
 		defer tx.Rollback(r.Context())
 
+		// Fetch contact_id before deleting so we can recompute score after
+		var contactID string
+		err = tx.QueryRow(r.Context(), `SELECT contact_id FROM deals WHERE id = $1`, id).Scan(&contactID)
+		if err != nil {
+			respondErrorWithCode(w, http.StatusNotFound, "deal not found", ErrCodeNotFound)
+			return
+		}
+
 		result, err := tx.Exec(r.Context(), `DELETE FROM deals WHERE id = $1`, id)
 		if err != nil || result.RowsAffected() == 0 {
 			respondErrorWithCode(w, http.StatusNotFound, "deal not found", ErrCodeNotFound)
 			return
+		}
+
+		// Recompute lead score after deal deletion
+		if err := scoring.ComputeLeadScore(r.Context(), tx, contactID); err != nil {
+			log.Printf("scoring: ComputeLeadScore failed for contact %s: %v", contactID, err)
 		}
 
 		tx.Commit(r.Context())

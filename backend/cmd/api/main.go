@@ -139,9 +139,11 @@ func run() error {
 		// Contacts
 		r.Get("/api/contacts", handlers.ListContacts(pool))
 		r.Post("/api/contacts", handlers.CreateContact(pool))
+		r.Get("/api/contacts/going-cold-count", handlers.GoingColdCount(pool))
 		r.Get("/api/contacts/{id}", handlers.GetContact(pool))
 		r.Patch("/api/contacts/{id}", handlers.UpdateContact(pool))
 		r.Delete("/api/contacts/{id}", handlers.DeleteContact(pool))
+		r.Get("/api/contacts/{id}/lead-score-explanation", handlers.GetLeadScoreExplanation(pool))
 
 		// Buyer Profiles
 		r.Get("/api/contacts/{id}/buyer-profile", handlers.GetBuyerProfile(pool))
@@ -190,6 +192,7 @@ func run() error {
 			r.Get("/api/ai/conversations/{id}/messages", handlers.GetMessages(pool))
 			r.Post("/api/ai/conversations/{id}/messages", handlers.SendMessage(pool, cfg))
 			r.Post("/api/ai/conversations/{id}/confirm", handlers.ConfirmToolAction(cfg))
+			r.Post("/api/ai/conversations/{id}/undo", handlers.UndoToolAction(cfg))
 		})
 
 		// Settings
@@ -206,7 +209,16 @@ func run() error {
 		r.Patch("/api/workflows/{id}", handlers.UpdateWorkflow(pool))
 		r.Delete("/api/workflows/{id}", handlers.DeleteWorkflow(pool))
 		r.Post("/api/workflows/{id}/toggle", handlers.ToggleWorkflow(pool))
+		r.Post("/api/workflows/{id}/run", handlers.RunWorkflow(pool, cfg))
+		r.Post("/api/workflows/{id}/dry-run", handlers.DryRunWorkflow(pool, cfg))
 		r.Get("/api/workflows/{id}/runs", handlers.ListWorkflowRuns(pool))
+
+		// Referrals
+		r.Get("/api/referrals", handlers.ListReferrals(pool))
+		r.Post("/api/referrals", handlers.CreateReferral(pool))
+		r.Delete("/api/referrals/{id}", handlers.DeleteReferral(pool))
+		r.Get("/api/referrals/network", handlers.GetReferralNetwork(pool))
+		r.Get("/api/referrals/stats", handlers.GetReferralStats(pool))
 
 		// Analytics
 		r.Get("/api/analytics/pipeline", handlers.GetPipelineAnalytics(pool))
